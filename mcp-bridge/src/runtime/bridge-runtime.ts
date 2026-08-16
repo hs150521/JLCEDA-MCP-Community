@@ -38,31 +38,11 @@ import { BridgeStatusReporter } from '../state/status-reporter.ts';
 import { safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
 import { debugLog } from '../utils/debug-log.ts';
 import { BridgeTransport } from './bridge-transport.ts';
+import { resolveBridgeTaskTimeoutMs, startTimedTask } from './task-timeout.ts';
 
 const RECONNECT_INTERVAL_MS = 1200;
 const CONTEXT_SYNC_INTERVAL_MS = 1000;
 const CONNECT_SUCCESS_TOAST_TIMER_SECONDS = 3;
-const BRIDGE_TASK_TIMEOUT_MS = 25_000;
-
-async function withTaskTimeout<T>(task: Promise<T>, path: string): Promise<T> {
-	let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
-	try {
-		return await Promise.race([
-			task,
-			new Promise<T>((_resolve, reject) => {
-				timeoutId = globalThis.setTimeout(() => {
-					reject(new Error(`Bridge task timed out after ${String(BRIDGE_TASK_TIMEOUT_MS)}ms: ${path}`));
-				}, BRIDGE_TASK_TIMEOUT_MS);
-			}),
-		]);
-	}
-	finally {
-		if (timeoutId !== undefined) {
-			globalThis.clearTimeout(timeoutId);
-		}
-	}
-}
-
 const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown>> = {
 	'/bridge/jlceda/api/index': handleApiIndexTask,
 	'/bridge/jlceda/api/search': handleApiSearchTask,
@@ -243,14 +223,20 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 
 		let result: unknown;
 		let taskError: { message: string; stack?: string } | undefined;
+		let handlerSettled: Promise<void> | undefined;
 		try {
 			debugLog('[DEBUG] calling handler for path:', task.path);
+			currentTransport.reportTaskStarted(task.requestId, task.leaseTerm);
 			// 任务执行前刷新服务端活动时间戳，避免空闲超时误判
 			currentTransport.refreshServerActivity();
-			result = await withTaskTimeout(
+			const timeoutMs = resolveBridgeTaskTimeoutMs(task.path, task.payload);
+			const timedTask = startTimedTask(
 				(async () => toSerializableAsync(await handler(task.payload)))(),
 				task.path,
+				timeoutMs,
 			);
+			handlerSettled = timedTask.settled;
+			result = await timedTask.result;
 			// 任务完成后再次刷新，确保结果回传前连接不被断开
 			currentTransport.refreshServerActivity();
 			debugLog('[DEBUG] handler completed successfully, result:', typeof result);
@@ -264,7 +250,16 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		}
 
 		debugLog('[DEBUG] completing task, hasError:', !!taskError);
-		currentTransport.completeTask(task.requestId, task.leaseTerm, result, taskError);
+		try {
+			currentTransport.completeTask(task.requestId, task.leaseTerm, result, taskError);
+		}
+		finally {
+			// Promise 超时无法取消嘉立创 EDA API。保持任务链锁定直到后台调用真正结束，
+			// 防止调用方重试或后续写操作与仍在运行的修改重叠。
+			if (handlerSettled) {
+				await handlerSettled;
+			}
+		}
 	}).catch((error: unknown) => {
 		const message = toSafeErrorMessage(error);
 		writeRuntimeWarningLog('bridge.task.failed', BRIDGE_STATUS_TEXT.runtime.taskFailedSummary, message, message, 'bridge_task_failed');

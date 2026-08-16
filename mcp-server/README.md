@@ -1,5 +1,8 @@
 # JLCEDA MCP Server
 
+公开的 `timeoutMs` 参数会传递到 WebSocket 请求。EDA 修改超时后，Bridge 仍会
+保持串行队列锁定，直到底层 API 真正结束；请求排队时间不计入 API 执行超时。
+
 本软件包是 **MCP Bridge 社区版**配套的原生 Model Context Protocol Server。
 它通过 STDIO 与 Codex、Claude、Cursor 等 MCP 客户端通信，并通过仅监听本机的
 WebSocket 与嘉立创 EDA 专业版扩展通信。

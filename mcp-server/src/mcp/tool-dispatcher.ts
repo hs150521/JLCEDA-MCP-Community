@@ -100,13 +100,31 @@ export class ToolDispatcher {
       const bridgePath = this.getBridgePath(toolCallParams.name);
       
       // 通过WebSocket发送到EDA插件执行
-      const result = await this.bridgeServer.request(bridgePath, args);
+      const requestTimeoutMs = this.getRequestTimeoutMs(toolCallParams.name, args);
+      const result = requestTimeoutMs === undefined
+        ? await this.bridgeServer.request(bridgePath, args)
+        : await this.bridgeServer.request(bridgePath, args, requestTimeoutMs + 2_000);
       
       // 包装为MCP响应格式
       return this.toToolContent(result);
     } catch (error) {
       throw new Error(`工具 ${toolCallParams.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
+    if (toolName !== 'api_invoke' && toolName !== 'eda_context') {
+      return undefined;
+    }
+    if (args.timeoutMs === undefined) {
+      return undefined;
+    }
+
+    const timeoutMs = Number(args.timeoutMs);
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
+      throw new RangeError('timeoutMs must be an integer between 1000 and 120000');
+    }
+    return timeoutMs;
   }
 
   /**

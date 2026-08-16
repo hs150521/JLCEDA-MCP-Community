@@ -1,0 +1,54 @@
+import { isPlainObjectRecord } from '../utils';
+
+const DEFAULT_BRIDGE_TASK_TIMEOUT_MS = 25_000;
+const API_TASK_DEFAULT_TIMEOUT_MS = 15_000;
+const API_TASK_MIN_TIMEOUT_MS = 1_000;
+const API_TASK_MAX_TIMEOUT_MS = 120_000;
+const CONFIGURABLE_TIMEOUT_PATHS = new Set([
+	'/bridge/jlceda/api/invoke',
+	'/bridge/jlceda/context',
+]);
+
+export interface TimedTask<T> {
+	result: Promise<T>;
+	settled: Promise<void>;
+}
+
+export function resolveBridgeTaskTimeoutMs(path: string, payload: unknown): number {
+	if (!CONFIGURABLE_TIMEOUT_PATHS.has(path)) {
+		return DEFAULT_BRIDGE_TASK_TIMEOUT_MS;
+	}
+
+	if (!isPlainObjectRecord(payload) || payload.timeoutMs === undefined) {
+		return API_TASK_DEFAULT_TIMEOUT_MS;
+	}
+
+	const timeoutMs = Number(payload.timeoutMs);
+	if (!Number.isInteger(timeoutMs) || timeoutMs < API_TASK_MIN_TIMEOUT_MS || timeoutMs > API_TASK_MAX_TIMEOUT_MS) {
+		throw new RangeError(`timeoutMs 必须是 ${String(API_TASK_MIN_TIMEOUT_MS)} 到 ${String(API_TASK_MAX_TIMEOUT_MS)} 之间的整数。`);
+	}
+
+	return timeoutMs;
+}
+
+export function startTimedTask<T>(task: Promise<T>, path: string, timeoutMs: number): TimedTask<T> {
+	let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+	const settled = task.then(
+		() => undefined,
+		() => undefined,
+	);
+	const result = Promise.race([
+		task,
+		new Promise<T>((_resolve, reject) => {
+			timeoutId = globalThis.setTimeout(() => {
+				reject(new Error(`Bridge task timed out after ${String(timeoutMs)}ms: ${path}`));
+			}, timeoutMs);
+		}),
+	]).finally(() => {
+		if (timeoutId !== undefined) {
+			globalThis.clearTimeout(timeoutId);
+		}
+	});
+
+	return { result, settled };
+}

@@ -36,6 +36,10 @@ const SERVER_IDLE_TIMEOUT_MS = 60000;
 const SERVER_IDLE_CHECK_INTERVAL_MS = 500;
 const BRIDGE_STATUS_TEXT = BridgeStateManager.text;
 
+export function shouldLogTransportMessage(messageType: BridgeClientMessage['type']): boolean {
+	return messageType !== 'bridge/heartbeat';
+}
+
 interface BridgeTransportCallbacks {
 	onRoleChanged: (message: BridgeServerRoleMessage) => void;
 	onDebugSwitchChanged: (debugSwitch: BridgeDebugSwitch) => void;
@@ -171,6 +175,16 @@ export class BridgeTransport {
 	 */
 	public refreshServerActivity(): void {
 		this.lastServerActivityAt = Date.now();
+	}
+
+	public reportTaskStarted(requestId: string, leaseTerm: number): void {
+		this.sendMessage({
+			type: 'bridge/task-started',
+			clientId: this.clientId,
+			requestId,
+			leaseTerm,
+			startedAt: Date.now(),
+		});
 	}
 
 	/**
@@ -334,15 +348,22 @@ export class BridgeTransport {
 
 	// 向服务端发送协议消息。
 	private sendMessage(message: BridgeClientMessage): void {
-		debugLog('[DEBUG] bridge-transport sendMessage called, type:', message.type, 'closed:', this.closed);
+		const logRoutineMessage = shouldLogTransportMessage(message.type);
+		if (logRoutineMessage) {
+			debugLog('[DEBUG] bridge-transport sendMessage called, type:', message.type, 'closed:', this.closed);
+		}
 		if (this.closed) {
 			debugLog('[DEBUG] bridge-transport sendMessage blocked: connection closed');
 			throw new Error(BRIDGE_STATUS_TEXT.transport.closed);
 		}
 		const payload = JSON.stringify(message);
-		debugLog('[DEBUG] bridge-transport sendMessage sending, size:', payload.length);
+		if (logRoutineMessage) {
+			debugLog('[DEBUG] bridge-transport sendMessage sending, size:', payload.length);
+		}
 		eda.sys_WebSocket.send(this.socketId, payload);
-		debugLog('[DEBUG] bridge-transport sendMessage sent successfully');
+		if (logRoutineMessage) {
+			debugLog('[DEBUG] bridge-transport sendMessage sent successfully');
+		}
 	}
 
 	// 启动连接建立超时保护，等待 WebSocket onOpen 回调。

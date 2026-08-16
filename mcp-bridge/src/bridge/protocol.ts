@@ -61,6 +61,15 @@ export interface BridgeClientResultMessage {
 	};
 }
 
+// 客户端上报任务已从串行队列中取出并开始执行。
+export interface BridgeClientTaskStartedMessage {
+	type: 'bridge/task-started';
+	clientId: string;
+	requestId: string;
+	leaseTerm: number;
+	startedAt: number;
+}
+
 // 客户端上报日志消息。
 export interface BridgeClientLogMessage {
 	type: 'bridge/log';
@@ -124,7 +133,7 @@ export interface BridgeServerErrorMessage {
 	requestId?: string;
 }
 
-export type BridgeClientMessage = BridgeClientHelloMessage | BridgeClientHeartbeatMessage | BridgeClientResultMessage | BridgeClientLogMessage | BridgeClientReadyMessage;
+export type BridgeClientMessage = BridgeClientHelloMessage | BridgeClientHeartbeatMessage | BridgeClientTaskStartedMessage | BridgeClientResultMessage | BridgeClientLogMessage | BridgeClientReadyMessage;
 
 export type BridgeServerMessage = BridgeServerWelcomeMessage | BridgeServerRoleMessage | BridgeServerDebugSwitchMessage | BridgeServerHeartbeatAckMessage | BridgeServerTaskMessage | BridgeServerErrorMessage;
 

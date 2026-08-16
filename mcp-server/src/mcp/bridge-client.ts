@@ -29,7 +29,8 @@ interface BridgeClientContext {
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timeout: NodeJS.Timeout;
+  timeout?: NodeJS.Timeout;
+  executionTimeoutMs?: number;
   clientId?: string;
   leaseTerm?: number;
 }
@@ -39,7 +40,10 @@ interface BridgeTask {
   requestId: string;
   path: string;
   payload: unknown;
+  timeoutMs: number;
 }
+
+const BRIDGE_QUEUE_TIMEOUT_MS = 15 * 60 * 1000;
 
 interface BridgeServerOptions {
   peerTtlMs?: number;
@@ -357,6 +361,10 @@ export class EdaBridgeServer {
       peer.isReady = true;
       return;
     }
+    if (type === 'bridge/task-started') {
+      this.markPendingRequestStarted(peer, rawMessage);
+      return;
+    }
     if (type === 'bridge/result') {
       this.completePendingRequest(peer, rawMessage);
       return;
@@ -449,7 +457,7 @@ export class EdaBridgeServer {
     if (!pending || pending.clientId !== peer.clientId || pending.leaseTerm !== Number(message.leaseTerm)) {
       return;
     }
-    clearTimeout(pending.timeout);
+    this.clearPendingTimeout(pending);
     this.pendingRequests.delete(requestId);
     if (isRecord(message.error) && typeof message.error.message === 'string') {
       pending.reject(new Error(message.error.message));
@@ -460,6 +468,28 @@ export class EdaBridgeServer {
       return;
     }
     pending.resolve(message.result);
+  }
+
+  private markPendingRequestStarted(peer: BridgePeer, message: Record<string, unknown>): void {
+    const requestId = String(message.requestId ?? '');
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending || pending.clientId !== peer.clientId || pending.leaseTerm !== Number(message.leaseTerm)) {
+      return;
+    }
+
+    this.clearPendingTimeout(pending);
+    const executionTimeoutMs = pending.executionTimeoutMs ?? 30000;
+    pending.timeout = setTimeout(() => {
+      this.pendingRequests.delete(requestId);
+      pending.reject(new Error(`Request execution timeout after ${String(executionTimeoutMs)}ms`));
+    }, executionTimeoutMs);
+  }
+
+  private clearPendingTimeout(pending: PendingRequest): void {
+    if (pending.timeout) {
+      clearTimeout(pending.timeout);
+      pending.timeout = undefined;
+    }
   }
 
   private attachMcpSocket(socket: WebSocket): void {
@@ -478,7 +508,11 @@ export class EdaBridgeServer {
       }
       const requestId = String(message.requestId ?? '');
       const path = String(message.path ?? '');
-      void this.dispatchRequest(path, message.payload, 30000).then(
+      const forwardedTimeoutMs = Number(message.timeoutMs);
+      const timeoutMs = Number.isInteger(forwardedTimeoutMs) && forwardedTimeoutMs > 0
+        ? forwardedTimeoutMs
+        : 30000;
+      void this.dispatchRequest(path, message.payload, timeoutMs).then(
         (result) => this.trySend(socket, { type: 'bridge/result', requestId, result }),
         (error) => this.trySend(socket, {
           type: 'bridge/result',
@@ -502,7 +536,7 @@ export class EdaBridgeServer {
       if (!pending) {
         return;
       }
-      clearTimeout(pending.timeout);
+      this.clearPendingTimeout(pending);
       this.pendingRequests.delete(requestId);
       if (message.error) {
         pending.reject(new Error(String(message.error)));
@@ -582,12 +616,13 @@ export class EdaBridgeServer {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);
-        reject(new Error(`Request timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
+        reject(new Error(`Request queue timeout after ${String(BRIDGE_QUEUE_TIMEOUT_MS)}ms`));
+      }, BRIDGE_QUEUE_TIMEOUT_MS);
       this.pendingRequests.set(requestId, {
         resolve,
         reject,
         timeout,
+        executionTimeoutMs: timeoutMs,
         clientId: peer.clientId,
         leaseTerm: this.leaseTerm,
       });
@@ -615,16 +650,11 @@ export class EdaBridgeServer {
     }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        reject(new Error(`Request timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      this.pendingRequests.set(requestId, { resolve, reject, timeout });
+      this.pendingRequests.set(requestId, { resolve, reject });
       try {
-        const request: BridgeTask = { type: 'bridge/task', requestId, path, payload };
+        const request: BridgeTask = { type: 'bridge/task', requestId, path, payload, timeoutMs };
         sendJson(socket, request);
       } catch (error) {
-        clearTimeout(timeout);
         this.pendingRequests.delete(requestId);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
@@ -649,7 +679,7 @@ export class EdaBridgeServer {
       if (pending.clientId !== clientId) {
         continue;
       }
-      clearTimeout(pending.timeout);
+      this.clearPendingTimeout(pending);
       this.pendingRequests.delete(requestId);
       pending.reject(new Error(reason));
     }
@@ -657,7 +687,7 @@ export class EdaBridgeServer {
 
   private rejectAllPending(reason: string): void {
     for (const [requestId, pending] of this.pendingRequests) {
-      clearTimeout(pending.timeout);
+      this.clearPendingTimeout(pending);
       this.pendingRequests.delete(requestId);
       pending.reject(new Error(reason));
     }
