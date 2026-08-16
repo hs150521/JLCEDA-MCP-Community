@@ -24,6 +24,11 @@ interface BridgeTask {
   payload: unknown;
 }
 
+interface BridgeServerOptions {
+  peerTtlMs?: number;
+  peerSweepIntervalMs?: number;
+}
+
 function decodeMessage(data: RawData): unknown {
   if (Buffer.isBuffer(data)) {
     return JSON.parse(data.toString('utf8'));
@@ -65,8 +70,16 @@ export class EdaBridgeServer {
   private isMainServer = false;
   private internalClient: WebSocket | null = null;
   private readonly authToken = String(process.env.JLCEDA_BRIDGE_TOKEN ?? '').trim();
+  private readonly peerTtlMs: number;
+  private readonly peerSweepIntervalMs: number;
+  private peerSweepTimer: NodeJS.Timeout | null = null;
+  private promoting = false;
+  private closing = false;
 
-  public constructor(private readonly port: number = 8765) {}
+  public constructor(private readonly port: number = 8765, options: BridgeServerOptions = {}) {
+    this.peerTtlMs = options.peerTtlMs ?? 15000;
+    this.peerSweepIntervalMs = options.peerSweepIntervalMs ?? 1000;
+  }
 
   public async start(): Promise<void> {
     if (this.started) {
@@ -95,6 +108,7 @@ export class EdaBridgeServer {
         if (!this.authToken) {
           process.stderr.write('[Security] JLCEDA_BRIDGE_TOKEN is not set; local WebSocket authentication is disabled\n');
         }
+        this.startPeerSweep();
         resolve();
       });
 
@@ -144,19 +158,32 @@ export class EdaBridgeServer {
         }
       }, 5000);
 
-      socket.once('open', () => {
-        if (settled) {
-          return;
+      socket.on('message', (data) => {
+        try {
+          const message = decodeMessage(data);
+          if (isRecord(message) && message.type === 'bridge/internal-ready' && !settled) {
+            settled = true;
+            clearTimeout(timer);
+            process.stderr.write(`[Client Mode] Connected to main server at ${url}\n`);
+            resolve();
+            return;
+          }
+        } catch {
+          // The regular message handler reports malformed payloads after authentication.
         }
-        settled = true;
-        clearTimeout(timer);
-        process.stderr.write(`[Client Mode] Connected to main server at ${url}\n`);
-        resolve();
+        this.handleInternalMessage(data);
       });
-      socket.on('message', (data) => this.handleInternalMessage(data));
       socket.on('close', () => {
         this.internalClient = null;
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(new Error('Main server closed before authentication completed'));
+        }
         this.rejectAllPending('Main server connection closed');
+        if (this.started && !this.closing && !this.promoting) {
+          void this.recoverMainServer();
+        }
       });
       socket.on('error', (error) => {
         if (!settled) {
@@ -173,6 +200,56 @@ export class EdaBridgeServer {
       return true;
     }
     return secureEquals(requestUrl.searchParams.get('token') ?? '', this.authToken);
+  }
+
+  private startPeerSweep(): void {
+    if (this.peerSweepTimer) {
+      clearInterval(this.peerSweepTimer);
+    }
+    this.peerSweepTimer = setInterval(() => this.expireStalePeers(), this.peerSweepIntervalMs);
+    this.peerSweepTimer.unref();
+  }
+
+  private expireStalePeers(): void {
+    const now = Date.now();
+    for (const peer of [...this.peers.values()]) {
+      const hasPendingTask = [...this.pendingRequests.values()].some(
+        (pending) => pending.clientId === peer.clientId,
+      );
+      if (hasPendingTask || now - peer.lastSeenAt <= this.peerTtlMs) {
+        continue;
+      }
+      peer.socket.close(4000, 'Bridge heartbeat timeout');
+      this.removeEdaSocket(peer.socket);
+    }
+  }
+
+  private async recoverMainServer(): Promise<void> {
+    if (this.promoting || this.closing) {
+      return;
+    }
+    this.promoting = true;
+    process.stderr.write('[Client Mode] Main server lost; attempting listener takeover\n');
+    try {
+      for (let attempt = 0; attempt < 20 && !this.closing; attempt += 1) {
+        try {
+          await this.startAsMainServer();
+          process.stderr.write('[Client Mode] Promoted to main server\n');
+          return;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 100 + Math.floor(Math.random() * 100)));
+          try {
+            await this.startAsClient();
+            return;
+          } catch {
+            // Another process may still be taking over. Retry until the deadline.
+          }
+        }
+      }
+      process.stderr.write('[Client Mode] Failed to recover a main bridge server\n');
+    } finally {
+      this.promoting = false;
+    }
   }
 
   private attachEdaSocket(socket: WebSocket): void {
@@ -330,6 +407,7 @@ export class EdaBridgeServer {
 
   private attachMcpSocket(socket: WebSocket): void {
     this.mcpClients.add(socket);
+    this.trySend(socket, { type: 'bridge/internal-ready' });
     socket.on('message', (data) => {
       let message: unknown;
       try {
@@ -480,6 +558,11 @@ export class EdaBridgeServer {
   }
 
   public close(): void {
+    this.closing = true;
+    if (this.peerSweepTimer) {
+      clearInterval(this.peerSweepTimer);
+      this.peerSweepTimer = null;
+    }
     this.rejectAllPending('Bridge server closed');
     this.internalClient?.close();
     this.internalClient = null;
@@ -496,6 +579,7 @@ export class EdaBridgeServer {
     this.wss = null;
     this.started = false;
     this.isMainServer = false;
+    this.promoting = false;
   }
 
   public hasClients(): boolean {

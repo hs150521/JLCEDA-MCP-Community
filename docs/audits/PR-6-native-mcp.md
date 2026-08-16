@@ -20,8 +20,9 @@ Resolved:
 - stdio EOF shuts down the process and releases the bridge listener;
 - WebSocket listening is restricted to `127.0.0.1` and exact paths;
 - optional shared-token authentication covers EDA and internal MCP routes, with log redaction;
-- EDA hello/welcome, heartbeat, ready, active/standby lease, result validation and takeover are implemented;
+- EDA hello/welcome, heartbeat expiry, ready, active/standby lease, result validation and takeover are implemented;
 - request IDs include a process UUID and multi-MCP routing is integration-tested;
+- surviving MCP processes can compete to take over the listener after the owner exits;
 - the handwritten MCP implementation was replaced by the official TypeScript Server SDK 2.0;
 - tests cover legacy initialize, 2026-07-28 server/discover, tools/list, bridge routing, path/auth rejection and EDA takeover;
 - Linux, Windows and packaged-extension GitHub Actions jobs pass;
@@ -31,8 +32,6 @@ Resolved:
 Still open before release:
 
 - make shared-token authentication mandatory or provide a safe first-run token exchange;
-- add stale-peer expiry in the native broker, not only heartbeat acknowledgement and socket-close handling;
-- promote a surviving internal MCP client when the original listener process exits;
 - add project/page identity and explicit target selection beyond active/standby ordering;
 - enable stricter TypeScript and establish a practical repository-wide lint baseline;
 - install the packaged EEXT in supported JLCEDA versions and run real EDA API integration tests; and

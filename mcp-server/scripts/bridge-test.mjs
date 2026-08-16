@@ -60,6 +60,17 @@ function waitForMessage(socket, predicate, timeoutMs = 3000) {
   });
 }
 
+async function waitUntil(predicate, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('Timed out waiting for condition');
+}
+
 function attachTaskResponder(socket, clientId, transform) {
   socket.on('message', (data) => {
     const message = JSON.parse(data.toString());
@@ -97,6 +108,7 @@ process.env.JLCEDA_BRIDGE_TOKEN = 'bridge-test-token';
 const tokenQuery = '?token=bridge-test-token';
 const mainServer = new EdaBridgeServer(port);
 const secondaryServer = new EdaBridgeServer(port);
+let expiryServer;
 let blue;
 let red;
 
@@ -105,6 +117,7 @@ try {
   assert.equal(mainServer.getMode(), 'main');
 
   await expectPolicyClose(`${url}/bridge/ws`);
+  await expectPolicyClose(`${url}/mcp-internal?token=wrong-token`);
   await expectPolicyClose(`${url}/unsupported${tokenQuery}`);
 
   blue = await registerEda(`${url}/bridge/ws${tokenQuery}`, 'blue-page');
@@ -136,10 +149,37 @@ try {
     { source: 'red', path: '/bridge/test/shared' },
   );
 
+  const expiryPort = await reservePort();
+  expiryServer = new EdaBridgeServer(expiryPort, { peerTtlMs: 250, peerSweepIntervalMs: 25 });
+  await expiryServer.start();
+  const stale = await registerEda(
+    `ws://127.0.0.1:${expiryPort}/bridge/ws${tokenQuery}`,
+    'stale-page',
+  );
+  const [staleCloseCode] = await new Promise((resolve) => {
+    stale.socket.once('close', (...args) => resolve(args));
+  });
+  assert.equal(staleCloseCode, 4000);
+  expiryServer.close();
+  expiryServer = undefined;
+
+  mainServer.close();
+  await waitUntil(() => secondaryServer.getMode() === 'main');
+  red = await registerEda(`${url}/bridge/ws${tokenQuery}`, 'red-reconnected');
+  attachTaskResponder(red.socket, 'red-reconnected', (message) => ({
+    source: 'promoted-server',
+    path: message.path,
+  }));
+  assert.deepEqual(
+    await secondaryServer.request('/bridge/test/failover', { value: 4 }, 2000),
+    { source: 'promoted-server', path: '/bridge/test/failover' },
+  );
+
   process.stdout.write('Bridge protocol integration test passed\n');
 } finally {
   blue?.socket.close();
   red?.socket.close();
+  expiryServer?.close();
   secondaryServer.close();
   mainServer.close();
   if (originalToken === undefined) {
