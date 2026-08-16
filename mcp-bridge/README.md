@@ -46,10 +46,10 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 2. 原生 MCP Server
 
-从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.3.tgz`，执行：
+从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.4.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.3.tgz
+npm install --global .\jlceda-mcp-server-2.1.4.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。
