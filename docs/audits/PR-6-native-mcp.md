@@ -23,6 +23,7 @@ Resolved:
 - EDA hello/welcome, heartbeat expiry, ready, active/standby lease, result validation and takeover are implemented;
 - request IDs include a process UUID and multi-MCP routing is integration-tested;
 - EDA peers report official project/document/page identity, and MCP tools can list and explicitly select the target client;
+- community Bridge 2.0.1 passed read-only integration testing in JLCEDA Professional desktop 3.2.181;
 - surviving MCP processes can compete to take over the listener after the owner exits;
 - the handwritten MCP implementation was replaced by the official TypeScript Server SDK 2.0;
 - tests cover legacy initialize, 2026-07-28 server/discover, tools/list, bridge routing, path/auth rejection and EDA takeover;
@@ -34,7 +35,6 @@ Still open before release:
 
 - make shared-token authentication mandatory or provide a safe first-run token exchange;
 - enable stricter TypeScript and establish a practical repository-wide lint baseline;
-- install the packaged EEXT in supported JLCEDA versions and run real EDA API integration tests; and
 - review every raw or mutating EDA tool for user-visible safety boundaries.
 
 ## Verification performed
