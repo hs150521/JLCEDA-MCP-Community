@@ -3,7 +3,7 @@
   "uuid": "4bf111f3be7d45ea94fa619409c3a79d",
   "displayName": "JLCEDA MCP Community Bridge",
   "description": "免配置开箱即用，语义级原理图审查，支持 EDA API 透传。",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "publisher": "JLCEDA MCP Community",
   "engines": {
     "eda": "^3.0.0"

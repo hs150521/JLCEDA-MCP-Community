@@ -155,13 +155,13 @@ npm run build
 | 工具 | 功能 | 示例 |
 |------|------|------|
 | `jlceda_component_select` | 搜索器件库 | 搜索STM32、电容、电阻 |
+| `jlceda_component_place` | 交互放置器件 | 按顺序由用户确认放置位置 |
 | `jlceda_component_place_auto` | 自动放置器件 | 放置器件到指定坐标 |
 
 ### 自动化工具
 
 | 工具 | 功能 | 示例 |
 |------|------|------|
-| `jlceda_auto_wire_connect` | 自动连线 | 按网络名连接引脚 |
 | `jlceda_schematic_auto_layout` | 自动布局 | 优化器件位置 |
 | `jlceda_schematic_auto_routing` | 自动布线 | 自动连接导线 |
 

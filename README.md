@@ -4,8 +4,8 @@
 > [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP). This project is
 > not affiliated with or endorsed by JLCEDA or the upstream maintainer.
 > Community contact: `yuanzl150521@gmail.com`.
-
-See [COMMUNITY.md](./COMMUNITY.md) for attribution and branch policy, and
+See [COMMUNITY.md](./COMMUNITY.md) for maintenance policy, attribution and
+branch policy, and
 [docs/native-mcp-setup.md](./docs/native-mcp-setup.md) for the tested native
 MCP setup and local bridge security guidance.
 
@@ -154,15 +154,15 @@ npm run build
 | `jlceda_schematic_read`   | 读取当前原理图的完整电路语义快照，返回器件列表、引脚→网络名映射、网络连接关系与 DRC 检查结果 |
 | `jlceda_schematic_review` | 读取全工程所有原理图页面的网表文件，覆盖多页电路，适合全局审查、BOM 核查与跨页信号追踪       |
 | `jlceda_component_select` | 在 EDA 系统库中搜索候选器件，返回候选列表供 AI 选择                |
+| `jlceda_component_place`  | 引导用户按顺序交互放置已确认的器件列表                 |
 | `jlceda_component_place_auto`  | 自动放置器件到指定坐标                         |
-| `jlceda_netlabel_place`   | 在指定器件引脚位置放置网络标签，通过网络标签代替导线实现电气连接，自动识别电源/地符号类型     |
+| `jlceda_netlabel_place`   | 电源/地使用网络标识，UART_TX 等普通信号使用普通网络标签     |
 | `jlceda_netlabel_modify`  | 修改已放置的网络标签名称，支持按引脚位置或图元 ID 查找并修改                      |
 
 ### 自动化工具
 
 | 工具                   | 说明                                                                                          |
 | -------------------- | --------------------------------------------------------------------------------------------- |
-| `jlceda_auto_wire_connect` | 自动连线功能，按网络名连接引脚 |
 | `jlceda_schematic_auto_layout` | 原理图自动布局，优化器件位置 |
 | `jlceda_schematic_auto_routing` | 原理图自动布线，自动连接导线 |
 
@@ -286,7 +286,7 @@ npm run build
 ### 新增功能
 
 - ✅ `netlabel_place` / `netlabel_modify` - 网络标签放置和修改
-- ✅ `auto_wire_connect` - 自动连线
+- ✅ `component_place` - 交互式器件放置
 - ✅ `schematic_auto_layout` - 自动布局
 - ✅ `schematic_auto_routing` - 自动布线  
 - ✅ `component_place_auto` - 自动放置器件

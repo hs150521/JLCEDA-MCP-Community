@@ -163,6 +163,62 @@
     }
   },
   {
+    "name": "component_place",
+    "description": "引导用户按顺序交互放置已确认的器件列表。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "description": "待放置器件数组，按最终放置顺序排列。",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "description": "器件 UUID。"
+              },
+              "libraryUuid": {
+                "type": "string",
+                "description": "器件所属库 UUID。"
+              },
+              "name": {
+                "type": "string",
+                "description": "器件名称（可选）。"
+              },
+              "footprintName": {
+                "type": "string",
+                "description": "封装名称（可选）。"
+              },
+              "subPartName": {
+                "type": "string",
+                "description": "多子部件器件的子部件名称（可选）。"
+              }
+            },
+            "required": [
+              "uuid",
+              "libraryUuid"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 180,
+          "default": 60,
+          "description": "单个器件放置超时时间，单位秒。"
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "component_place_auto",
     "description": "自动将器件放置到原理图的指定坐标。支持 AI 计算智能布局，或使用网格/线性自动布局。放置后用户可手动调整位置。",
     "inputSchema": {
@@ -303,112 +359,8 @@
     }
   },
   {
-    "name": "auto_wire_connect",
-    "description": "根据网络连接关系，自动在器件引脚之间创建导线。支持按网络名分组连接或点对点连接，使用曼哈顿布线（正交）或直线布线。",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "connections": {
-          "type": "array",
-          "description": "按网络名分组的连接定义（与 pointToPointConnections 二选一）。",
-          "items": {
-            "type": "object",
-            "properties": {
-              "netName": {
-                "type": "string",
-                "description": "网络名称（如 VCC、GND、SDA）。"
-              },
-              "pinReferences": {
-                "type": "array",
-                "description": "该网络需要连接的所有引脚。",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "componentId": {
-                      "type": "string",
-                      "description": "器件实例 ID（从 schematic_read 获取的 componentInstanceId）。"
-                    },
-                    "pinNumber": {
-                      "type": "string",
-                      "description": "引脚编号。"
-                    }
-                  },
-                  "required": [
-                    "componentId",
-                    "pinNumber"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "netName",
-              "pinReferences"
-            ]
-          }
-        },
-        "pointToPointConnections": {
-          "type": "array",
-          "description": "点对点连接定义（与 connections 二选一）。",
-          "items": {
-            "type": "object",
-            "properties": {
-              "from": {
-                "type": "object",
-                "properties": {
-                  "componentId": {
-                    "type": "string"
-                  },
-                  "pinNumber": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "componentId",
-                  "pinNumber"
-                ]
-              },
-              "to": {
-                "type": "object",
-                "properties": {
-                  "componentId": {
-                    "type": "string"
-                  },
-                  "pinNumber": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "componentId",
-                  "pinNumber"
-                ]
-              },
-              "netName": {
-                "type": "string",
-                "description": "可选的网络名。"
-              }
-            },
-            "required": [
-              "from",
-              "to"
-            ]
-          }
-        },
-        "routingStrategy": {
-          "type": "string",
-          "enum": [
-            "direct",
-            "manhattan",
-            "auto"
-          ],
-          "default": "manhattan",
-          "description": "布线策略：direct=直线，manhattan=正交布线（推荐），auto=自动选择。"
-        }
-      }
-    }
-  },
-  {
     "name": "netlabel_place",
-    "description": "在指定器件引脚位置放置网络标签，通过网络标签代替导线实现电气连接。自动识别电源/地符号类型（VCC→电源符号，GND→地符号），其他为普通网络标签。推荐使用此工具代替 auto_wire_connect 进行电路连接。",
+    "description": "在指定器件引脚位置放置网络标签，通过网络标签代替导线实现电气连接。电源和地网络创建对应网络标识，其他网络创建普通网络标签。",
     "inputSchema": {
       "type": "object",
       "properties": {

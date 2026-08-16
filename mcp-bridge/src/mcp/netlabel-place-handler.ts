@@ -18,10 +18,6 @@ interface NetLabelPlacement {
 	netName: string;
 }
 
-interface NetLabelPlaceRequest {
-	placements: NetLabelPlacement[];
-}
-
 interface ComponentApi {
 	context: unknown;
 	getAllPinsByPrimitiveId: (primitiveId: string) => Promise<Array<unknown>>;
@@ -38,6 +34,13 @@ interface NetFlagApi {
 		mirror?: boolean,
 	) => Promise<unknown>;
 }
+
+interface NetLabelApi {
+	context: unknown;
+	createNetLabel: (x: number, y: number, net: string) => Promise<unknown>;
+}
+
+export type NetLabelKind = 'Power' | 'Ground' | 'AnalogGround' | 'ProtectGround' | 'NetLabel';
 
 interface PinObject {
 	x: number;
@@ -113,6 +116,26 @@ function resolveNetFlagApi(): NetFlagApi {
 	};
 }
 
+// 获取普通网络标签 API。
+function resolveNetLabelApi(): NetLabelApi {
+	const attributeModule = eda.sch_PrimitiveAttribute;
+	if (
+		!isPlainObjectRecord(attributeModule)
+		|| typeof attributeModule.createNetLabel !== 'function'
+	) {
+		throw new Error('未找到 eda.sch_PrimitiveAttribute.createNetLabel API。');
+	}
+
+	return {
+		context: attributeModule,
+		createNetLabel: attributeModule.createNetLabel as (
+			x: number,
+			y: number,
+			net: string,
+		) => Promise<unknown>,
+	};
+}
+
 // 查找引脚
 function findPin(pins: Array<unknown>, identifier: string): PinObject | null {
 	for (let i = 0; i < pins.length; i += 1) {
@@ -146,39 +169,37 @@ function findPin(pins: Array<unknown>, identifier: string): PinObject | null {
 }
 
 // 计算标签偏移量（直接放在引脚位置，无偏移）
-function calculateLabelOffset(
-	rotation: number,
-	pinLength: number,
-	netFlagType: 'Power' | 'Ground' | 'AnalogGround' | 'ProtectGround',
-): { x: number; y: number } {
+function calculateLabelOffset(): { x: number; y: number } {
 	// 所有类型的网络标签/符号都直接放在引脚坐标上，不添加偏移
 	return { x: 0, y: 0 };
 }
 
 // 检测网络标识类型（电源/地/自定义）
-function detectNetFlagType(netName: string): 'Power' | 'Ground' | 'AnalogGround' | 'ProtectGround' {
+export function detectNetLabelKind(netName: string): NetLabelKind {
 	const name = netName.toUpperCase();
 
 	// 保护地
-	if (/^(PE|PGND|PROTECTIVE|EARTH)/.test(name)) {
+	if (/^(?:PE|PGND|PROTECTIVE|EARTH)/.test(name)) {
 		return 'ProtectGround';
 	}
 
 	// 模拟地
-	if (/^(AGND|ANALOG|GND_A)/.test(name)) {
+	if (/^(?:AGND|ANALOG|GND_A)/.test(name)) {
 		return 'AnalogGround';
 	}
 
 	// 普通地
-	if (/^(GND|VSS|V-|DGND|GROUND|GND_D)/.test(name) || name === 'GND' || name === 'VSS') {
+	if (/^(?:GND|VSS|V-|DGND|GROUND)/.test(name)) {
 		return 'Ground';
 	}
 
-	// 其他所有网络（包括电源和自定义网络）统一使用 Power 类型
-	// VCC、VDD、+5V 等传统电源网络
-	// LED_SIGNAL、UART_TX 等自定义网络
-	// 都使用 Power 类型符号，网络名保持自定义
-	return 'Power';
+	// 常见电源轨名称或名称中包含明确电压轨记法。
+	if (/^(?:VCC|VDD|VEE|VBAT|VSYS|VIN|VOUT|VREF)(?:$|[_+-])/.test(name)
+		|| /(?:^|_)[+-]?(?:\d+(?:\.\d+)?V|\d+V\d+)(?:$|_)/.test(name)) {
+		return 'Power';
+	}
+
+	return 'NetLabel';
 }
 
 /**
@@ -208,6 +229,7 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 
 	const componentApi = resolveComponentApi();
 	const netFlagApi = resolveNetFlagApi();
+	const netLabelApi = resolveNetLabelApi();
 
 	const results = [];
 	let successCount = 0;
@@ -251,26 +273,33 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 			}
 
 			// 检测网络类型（所有网络都使用网络符号）
-			const netFlagType = detectNetFlagType(placement.netName);
+			const netLabelKind = detectNetLabelKind(placement.netName);
 
 			// 计算标签位置（加上偏移量）
-			const offset = calculateLabelOffset(pin.rotation, pin.pinLength, netFlagType);
+			const offset = calculateLabelOffset();
 			const labelX = pin.x + offset.x;
 			const labelY = pin.y + offset.y;
 
-			// 创建网络符号（统一使用 createNetFlag）
-			// 自定义网络名（如 LED_SIGNAL）也使用 Power 类型符号
-			const result = await Promise.resolve(
-				netFlagApi.createNetFlag.call(
-					netFlagApi.context,
-					netFlagType,
-					placement.netName,
-					labelX,
-					labelY,
-					0, // rotation
-					false, // mirror
-				),
-			);
+			const result = netLabelKind === 'NetLabel'
+				? await Promise.resolve(
+						netLabelApi.createNetLabel.call(
+							netLabelApi.context,
+							labelX,
+							labelY,
+							placement.netName,
+						),
+					)
+				: await Promise.resolve(
+						netFlagApi.createNetFlag.call(
+							netFlagApi.context,
+							netLabelKind,
+							placement.netName,
+							labelX,
+							labelY,
+							0,
+							false,
+						),
+					);
 
 			if (result) {
 				results.push({
@@ -279,11 +308,12 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 					pinIdentifier: placement.pinIdentifier,
 					netName: placement.netName,
 					success: true,
-					type: netFlagType,
+					type: netLabelKind,
 					position: { x: labelX, y: labelY },
 				});
 				successCount += 1;
-			} else {
+			}
+			else {
 				results.push({
 					index: i,
 					componentId: placement.componentId,
@@ -294,7 +324,8 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 				});
 				failureCount += 1;
 			}
-		} catch (error: unknown) {
+		}
+		catch (error: unknown) {
 			results.push({
 				index: i,
 				componentId: placement.componentId,

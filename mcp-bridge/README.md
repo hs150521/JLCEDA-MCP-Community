@@ -22,6 +22,7 @@ B 站演示视频：https://www.bilibili.com/video/BV11QwuzxEDy/
 - `schematic_review`：读取全工程所有原理图页面的网表文件，覆盖多页电路，适合全局审查、BOM 核查与跨页信号追踪。
 - `component_select`：搜索器件候选项并返回确认结果。
 - `component_place`：引导放置已确认的器件列表。
+- `netlabel_place`：电源/地网络创建对应网络标识，其他信号创建普通网络标签。
 
 **透传 EDA API 工具（可选，需在服务端侧边栏开启）**
 
