@@ -1,5 +1,10 @@
 # Changelog
 
+## 未发布
+
+- 将校验后的 `api_invoke` 和 `eda_context` 超时值传递给 Bridge 请求。
+- 增加超时参数传递的回归测试。
+
 ## 2.1.3 - 2026-08-17
 
 - 发布面向普通用户的最小 npm 安装包，并提供 `jlceda-mcp` 命令。

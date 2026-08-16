@@ -1,5 +1,8 @@
 # JLCEDA MCP Community
 
+当前开发版会拒绝空的自动布局/自动布线 UUID 选择；EDA 操作超时后仍保持串行，
+直到底层 API 真正结束；网络标签修改同时支持普通标签和组件形式的电源/地标识。
+
 社区维护的嘉立创 EDA 专业版 MCP 集成，基于
 [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP) 改进。
 本项目不是嘉立创官方插件，也不代表上游维护者。

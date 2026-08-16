@@ -75,7 +75,7 @@ function normalizeUuids(raw: unknown): string[] | undefined {
 	}
 
 	if (raw.length === 0) {
-		return undefined;
+		throw new Error('uuids 不能是空数组。若要对整张图执行自动布局，请省略 uuids 参数。');
 	}
 
 	const result: string[] = [];

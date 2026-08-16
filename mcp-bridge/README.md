@@ -1,5 +1,8 @@
 # MCP Bridge 社区版
 
+当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
+直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。
+
 > 本扩展不是嘉立创官方插件，也不代表嘉立创或原项目维护者。
 
 本扩展基于 [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP)
