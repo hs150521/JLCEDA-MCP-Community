@@ -8,7 +8,7 @@ Security fixes are developed on `native-mcp-v2` until that architecture is promo
 
 ## Reporting a vulnerability
 
-Report security issues privately to `yuanzl150521@gmail.com`. Include the affected commit or release, reproduction steps, impact, and any suggested mitigation. Please do not publish a working exploit before a fix is available.
+Report security issues privately to `hs150521@proton.me`. Include the affected commit or release, reproduction steps, impact, and any suggested mitigation. Please do not publish a working exploit before a fix is available.
 
 ## Local bridge protections
 

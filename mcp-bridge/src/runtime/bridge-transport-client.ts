@@ -8,9 +8,9 @@
  * ------------------------------------------------------------------------
  */
 
+import { connectionStatusManager } from '../state/connection-status.ts';
 import { isPlainObjectRecord, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
 import { debugLog } from '../utils/debug-log.ts';
-import { connectionStatusManager } from '../state/connection-status.ts';
 
 interface BridgeTaskMessage {
 	type: 'bridge/task';
@@ -45,11 +45,11 @@ export class BridgeTransport {
 	 * 启动客户端并连接到MCP服务器
 	 */
 	public async start(): Promise<void> {
-		debugLog('[Bridge] Connecting to MCP server at ' + this.serverUrl);
-		
+		debugLog(`[Bridge] Connecting to MCP server at ${this.serverUrl}`);
+
 		// 异步连接，不阻塞
 		this.connect().catch((error) => {
-			debugLog('[Bridge] Initial connection failed: ' + toSafeErrorMessage(error));
+			debugLog(`[Bridge] Initial connection failed: ${toSafeErrorMessage(error)}`);
 			// 连接失败会自动重连，不抛出错误
 		});
 	}
@@ -64,7 +64,7 @@ export class BridgeTransport {
 
 		try {
 			// 生成唯一socketId
-			this.socketId = 'eda_bridge_' + Date.now();
+			this.socketId = `eda_bridge_${Date.now()}`;
 
 			// 使用EDA的WebSocket客户端API
 			eda.sys_WebSocket.register(
@@ -79,12 +79,13 @@ export class BridgeTransport {
 				() => {
 					// 连接打开
 					this.onConnected();
-				}
+				},
 			);
 
 			debugLog('[Bridge] WebSocket connection registered');
-		} catch (error: unknown) {
-			debugLog('[Bridge] Failed to register: ' + toSafeErrorMessage(error));
+		}
+		catch (error: unknown) {
+			debugLog(`[Bridge] Failed to register: ${toSafeErrorMessage(error)}`);
 			this.scheduleReconnect();
 			throw error;
 		}
@@ -96,18 +97,20 @@ export class BridgeTransport {
 	private onConnected(): void {
 		this.connected = true;
 		connectionStatusManager.addConnection('mcp-server');
-		
+
 		debugLog('[Bridge] Connected to MCP server');
-		console.log('[Bridge] Connected to MCP server at ' + this.serverUrl);
+		// eslint-disable-next-line no-console
+		console.log(`[Bridge] Connected to MCP server at ${this.serverUrl}`);
 
 		// 显示连接成功提示
 		try {
 			eda.sys_Message.showToastMessage(
 				'已连接到MCP服务器',
 				1, // SUCCESS
-				3
+				3,
 			);
-		} catch (e) {
+		}
+		catch {
 			// 忽略
 		}
 	}
@@ -118,17 +121,18 @@ export class BridgeTransport {
 	private onDisconnected(code: number, reason: string): void {
 		this.connected = false;
 		connectionStatusManager.removeConnection('mcp-server');
-		
-		debugLog('[Bridge] Disconnected from MCP server: ' + code + ' - ' + reason);
+
+		debugLog(`[Bridge] Disconnected from MCP server: ${code} - ${reason}`);
 
 		// 显示断开提示
 		try {
 			eda.sys_Message.showToastMessage(
 				'MCP服务器连接断开',
 				2, // WARNING
-				3
+				3,
 			);
-		} catch (e) {
+		}
+		catch {
 			// 忽略
 		}
 
@@ -140,7 +144,7 @@ export class BridgeTransport {
 	 * 连接错误
 	 */
 	private onError(error: string): void {
-		debugLog('[Bridge] WebSocket error: ' + error);
+		debugLog(`[Bridge] WebSocket error: ${error}`);
 	}
 
 	/**
@@ -151,7 +155,7 @@ export class BridgeTransport {
 			return;
 		}
 
-		debugLog('[Bridge] Scheduling reconnect in ' + this.RECONNECT_INTERVAL + 'ms');
+		debugLog(`[Bridge] Scheduling reconnect in ${this.RECONNECT_INTERVAL}ms`);
 
 		this.reconnectTimer = globalThis.setTimeout(() => {
 			this.reconnectTimer = undefined;
@@ -177,8 +181,9 @@ export class BridgeTransport {
 				connectionStatusManager.updateActivity('mcp-server');
 				await this.handleTask(message as BridgeTaskMessage);
 			}
-		} catch (error: unknown) {
-			debugLog('[Bridge] Failed to handle message: ' + toSafeErrorMessage(error));
+		}
+		catch (error: unknown) {
+			debugLog(`[Bridge] Failed to handle message: ${toSafeErrorMessage(error)}`);
 		}
 	}
 
@@ -187,35 +192,36 @@ export class BridgeTransport {
 	 */
 	private async handleTask(message: BridgeTaskMessage): Promise<void> {
 		const { requestId, path, payload } = message;
-		
+
 		try {
-			debugLog('[Bridge] Handling task: ' + path + ', requestId: ' + requestId);
-			
+			debugLog(`[Bridge] Handling task: ${path}, requestId: ${requestId}`);
+
 			// 调用handler执行任务
 			const result = await this.callbacks.onTask(requestId, path, payload);
-			
+
 			// 序列化结果
 			const serialized = await toSerializableAsync(result);
-			
+
 			// 返回成功结果
 			const response: BridgeResultMessage = {
 				type: 'bridge/result',
 				requestId,
 				result: serialized,
 			};
-			
+
 			this.sendMessage(response);
-			debugLog('[Bridge] Task completed: ' + requestId);
-		} catch (error: unknown) {
+			debugLog(`[Bridge] Task completed: ${requestId}`);
+		}
+		catch (error: unknown) {
 			// 返回错误结果
 			const response: BridgeResultMessage = {
 				type: 'bridge/result',
 				requestId,
 				error: toSafeErrorMessage(error),
 			};
-			
+
 			this.sendMessage(response);
-			debugLog('[Bridge] Task failed: ' + requestId + ', error: ' + toSafeErrorMessage(error));
+			debugLog(`[Bridge] Task failed: ${requestId}, error: ${toSafeErrorMessage(error)}`);
 		}
 	}
 
@@ -231,8 +237,9 @@ export class BridgeTransport {
 		try {
 			const data = JSON.stringify(message);
 			eda.sys_WebSocket.send(this.socketId, data);
-		} catch (error: unknown) {
-			debugLog('[Bridge] Failed to send message: ' + toSafeErrorMessage(error));
+		}
+		catch (error: unknown) {
+			debugLog(`[Bridge] Failed to send message: ${toSafeErrorMessage(error)}`);
 		}
 	}
 
@@ -250,7 +257,8 @@ export class BridgeTransport {
 		if (this.socketId) {
 			try {
 				eda.sys_WebSocket.close(this.socketId);
-			} catch (e) {
+			}
+			catch {
 				// 忽略
 			}
 			this.socketId = null;

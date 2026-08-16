@@ -4,7 +4,7 @@ JLCEDA MCP Community is a community-maintained fork of
 [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP).
 
 - Repository: https://github.com/hs150521/JLCEDA-MCP-Community
-- Contact: `yuanzl150521@gmail.com`
+- Contact: `hs150521@proton.me`
 - License: Apache License 2.0
 - Status: independent community project; not affiliated with or endorsed by
   JLCEDA or the upstream maintainer
@@ -37,5 +37,5 @@ Before a community EDA extension is published, it must have:
 7. an EDA integration test against supported editor versions; and
 8. retained Apache-2.0 license and applicable attribution notices.
 
-Security-sensitive reports should be sent to `yuanzl150521@gmail.com` before
+Security-sensitive reports should be sent to `hs150521@proton.me` before
 public disclosure.

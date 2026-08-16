@@ -2,7 +2,7 @@
 
 Audit date: 2026-08-16  
 Audited head: `090d441` (`sengbin/JLCEDA-MCP#6`)  
-Community contact: `yuanzl150521@gmail.com`
+Community contact: `hs150521@proton.me`
 
 ## Verdict
 

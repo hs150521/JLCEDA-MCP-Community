@@ -26,7 +26,7 @@ export class ConnectionStatusManager {
 	 */
 	public markServerStarted(): void {
 		this.serverStartedAt = Date.now();
-		debugLog('[Status] Server started at: ' + new Date(this.serverStartedAt).toLocaleString());
+		debugLog(`[Status] Server started at: ${new Date(this.serverStartedAt).toLocaleString()}`);
 	}
 
 	/**
@@ -40,7 +40,7 @@ export class ConnectionStatusManager {
 			requestCount: 0,
 		};
 		this.connections.set(clientId, info);
-		debugLog('[Status] Client connected: ' + clientId + ', total: ' + this.connections.size);
+		debugLog(`[Status] Client connected: ${clientId}, total: ${this.connections.size}`);
 		this.showConnectionToast('MCP服务器已连接', true);
 	}
 
@@ -49,7 +49,7 @@ export class ConnectionStatusManager {
 	 */
 	public removeConnection(clientId: string): void {
 		if (this.connections.delete(clientId)) {
-			debugLog('[Status] Client disconnected: ' + clientId + ', remaining: ' + this.connections.size);
+			debugLog(`[Status] Client disconnected: ${clientId}, remaining: ${this.connections.size}`);
 			if (this.connections.size === 0) {
 				this.showConnectionToast('MCP服务器已断开', false);
 			}
@@ -73,12 +73,12 @@ export class ConnectionStatusManager {
 	 */
 	public getStatusSummary(): string {
 		const lines: string[] = [];
-		
+
 		lines.push('═══════════════════════════════════════');
 		lines.push('  MCP Bridge 客户端状态 (v2.0)');
 		lines.push('═══════════════════════════════════════');
 		lines.push('');
-		
+
 		if (this.serverStartedAt === 0 && this.connections.size === 0) {
 			lines.push('⚠️  客户端未启动');
 			return lines.join('\n');
@@ -86,46 +86,47 @@ export class ConnectionStatusManager {
 
 		const uptime = this.serverStartedAt > 0 ? (Date.now() - this.serverStartedAt) : 0;
 		const uptimeStr = uptime > 0 ? this.formatUptime(uptime) : '刚刚启动';
-		
+
 		lines.push('✅ 客户端运行中');
 		lines.push('');
 		lines.push('服务器地址: ws://127.0.0.1:8765/bridge/ws');
-		lines.push('运行时长: ' + uptimeStr);
-		lines.push('总请求数: ' + this.totalRequestsHandled);
+		lines.push(`运行时长: ${uptimeStr}`);
+		lines.push(`总请求数: ${this.totalRequestsHandled}`);
 		lines.push('');
-		
+
 		if (this.connections.size === 0) {
 			lines.push('⚠️  当前未连接到MCP服务器');
 			lines.push('');
 			lines.push('提示：请确保MCP服务器正在运行');
-		} else {
+		}
+		else {
 			lines.push('✅ 已连接到MCP服务器');
 			lines.push('');
 			lines.push('───────────────────────────────────────');
 			lines.push('  连接详情');
 			lines.push('───────────────────────────────────────');
-			
+
 			let index = 1;
 			for (const [clientId, info] of this.connections.entries()) {
 				const connectedTime = Date.now() - info.connectedAt;
 				const connectedStr = this.formatUptime(connectedTime);
 				const idleTime = Date.now() - info.lastActivityAt;
 				const idleStr = this.formatUptime(idleTime);
-				
+
 				lines.push('');
-				lines.push('连接 #' + index + ':');
-				lines.push('  ID: ' + clientId);
-				lines.push('  连接时长: ' + connectedStr);
-				lines.push('  空闲时间: ' + idleStr);
-				lines.push('  处理请求: ' + info.requestCount + ' 个');
-				
+				lines.push(`连接 #${index}:`);
+				lines.push(`  ID: ${clientId}`);
+				lines.push(`  连接时长: ${connectedStr}`);
+				lines.push(`  空闲时间: ${idleStr}`);
+				lines.push(`  处理请求: ${info.requestCount} 个`);
+
 				index++;
 			}
 		}
-		
+
 		lines.push('');
 		lines.push('═══════════════════════════════════════');
-		
+
 		return lines.join('\n');
 	}
 
@@ -151,9 +152,10 @@ export class ConnectionStatusManager {
 			eda.sys_Message.showToastMessage(
 				message,
 				isSuccess ? 1 : 2, // 1=SUCCESS, 2=WARNING
-				3
+				3,
 			);
-		} catch (e) {
+		}
+		catch {
 			// 忽略提示错误
 		}
 	}
@@ -168,13 +170,16 @@ export class ConnectionStatusManager {
 		const days = Math.floor(hours / 24);
 
 		if (days > 0) {
-			return days + '天 ' + (hours % 24) + '小时';
-		} else if (hours > 0) {
-			return hours + '小时 ' + (minutes % 60) + '分钟';
-		} else if (minutes > 0) {
-			return minutes + '分钟 ' + (seconds % 60) + '秒';
-		} else {
-			return seconds + '秒';
+			return `${days}天 ${hours % 24}小时`;
+		}
+		else if (hours > 0) {
+			return `${hours}小时 ${minutes % 60}分钟`;
+		}
+		else if (minutes > 0) {
+			return `${minutes}分钟 ${seconds % 60}秒`;
+		}
+		else {
+			return `${seconds}秒`;
 		}
 	}
 

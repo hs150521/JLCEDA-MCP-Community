@@ -15,7 +15,7 @@ const MAX_BUFFER_SIZE = 100;
  */
 export function debugLog(message: string, ...args: unknown[]): void {
 	const timestamp = new Date().toISOString();
-	const argsStr = args.map(arg => {
+	const argsStr = args.map((arg) => {
 		try {
 			return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
 		}
@@ -23,18 +23,19 @@ export function debugLog(message: string, ...args: unknown[]): void {
 			return String(arg);
 		}
 	}).join(' ');
-	
+
 	const logLine = `[${timestamp}] ${message} ${argsStr}`;
-	
+
 	// 输出到控制台
+	// eslint-disable-next-line no-console
 	console.log(logLine);
-	
+
 	// 添加到缓冲区
 	logBuffer.push(logLine);
 	if (logBuffer.length > MAX_BUFFER_SIZE) {
 		logBuffer.shift();
 	}
-	
+
 	// 尝试写入EDA存储
 	try {
 		const storageKey = 'mcp_bridge_debug_log';
@@ -64,7 +65,7 @@ export function getDebugLog(): string {
 	catch {
 		// 忽略
 	}
-	
+
 	// 回退到内存缓冲区
 	return logBuffer.join('\n');
 }

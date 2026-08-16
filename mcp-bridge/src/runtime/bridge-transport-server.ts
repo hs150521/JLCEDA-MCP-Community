@@ -8,9 +8,9 @@
  * ------------------------------------------------------------------------
  */
 
+import { connectionStatusManager } from '../state/connection-status.ts';
 import { isPlainObjectRecord, toSafeErrorMessage } from '../utils.ts';
 import { debugLog } from '../utils/debug-log.ts';
-import { connectionStatusManager } from '../state/connection-status.ts';
 
 interface BridgeTaskMessage {
 	type: 'bridge/task';
@@ -52,16 +52,16 @@ export class BridgeTransport {
 		try {
 			// 使用EDA的WebSocket服务器API（假设存在）
 			// 如果不存在，需要使用标准的WebSocket库
-			debugLog('[Bridge] Starting WebSocket server on port ' + this.port);
-			
+			debugLog(`[Bridge] Starting WebSocket server on port ${this.port}`);
+
 			// 注意：这里需要根据EDA实际提供的API进行调整
 			// 由于EDA可能不提供服务器API，我们需要使用标准WebSocket
 			const ws = await import('ws');
 			const WebSocketServer = ws.WebSocketServer || ws.Server;
-			
-			this.server = new WebSocketServer({ 
+
+			this.server = new WebSocketServer({
 				port: this.port,
-				path: '/bridge/ws'
+				path: '/bridge/ws',
 			});
 
 			this.server.on('connection', (client: any) => {
@@ -74,10 +74,12 @@ export class BridgeTransport {
 
 			this.started = true;
 			connectionStatusManager.markServerStarted();
-			
-			debugLog('[Bridge] WebSocket server started on ws://127.0.0.1:' + this.port + '/bridge/ws');
-			console.log('[Bridge] WebSocket server started on ws://127.0.0.1:' + this.port + '/bridge/ws');
-		} catch (error: unknown) {
+
+			debugLog(`[Bridge] WebSocket server started on ws://127.0.0.1:${this.port}/bridge/ws`);
+			// eslint-disable-next-line no-console
+			console.log(`[Bridge] WebSocket server started on ws://127.0.0.1:${this.port}/bridge/ws`);
+		}
+		catch (error: unknown) {
 			console.error('[Bridge] Failed to start server:', toSafeErrorMessage(error));
 			throw error;
 		}
@@ -95,7 +97,8 @@ export class BridgeTransport {
 			try {
 				client.close();
 				connectionStatusManager.removeConnection(clientId);
-			} catch (e) {
+			}
+			catch {
 				// ignore
 			}
 		});
@@ -115,11 +118,11 @@ export class BridgeTransport {
 	 * 处理新的客户端连接
 	 */
 	private handleConnection(client: any): void {
-		const clientId = 'client_' + (++this.clientIdCounter) + '_' + Date.now();
+		const clientId = `client_${++this.clientIdCounter}_${Date.now()}`;
 		this.clients.set(client, clientId);
 		connectionStatusManager.addConnection(clientId);
-		
-		debugLog('[Bridge] MCP Server connected, clientId: ' + clientId + ', total clients: ' + this.clients.size);
+
+		debugLog(`[Bridge] MCP Server connected, clientId: ${clientId}, total clients: ${this.clients.size}`);
 
 		client.on('message', async (data: any) => {
 			await this.handleMessage(data, client, clientId);
@@ -128,11 +131,11 @@ export class BridgeTransport {
 		client.on('close', () => {
 			this.clients.delete(client);
 			connectionStatusManager.removeConnection(clientId);
-			debugLog('[Bridge] MCP Server disconnected, clientId: ' + clientId + ', remaining clients: ' + this.clients.size);
+			debugLog(`[Bridge] MCP Server disconnected, clientId: ${clientId}, remaining clients: ${this.clients.size}`);
 		});
 
 		client.on('error', (error: any) => {
-			debugLog('[Bridge] Client error (clientId: ' + clientId + '): ' + toSafeErrorMessage(error));
+			debugLog(`[Bridge] Client error (clientId: ${clientId}): ${toSafeErrorMessage(error)}`);
 		});
 	}
 
@@ -145,7 +148,7 @@ export class BridgeTransport {
 			const message = JSON.parse(text);
 
 			if (!isPlainObjectRecord(message)) {
-				debugLog('[Bridge] Invalid message format from clientId: ' + clientId);
+				debugLog(`[Bridge] Invalid message format from clientId: ${clientId}`);
 				return;
 			}
 
@@ -153,8 +156,9 @@ export class BridgeTransport {
 				connectionStatusManager.updateActivity(clientId);
 				await this.handleTask(message as BridgeTaskMessage, client, clientId);
 			}
-		} catch (error: unknown) {
-			debugLog('[Bridge] Failed to handle message from clientId ' + clientId + ': ' + toSafeErrorMessage(error));
+		}
+		catch (error: unknown) {
+			debugLog(`[Bridge] Failed to handle message from clientId ${clientId}: ${toSafeErrorMessage(error)}`);
 		}
 	}
 
@@ -163,32 +167,33 @@ export class BridgeTransport {
 	 */
 	private async handleTask(message: BridgeTaskMessage, client: any, clientId: string): Promise<void> {
 		const { requestId, path, payload } = message;
-		
+
 		try {
-			debugLog('[Bridge] Handling task from clientId ' + clientId + ': ' + path + ', requestId: ' + requestId);
-			
+			debugLog(`[Bridge] Handling task from clientId ${clientId}: ${path}, requestId: ${requestId}`);
+
 			// 调用handler执行任务
 			const result = await this.callbacks.onTask(requestId, path, payload);
-			
+
 			// 返回成功结果
 			const response: BridgeResultMessage = {
 				type: 'bridge/result',
 				requestId,
 				result,
 			};
-			
+
 			client.send(JSON.stringify(response));
-			debugLog('[Bridge] Task completed for clientId ' + clientId + ': ' + requestId);
-		} catch (error: unknown) {
+			debugLog(`[Bridge] Task completed for clientId ${clientId}: ${requestId}`);
+		}
+		catch (error: unknown) {
 			// 返回错误结果
 			const response: BridgeResultMessage = {
 				type: 'bridge/result',
 				requestId,
 				error: toSafeErrorMessage(error),
 			};
-			
+
 			client.send(JSON.stringify(response));
-			debugLog('[Bridge] Task failed for clientId ' + clientId + ': ' + requestId + ', error: ' + toSafeErrorMessage(error));
+			debugLog(`[Bridge] Task failed for clientId ${clientId}: ${requestId}, error: ${toSafeErrorMessage(error)}`);
 		}
 	}
 }

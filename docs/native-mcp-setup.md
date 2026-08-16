@@ -2,7 +2,19 @@
 
 This document applies to the community `native-mcp-v2` branch.
 
-## 1. Build the server
+## 1. Install the server
+
+Requires Node.js 20 or later. Download `jlceda-mcp-server-2.1.3.tgz` from the
+matching GitHub Release and run:
+
+```powershell
+npm install --global .\jlceda-mcp-server-2.1.3.tgz
+Get-Command jlceda-mcp
+```
+
+The installed STDIO command is `jlceda-mcp`.
+
+### Build from source
 
 ```powershell
 cd mcp-server
@@ -26,12 +38,33 @@ Keep the output private. Reuse the same value for every MCP client that must sha
 
 ## 3. Configure the MCP client
 
-Start `mcp-server/dist/index.js` with these environment variables:
+Configure `jlceda-mcp` as a local STDIO server. Use the same port and token in
+every client.
+
+### Codex
+
+```powershell
+codex mcp add jlceda --env JLCEDA_BRIDGE_PORT=8765 --env JLCEDA_BRIDGE_TOKEN=replace-with-your-random-token -- jlceda-mcp
+codex mcp list
+```
+
+Codex stores MCP configuration in `~/.codex/config.toml`; the desktop app, CLI,
+and IDE extension share it. Restart the Codex client after changing the server.
+See the [official Codex MCP documentation](https://developers.openai.com/codex/mcp/).
+
+### Claude Desktop and compatible JSON clients
 
 ```json
 {
-  JLCEDA_BRIDGE_PORT: 8765,
-  JLCEDA_BRIDGE_TOKEN: replace-with-your-random-token
+  mcpServers: {
+    jlceda: {
+      command: jlceda-mcp,
+      env: {
+        JLCEDA_BRIDGE_PORT: 8765,
+        JLCEDA_BRIDGE_TOKEN: replace-with-your-random-token
+      }
+    }
+  }
 }
 ```
 

@@ -8,28 +8,28 @@
  * ------------------------------------------------------------------------
  */
 
-import { debugLog } from '../utils/debug-log.ts';
-import { toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
-import { BridgeTransport } from './bridge-transport-client.ts';
-import { connectionStatusManager } from '../state/connection-status.ts';
 import { handleApiIndexTask } from '../mcp/api-index-handler.ts';
 import { handleApiSearchTask } from '../mcp/api-search-handler.ts';
 import { handleAutoLayoutTask } from '../mcp/auto-layout-handler.ts';
 import { handleAutoRoutingTask } from '../mcp/auto-routing-handler.ts';
+import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import {
 	handleComponentPlaceCheckTask,
 	handleComponentPlaceCloseTask,
 	handleComponentPlaceStartTask,
 	handleComponentPlaceTask,
 } from '../mcp/component-place-handler.ts';
-import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
+import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
+import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
-import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
-import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
+import { connectionStatusManager } from '../state/connection-status.ts';
+import { toSafeErrorMessage } from '../utils.ts';
+import { debugLog } from '../utils/debug-log.ts';
+import { BridgeTransport } from './bridge-transport-client.ts';
 
 const MCP_SERVER_URL = 'ws://127.0.0.1:8765/bridge/ws';
 const PAGE_CHECK_INTERVAL_MS = 1000;
@@ -70,7 +70,8 @@ async function isValidPageTypeAsync(): Promise<boolean> {
 			return validTypes.includes(docInfo.documentType);
 		}
 		return false;
-	} catch (e) {
+	}
+	catch {
 		return false;
 	}
 }
@@ -110,14 +111,15 @@ function startPageCheck(): void {
 			if (shouldBeActive && !transport) {
 				// 需要连接但未连接
 				startClient();
-			} else if (!shouldBeActive && transport) {
+			}
+			else if (!shouldBeActive && transport) {
 				// 不需要但正在运行
 				stopClient();
 			}
 		}, PAGE_CHECK_INTERVAL_MS);
 
 		// 立即检查一次
-		isValidPageTypeAsync().then(isValid => {
+		isValidPageTypeAsync().then((isValid) => {
 			if (isValid) {
 				startClient();
 			}
@@ -148,7 +150,7 @@ function startClient(): void {
 
 	// 异步启动，不等待结果
 	transport.start().catch((error: unknown) => {
-		debugLog('[Bridge Runtime] Failed to start client: ' + toSafeErrorMessage(error));
+		debugLog(`[Bridge Runtime] Failed to start client: ${toSafeErrorMessage(error)}`);
 		transport = undefined;
 	});
 }
@@ -171,9 +173,10 @@ function stopClient(): void {
 		eda.sys_Message.showToastMessage(
 			'已断开MCP服务器连接（页面切换）',
 			2, // WARNING
-			2
+			2,
 		);
-	} catch (e) {
+	}
+	catch {
 		// 忽略
 	}
 }
@@ -204,32 +207,34 @@ export function stopBridgeRuntime(): void {
  */
 export function restartBridgeServer(): void {
 	debugLog('[Bridge Runtime] Manual restart requested');
-	
+
 	// 重新标记启动（刷新状态显示）
 	connectionStatusManager.clear();
 	connectionStatusManager.markServerStarted();
-	
+
 	// 先断开
 	stopClient();
-	
+
 	// 显示重启提示
 	try {
 		eda.sys_Message.showToastMessage(
 			'正在重新连接MCP服务器...',
 			2, // WARNING
-			2
+			2,
 		);
-	} catch (e) {
+	}
+	catch {
 		// 忽略
 	}
-	
+
 	// 等待500ms后重新连接
 	globalThis.setTimeout(async () => {
 		const isValid = await isValidPageTypeAsync();
-		
+
 		if (isValid) {
 			startClient();
-		} else {
+		}
+		else {
 			// 不在有效页面
 			try {
 				const docInfo = await eda.dmt_SelectControl.getCurrentDocumentInfo();
@@ -242,14 +247,15 @@ export function restartBridgeServer(): void {
 						'3': 'PCB ✅',
 						'5': 'Project（工程）',
 					};
-					const typeName = typeNames[String(docInfo.documentType)] || '未知(' + docInfo.documentType + ')';
-					message += '当前文档类型: ' + typeName + '\n\n';
+					const typeName = typeNames[String(docInfo.documentType)] || `未知(${docInfo.documentType})`;
+					message += `当前文档类型: ${typeName}\n\n`;
 				}
 				message += '将在打开原理图/PCB时自动连接。';
-				
+
 				eda.sys_Dialog.showInformationMessage(message, 'MCP Bridge 重启');
-			} catch (e) {
-				debugLog('[Bridge Runtime] Failed to get document info: ' + e);
+			}
+			catch (e) {
+				debugLog(`[Bridge Runtime] Failed to get document info: ${e}`);
 			}
 		}
 	}, 500);
@@ -259,22 +265,23 @@ export function restartBridgeServer(): void {
  * 处理任务
  */
 async function handleTask(path: string, payload: unknown): Promise<unknown> {
-	debugLog('[Bridge Runtime] Handling task: ' + path);
+	debugLog(`[Bridge Runtime] Handling task: ${path}`);
 
 	// 查找handler
 	const handler = BRIDGE_TASK_HANDLERS[path];
 	if (!handler) {
-		throw new Error('Unknown task path: ' + path);
+		throw new Error(`Unknown task path: ${path}`);
 	}
 
 	try {
 		// 执行handler
 		const result = await handler(payload);
-		
-		debugLog('[Bridge Runtime] Task completed: ' + path);
+
+		debugLog(`[Bridge Runtime] Task completed: ${path}`);
 		return result;
-	} catch (error: unknown) {
-		debugLog('[Bridge Runtime] Task failed: ' + path + ', error: ' + toSafeErrorMessage(error));
+	}
+	catch (error: unknown) {
+		debugLog(`[Bridge Runtime] Task failed: ${path}, error: ${toSafeErrorMessage(error)}`);
 		throw error;
 	}
 }

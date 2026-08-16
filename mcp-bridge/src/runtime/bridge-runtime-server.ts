@@ -9,10 +9,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
-import { debugLog } from '../utils/debug-log.ts';
 import { handleApiIndexTask } from '../mcp/api-index-handler.ts';
-import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleApiSearchTask } from '../mcp/api-search-handler.ts';
 import { handleAutoLayoutTask } from '../mcp/auto-layout-handler.ts';
 import { handleAutoRoutingTask } from '../mcp/auto-routing-handler.ts';
@@ -25,10 +22,13 @@ import {
 } from '../mcp/component-place-handler.ts';
 import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
+import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
 import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
+import { toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
+import { debugLog } from '../utils/debug-log.ts';
 import { BridgeTransport } from './bridge-transport-server.ts';
 
 const DEFAULT_PORT = 8765;
@@ -65,30 +65,32 @@ function isValidPageType(): boolean {
 	try {
 		// 使用 getCurrentDocumentInfo 获取文档类型
 		// 这是异步方法，但我们需要同步检查，所以尝试多种方法
-		
+
 		// 方法1：尝试使用 dmt_SelectControl.getCurrentDocumentInfo
 		const docInfo = eda.dmt_SelectControl.getCurrentDocumentInfo();
 		if (docInfo && typeof docInfo.then === 'function') {
 			// 如果是Promise，我们无法在同步函数中等待
 			// 使用备选方法
-		} else if (docInfo && docInfo.documentType !== undefined) {
+		}
+		else if (docInfo && docInfo.documentType !== undefined) {
 			// SCHEMATIC_PAGE = 1, PCB = 3
 			const validTypes = [1, 3];
-			debugLog('[Bridge Runtime] Document type (sync): ' + docInfo.documentType);
+			debugLog(`[Bridge Runtime] Document type (sync): ${docInfo.documentType}`);
 			return validTypes.includes(docInfo.documentType);
 		}
-		
+
 		// 方法2：尝试使用 sys_Context（如果存在）
 		if (eda.sys_Context && typeof eda.sys_Context.getActivePageType === 'function') {
 			const pageType = eda.sys_Context.getActivePageType();
-			debugLog('[Bridge Runtime] Page type (sys_Context): ' + pageType);
+			debugLog(`[Bridge Runtime] Page type (sys_Context): ${pageType}`);
 			return pageType === 'sch' || pageType === 'pcb';
 		}
-		
+
 		debugLog('[Bridge Runtime] Unable to determine page type');
 		return false;
-	} catch (e) {
-		debugLog('[Bridge Runtime] Failed to get page type: ' + e);
+	}
+	catch (e) {
+		debugLog(`[Bridge Runtime] Failed to get page type: ${e}`);
 		return false;
 	}
 }
@@ -102,12 +104,13 @@ async function isValidPageTypeAsync(): Promise<boolean> {
 		if (docInfo && docInfo.documentType !== undefined) {
 			// SCHEMATIC_PAGE = 1, PCB = 3
 			const validTypes = [1, 3];
-			debugLog('[Bridge Runtime] Document type (async): ' + docInfo.documentType);
+			debugLog(`[Bridge Runtime] Document type (async): ${docInfo.documentType}`);
 			return validTypes.includes(docInfo.documentType);
 		}
 		return false;
-	} catch (e) {
-		debugLog('[Bridge Runtime] Failed to get document info: ' + e);
+	}
+	catch (e) {
+		debugLog(`[Bridge Runtime] Failed to get document info: ${e}`);
 		return false;
 	}
 }
@@ -142,7 +145,8 @@ function startPageCheck(): void {
 		if (shouldBeActive && !transport) {
 			// 需要启动但未启动
 			startServer();
-		} else if (!shouldBeActive && transport) {
+		}
+		else if (!shouldBeActive && transport) {
 			// 不需要但正在运行
 			stopServer();
 		}
@@ -171,30 +175,33 @@ function startServer(): void {
 	});
 
 	transport.start().then(() => {
-		console.log('[Bridge Runtime] Bridge server started successfully on port ' + DEFAULT_PORT);
-		
+		// eslint-disable-next-line no-console
+		console.log(`[Bridge Runtime] Bridge server started successfully on port ${DEFAULT_PORT}`);
+
 		// 显示成功提示
 		try {
 			eda.sys_Message.showToastMessage(
-				'MCP Bridge服务器已启动 (端口:' + DEFAULT_PORT + ')',
+				`MCP Bridge服务器已启动 (端口:${DEFAULT_PORT})`,
 				1, // SUCCESS
-				3
+				3,
 			);
-		} catch (e) {
+		}
+		catch {
 			// 忽略提示错误
 		}
 	}).catch((error: unknown) => {
 		console.error('[Bridge Runtime] Failed to start bridge server:', toSafeErrorMessage(error));
 		transport = undefined;
-		
+
 		// 显示错误提示
 		try {
 			eda.sys_Message.showToastMessage(
-				'MCP Bridge服务器启动失败: ' + toSafeErrorMessage(error),
+				`MCP Bridge服务器启动失败: ${toSafeErrorMessage(error)}`,
 				0, // ERROR
-				5
+				5,
 			);
-		} catch (e) {
+		}
+		catch {
 			// 忽略提示错误
 		}
 	});
@@ -218,9 +225,10 @@ function stopServer(): void {
 		eda.sys_Message.showToastMessage(
 			'MCP Bridge服务器已停止（页面切换）',
 			2, // WARNING
-			2
+			2,
 		);
-	} catch (e) {
+	}
+	catch {
 		// 忽略提示错误
 	}
 }
@@ -251,32 +259,34 @@ export function stopBridgeRuntime(): void {
  */
 export function restartBridgeServer(): void {
 	debugLog('[Bridge Runtime] Manual restart requested');
-	
+
 	// 先停止服务器
 	stopServer();
-	
+
 	// 显示重启提示
 	try {
 		eda.sys_Message.showToastMessage(
 			'正在重启MCP Bridge服务器...',
 			2, // WARNING
-			2
+			2,
 		);
-	} catch (e) {
+	}
+	catch {
 		// 忽略提示错误
 	}
-	
+
 	// 等待500ms后重新启动（使用异步检查）
 	globalThis.setTimeout(async () => {
 		try {
 			const pageType = await isValidPageTypeAsync();
 			const docInfo = await eda.dmt_SelectControl.getCurrentDocumentInfo();
-			
-			debugLog('[Bridge Runtime] Restart check - isValid: ' + pageType + ', documentType: ' + (docInfo ? docInfo.documentType : 'none'));
-			
+
+			debugLog(`[Bridge Runtime] Restart check - isValid: ${pageType}, documentType: ${docInfo ? docInfo.documentType : 'none'}`);
+
 			if (pageType) {
 				startServer();
-			} else {
+			}
+			else {
 				// 不在有效页面
 				let message = '当前不在原理图或PCB页面\n\n';
 				if (docInfo && docInfo.documentType !== undefined) {
@@ -288,18 +298,19 @@ export function restartBridgeServer(): void {
 						'5': 'Project（工程）',
 						'2': 'Symbol Component（元件符号）',
 					};
-					const typeName = typeNames[String(docInfo.documentType)] || '未知类型(' + docInfo.documentType + ')';
-					message += '当前文档类型: ' + typeName + '\n\n';
+					const typeName = typeNames[String(docInfo.documentType)] || `未知类型(${docInfo.documentType})`;
+					message += `当前文档类型: ${typeName}\n\n`;
 				}
 				message += '服务器将在打开原理图/PCB时自动启动。';
-				
+
 				eda.sys_Dialog.showInformationMessage(message, 'MCP Bridge 重启');
 			}
-		} catch (e) {
-			debugLog('[Bridge Runtime] Restart check failed: ' + e);
+		}
+		catch (e) {
+			debugLog(`[Bridge Runtime] Restart check failed: ${e}`);
 			eda.sys_Dialog.showInformationMessage(
-				'重启检查失败\n\n' + String(e),
-				'MCP Bridge 重启'
+				`重启检查失败\n\n${String(e)}`,
+				'MCP Bridge 重启',
 			);
 		}
 	}, 500);
@@ -309,25 +320,26 @@ export function restartBridgeServer(): void {
  * 处理任务
  */
 async function handleTask(path: string, payload: unknown): Promise<unknown> {
-	debugLog('[Bridge Runtime] Handling task: ' + path);
+	debugLog(`[Bridge Runtime] Handling task: ${path}`);
 
 	// 查找handler
 	const handler = BRIDGE_TASK_HANDLERS[path];
 	if (!handler) {
-		throw new Error('Unknown task path: ' + path);
+		throw new Error(`Unknown task path: ${path}`);
 	}
 
 	try {
 		// 执行handler
 		const result = await handler(payload);
-		
+
 		// 序列化结果
 		const serialized = await toSerializableAsync(result);
-		
-		debugLog('[Bridge Runtime] Task completed: ' + path);
+
+		debugLog(`[Bridge Runtime] Task completed: ${path}`);
 		return serialized;
-	} catch (error: unknown) {
-		debugLog('[Bridge Runtime] Task failed: ' + path + ', error: ' + toSafeErrorMessage(error));
+	}
+	catch (error: unknown) {
+		debugLog(`[Bridge Runtime] Task failed: ${path}, error: ${toSafeErrorMessage(error)}`);
 		throw error;
 	}
 }

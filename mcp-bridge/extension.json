@@ -1,151 +1,151 @@
 {
-  "name": "mcp-bridge-community",
-  "uuid": "4bf111f3be7d45ea94fa619409c3a79d",
-  "displayName": "MCP Bridge 社区版",
-  "description": "基于 sengbin/JLCEDA-MCP 项目中 MCP Bridge 扩展改进的社区维护版本；非嘉立创官方插件。支持原生 MCP Server、多客户端选择与原理图工具。",
-  "version": "2.0.4",
-  "publisher": "hs150521 Community",
-  "engines": {
-    "eda": "^3.0.0"
-  },
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/hs150521/JLCEDA-MCP-Community.git"
-  },
-  "categories": "Other",
-  "keywords": [
-    "MCP Bridge",
-    "Copilot",
-    "ClaudeCode",
-    "Codex",
-    "AI",
-    "Unofficial"
-  ],
-  "images": {
-    "logo": "./images/community-logo-512.png"
-  },
-  "homepage": "https://github.com/hs150521/JLCEDA-MCP-Community",
-  "bugs": "https://github.com/hs150521/JLCEDA-MCP-Community/issues",
-  "activationEvents": {
-    "onStartupFinished": true
-  },
-  "entry": "./dist/index",
-  "dependentExtensions": {},
-  "headerMenus": {
-    "home": [
-      {
-        "id": "MCP Bridge",
-        "title": "MCP Bridge",
-        "menuItems": [
-          {
-            "id": "连接状态",
-            "title": "连接状态",
-            "registerFn": "viewConnectionStatus"
-          },
-          {
-            "id": "重启服务器",
-            "title": "重启服务器",
-            "registerFn": "restartServer"
-          },
-          {
-            "id": "连接设置",
-            "title": "连接设置",
-            "registerFn": "openSettingsPage"
-          },
-          {
-            "id": "查看调试日志",
-            "title": "查看调试日志",
-            "registerFn": "viewDebugLog"
-          },
-          {
-            "id": "清空调试日志",
-            "title": "清空调试日志",
-            "registerFn": "clearDebugLogAction"
-          },
-          {
-            "id": "About",
-            "title": "About...",
-            "registerFn": "about"
-          }
-        ]
-      }
-    ],
-    "sch": [
-      {
-        "id": "MCP Bridge",
-        "title": "MCP Bridge",
-        "menuItems": [
-          {
-            "id": "连接状态",
-            "title": "连接状态",
-            "registerFn": "viewConnectionStatus"
-          },
-          {
-            "id": "重启服务器",
-            "title": "重启服务器",
-            "registerFn": "restartServer"
-          },
-          {
-            "id": "连接设置",
-            "title": "连接设置",
-            "registerFn": "openSettingsPage"
-          },
-          {
-            "id": "查看调试日志",
-            "title": "查看调试日志",
-            "registerFn": "viewDebugLog"
-          },
-          {
-            "id": "清空调试日志",
-            "title": "清空调试日志",
-            "registerFn": "clearDebugLogAction"
-          },
-          {
-            "id": "About",
-            "title": "About...",
-            "registerFn": "about"
-          }
-        ]
-      }
-    ],
-    "pcb": [
-      {
-        "id": "MCP Bridge",
-        "title": "MCP Bridge",
-        "menuItems": [
-          {
-            "id": "连接状态",
-            "title": "连接状态",
-            "registerFn": "viewConnectionStatus"
-          },
-          {
-            "id": "重启服务器",
-            "title": "重启服务器",
-            "registerFn": "restartServer"
-          },
-          {
-            "id": "连接设置",
-            "title": "连接设置",
-            "registerFn": "openSettingsPage"
-          },
-          {
-            "id": "查看调试日志",
-            "title": "查看调试日志",
-            "registerFn": "viewDebugLog"
-          },
-          {
-            "id": "清空调试日志",
-            "title": "清空调试日志",
-            "registerFn": "clearDebugLogAction"
-          },
-          {
-            "id": "About",
-            "title": "About...",
-            "registerFn": "about"
-          }
-        ]
-      }
-    ]
-  }
+	"name": "mcp-bridge-community",
+	"uuid": "4bf111f3be7d45ea94fa619409c3a79d",
+	"displayName": "MCP Bridge 社区版",
+	"description": "基于 sengbin/JLCEDA-MCP 项目中 MCP Bridge 扩展改进的社区维护版本；非嘉立创官方插件。支持原生 MCP Server、多客户端选择与原理图工具。",
+	"version": "2.0.5",
+	"publisher": "hs150521 Community",
+	"engines": {
+		"eda": "^3.0.0"
+	},
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/hs150521/JLCEDA-MCP-Community.git"
+	},
+	"categories": "Other",
+	"keywords": [
+		"MCP Bridge",
+		"Copilot",
+		"ClaudeCode",
+		"Codex",
+		"AI",
+		"Unofficial"
+	],
+	"images": {
+		"logo": "./images/community-logo-512.png"
+	},
+	"homepage": "https://github.com/hs150521/JLCEDA-MCP-Community",
+	"bugs": "https://github.com/hs150521/JLCEDA-MCP-Community/issues",
+	"activationEvents": {
+		"onStartupFinished": true
+	},
+	"entry": "./dist/index",
+	"dependentExtensions": {},
+	"headerMenus": {
+		"home": [
+			{
+				"id": "MCP Bridge",
+				"title": "MCP Bridge",
+				"menuItems": [
+					{
+						"id": "连接状态",
+						"title": "连接状态",
+						"registerFn": "viewConnectionStatus"
+					},
+					{
+						"id": "重启服务器",
+						"title": "重启服务器",
+						"registerFn": "restartServer"
+					},
+					{
+						"id": "连接设置",
+						"title": "连接设置",
+						"registerFn": "openSettingsPage"
+					},
+					{
+						"id": "查看调试日志",
+						"title": "查看调试日志",
+						"registerFn": "viewDebugLog"
+					},
+					{
+						"id": "清空调试日志",
+						"title": "清空调试日志",
+						"registerFn": "clearDebugLogAction"
+					},
+					{
+						"id": "About",
+						"title": "About...",
+						"registerFn": "about"
+					}
+				]
+			}
+		],
+		"sch": [
+			{
+				"id": "MCP Bridge",
+				"title": "MCP Bridge",
+				"menuItems": [
+					{
+						"id": "连接状态",
+						"title": "连接状态",
+						"registerFn": "viewConnectionStatus"
+					},
+					{
+						"id": "重启服务器",
+						"title": "重启服务器",
+						"registerFn": "restartServer"
+					},
+					{
+						"id": "连接设置",
+						"title": "连接设置",
+						"registerFn": "openSettingsPage"
+					},
+					{
+						"id": "查看调试日志",
+						"title": "查看调试日志",
+						"registerFn": "viewDebugLog"
+					},
+					{
+						"id": "清空调试日志",
+						"title": "清空调试日志",
+						"registerFn": "clearDebugLogAction"
+					},
+					{
+						"id": "About",
+						"title": "About...",
+						"registerFn": "about"
+					}
+				]
+			}
+		],
+		"pcb": [
+			{
+				"id": "MCP Bridge",
+				"title": "MCP Bridge",
+				"menuItems": [
+					{
+						"id": "连接状态",
+						"title": "连接状态",
+						"registerFn": "viewConnectionStatus"
+					},
+					{
+						"id": "重启服务器",
+						"title": "重启服务器",
+						"registerFn": "restartServer"
+					},
+					{
+						"id": "连接设置",
+						"title": "连接设置",
+						"registerFn": "openSettingsPage"
+					},
+					{
+						"id": "查看调试日志",
+						"title": "查看调试日志",
+						"registerFn": "viewDebugLog"
+					},
+					{
+						"id": "清空调试日志",
+						"title": "清空调试日志",
+						"registerFn": "clearDebugLogAction"
+					},
+					{
+						"id": "About",
+						"title": "About...",
+						"registerFn": "about"
+					}
+				]
+			}
+		]
+	}
 }
