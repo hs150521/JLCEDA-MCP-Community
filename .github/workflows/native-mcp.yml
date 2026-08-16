@@ -1,0 +1,50 @@
+name: Native MCP CI
+
+on:
+  push:
+    branches: [native-mcp-v2]
+  pull_request:
+    paths:
+      - mcp-server/**
+      - mcp-bridge/**
+      - .github/workflows/native-mcp.yml
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --omit=dev --registry=https://registry.npmjs.org
+
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-bridge
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-bridge/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Verify packaged extension
+        run: find ../build -type f -name '*.eext' -print -quit | grep -q .

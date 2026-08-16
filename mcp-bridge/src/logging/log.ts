@@ -106,6 +106,27 @@ function normalizeText(value: unknown): string {
 	return String(value ?? '').trim();
 }
 
+function redactBridgeWebSocketUrl(value: string | undefined): string | undefined {
+	if (!value) {
+		return value;
+	}
+	try {
+		const parsed = new URL(value);
+		for (const key of ['token', 'access_token', 'auth']) {
+			if (parsed.searchParams.has(key)) {
+				parsed.searchParams.set(key, '[REDACTED]');
+			}
+		}
+		if (parsed.password) {
+			parsed.password = '[REDACTED]';
+		}
+		return parsed.toString();
+	}
+	catch {
+		return value.replace(/([?&](?:token|access_token|auth)=)[^&#]*/gi, '$1[REDACTED]');
+	}
+}
+
 // 生成北京时间 HH:mm:ss 展示文本。
 function formatBeijingTimeOnly(date: Date): string {
 	try {
@@ -183,7 +204,7 @@ export class BridgeLogPipeline {
 			message: input.message,
 			runtimeStatus: input.runtimeStatus,
 			bridgeStatus: input.bridgeStatus,
-			bridgeWebSocketUrl: input.bridgeWebSocketUrl,
+			bridgeWebSocketUrl: redactBridgeWebSocketUrl(input.bridgeWebSocketUrl),
 			host: input.host,
 			port: input.port,
 			contextKey: input.contextKey,

@@ -20,11 +20,24 @@ export interface BridgeDebugSwitch {
 	enableConnectionList: boolean;
 }
 
+// 当前 EDA 页面身份。字段仅来自嘉立创官方上下文 API。
+export interface BridgeClientContext {
+	documentType?: number;
+	documentUuid?: string;
+	tabId?: string;
+	projectUuid?: string;
+	projectName?: string;
+	pageKind?: 'schematic' | 'pcb';
+	pageUuid?: string;
+	pageName?: string;
+}
+
 // 客户端上报握手消息。
 export interface BridgeClientHelloMessage {
 	type: 'bridge/hello';
 	clientId: string;
 	bridgeVersion: string;
+	context?: BridgeClientContext;
 }
 
 // 客户端上报心跳消息。
@@ -32,6 +45,7 @@ export interface BridgeClientHeartbeatMessage {
 	type: 'bridge/heartbeat';
 	clientId: string;
 	sentAt: number;
+	context?: BridgeClientContext;
 }
 
 // 客户端回传任务执行结果。

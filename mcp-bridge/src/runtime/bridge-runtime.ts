@@ -9,7 +9,7 @@
  * ------------------------------------------------------------------------
  */
 
-import type { BridgeDebugSwitch, BridgeRole, BridgeServerRoleMessage } from '../bridge/protocol.ts';
+import type { BridgeClientContext, BridgeDebugSwitch, BridgeRole, BridgeServerRoleMessage } from '../bridge/protocol.ts';
 import type { UnifiedLogEntry } from '../logging/log.ts';
 import extensionConfig from '../../extension.json';
 import { getConfiguredMcpUrl, getMcpServerUrlChangedTopic } from '../bridge/config.ts';
@@ -17,6 +17,9 @@ import { BridgeLogDispatchPipeline } from '../logging/log-dispatch.ts';
 import { bridgeLogPipeline } from '../logging/log.ts';
 import { handleApiIndexTask } from '../mcp/api-index-handler.ts';
 import { handleApiSearchTask } from '../mcp/api-search-handler.ts';
+import { handleAutoLayoutTask } from '../mcp/auto-layout-handler.ts';
+import { handleAutoRoutingTask } from '../mcp/auto-routing-handler.ts';
+import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import {
 	handleComponentPlaceCheckTask,
 	handleComponentPlaceCloseTask,
@@ -26,27 +29,55 @@ import {
 import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
+import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
+import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
 import { BridgeStateManager } from '../state/state-manager.ts';
 import { BridgeStatusReporter } from '../state/status-reporter.ts';
 import { safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
+import { debugLog } from '../utils/debug-log.ts';
 import { BridgeTransport } from './bridge-transport.ts';
 
 const RECONNECT_INTERVAL_MS = 1200;
 const CONTEXT_SYNC_INTERVAL_MS = 1000;
 const CONNECT_SUCCESS_TOAST_TIMER_SECONDS = 3;
+const BRIDGE_TASK_TIMEOUT_MS = 25_000;
+
+async function withTaskTimeout<T>(task: Promise<T>, path: string): Promise<T> {
+	let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			task,
+			new Promise<T>((_resolve, reject) => {
+				timeoutId = globalThis.setTimeout(() => {
+					reject(new Error(`Bridge task timed out after ${String(BRIDGE_TASK_TIMEOUT_MS)}ms: ${path}`));
+				}, BRIDGE_TASK_TIMEOUT_MS);
+			}),
+		]);
+	}
+	finally {
+		if (timeoutId !== undefined) {
+			globalThis.clearTimeout(timeoutId);
+		}
+	}
+}
 
 const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown>> = {
 	'/bridge/jlceda/api/index': handleApiIndexTask,
 	'/bridge/jlceda/api/search': handleApiSearchTask,
 	'/bridge/jlceda/api/invoke': handleApiInvokeTask,
+	'/bridge/jlceda/auto/layout': handleAutoLayoutTask,
+	'/bridge/jlceda/auto/routing': handleAutoRoutingTask,
 	'/bridge/jlceda/component/place/check': handleComponentPlaceCheckTask,
 	'/bridge/jlceda/component/place/close': handleComponentPlaceCloseTask,
 	'/bridge/jlceda/component/place/start': handleComponentPlaceStartTask,
 	'/bridge/jlceda/component/place': handleComponentPlaceTask,
+	'/bridge/jlceda/component/place-auto': handleComponentPlaceAutoTask,
 	'/bridge/jlceda/component/select': handleComponentSelectTask,
 	'/bridge/jlceda/context': handleEdaContextTask,
+	'/bridge/jlceda/netlabel/modify': handleNetLabelModifyTask,
+	'/bridge/jlceda/netlabel/place': handleNetLabelPlaceTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,
 };
@@ -125,6 +156,29 @@ function getSocketId(): string {
 	return `jlc_mcp_bridge_socket_${getClientId()}_${socketSequence}`;
 }
 
+// 使用官方上下文 API 读取当前目标身份，避免多页面时仅按连接顺序选择。
+async function readBridgeClientContext(): Promise<BridgeClientContext | undefined> {
+	const [document, project, schematicPage, pcb] = await Promise.all([
+		safeCall(() => eda.dmt_SelectControl.getCurrentDocumentInfo()),
+		safeCall(() => eda.dmt_Project.getCurrentProjectInfo()),
+		safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo()),
+		safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
+	]);
+	if (!document && !schematicPage && !pcb) {
+		return undefined;
+	}
+	return {
+		documentType: document?.documentType,
+		documentUuid: document?.uuid,
+		tabId: document?.tabId,
+		projectUuid: document?.parentProjectUuid ?? project?.uuid,
+		projectName: project?.friendlyName,
+		pageKind: schematicPage ? 'schematic' : pcb ? 'pcb' : undefined,
+		pageUuid: schematicPage?.uuid ?? pcb?.uuid,
+		pageName: schematicPage?.name ?? pcb?.name,
+	};
+}
+
 // 清理重连定时器。
 function clearReconnectTimer(): void {
 	if (reconnectTimer !== undefined) {
@@ -160,22 +214,26 @@ function applyRole(message: BridgeServerRoleMessage): void {
 
 // 调度任务执行并回传结果。
 function enqueueTask(task: { requestId: string; path: string; payload: unknown; leaseTerm: number }, currentTransport: BridgeTransport): void {
+	debugLog('[DEBUG] enqueueTask called, path:', task.path, 'requestId:', task.requestId);
 	taskChain = taskChain.then(async () => {
-		if (currentRole !== 'active') {
-			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
-				message: BRIDGE_STATUS_TEXT.runtime.taskRejectedStandby,
-			});
-			return;
-		}
+		debugLog('[DEBUG] executing task, path:', task.path);
+		// 本地MCP运行模式，移除角色和租约检查
+		// if (currentRole !== 'active') {
+		// 	currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+		// 		message: BRIDGE_STATUS_TEXT.runtime.taskRejectedStandby,
+		// 	});
+		// 	return;
+		// }
 
-		if (task.leaseTerm !== currentLeaseTerm) {
-			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
-				message: BRIDGE_STATUS_TEXT.runtime.taskLeaseExpired,
-			});
-			return;
-		}
+		// if (task.leaseTerm !== currentLeaseTerm) {
+		// 	currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+		// 		message: BRIDGE_STATUS_TEXT.runtime.taskLeaseExpired,
+		// 	});
+		// 	return;
+		// }
 
 		const handler = BRIDGE_TASK_HANDLERS[task.path];
+		debugLog('[DEBUG] handler found:', !!handler, 'for path:', task.path);
 		if (!handler) {
 			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
 				message: `${BRIDGE_STATUS_TEXT.runtime.taskPathUnsupportedPrefix}${task.path}`,
@@ -186,15 +244,26 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		let result: unknown;
 		let taskError: { message: string; stack?: string } | undefined;
 		try {
-			result = await toSerializableAsync(await handler(task.payload));
+			debugLog('[DEBUG] calling handler for path:', task.path);
+			// 任务执行前刷新服务端活动时间戳，避免空闲超时误判
+			currentTransport.refreshServerActivity();
+			result = await withTaskTimeout(
+				(async () => toSerializableAsync(await handler(task.payload)))(),
+				task.path,
+			);
+			// 任务完成后再次刷新，确保结果回传前连接不被断开
+			currentTransport.refreshServerActivity();
+			debugLog('[DEBUG] handler completed successfully, result:', typeof result);
 		}
 		catch (error: unknown) {
+			debugLog('[DEBUG] handler threw error:', error);
 			taskError = {
 				message: toSafeErrorMessage(error),
 				stack: error instanceof Error ? error.stack : undefined,
 			};
 		}
 
+		debugLog('[DEBUG] completing task, hasError:', !!taskError);
 		currentTransport.completeTask(task.requestId, task.leaseTerm, result, taskError);
 	}).catch((error: unknown) => {
 		const message = toSafeErrorMessage(error);
@@ -211,7 +280,8 @@ async function ensureConnected(): Promise<void> {
 	connecting = true;
 	statusReporter.markConnecting();
 	const activeClientId = getClientId();
-	const instance = new BridgeTransport(getConfiguredMcpUrl(), getSocketId(), activeClientId, String(extensionConfig.version), {
+	const initialContext = await readBridgeClientContext();
+	const instance = new BridgeTransport(getConfiguredMcpUrl(), getSocketId(), activeClientId, String(extensionConfig.version), initialContext, {
 		onRoleChanged: (message) => {
 			applyRole(message);
 		},
@@ -235,8 +305,10 @@ async function ensureConnected(): Promise<void> {
 	});
 
 	try {
+		debugLog('[DEBUG] bridge-runtime starting connection');
 		bridgeLogDispatchPipeline.resetHandshakeState();
 		await instance.connect();
+		debugLog('[DEBUG] bridge-runtime connection established');
 		if (!started) {
 			instance.close();
 			return;
@@ -245,7 +317,9 @@ async function ensureConnected(): Promise<void> {
 		transport = instance;
 		bridgeLogDispatchPipeline.flushToTransport(transport);
 		// 只有运行时确认握手完成并接管实例后，才通知服务端允许调度任务。
+		debugLog('[DEBUG] bridge-runtime calling reportReady');
 		transport.reportReady();
+		debugLog('[DEBUG] bridge-runtime reportReady completed');
 		showConnectSuccessToast();
 	}
 	catch (error: unknown) {
@@ -311,8 +385,9 @@ async function isEditablePage(): Promise<boolean> {
 function startContextSync(): void {
 	clearContextSyncTimer();
 	contextSyncTimer = globalThis.setInterval(() => {
-		void isEditablePage().then((editable) => {
+		void isEditablePage().then(async (editable) => {
 			if (editable) {
+				transport?.updateContext(await readBridgeClientContext());
 				// 在原理图或 PCB 页时正常维持连接。
 				void ensureConnected();
 				// 心跳刷新状态快照，让设置页的过期检测能区分活跃连接与历史遗留数据。
@@ -359,5 +434,52 @@ export function startBridgeRuntime(): void {
 		}
 	}).catch(() => {
 		// 页面类型检测失败时跳过初次连接，由周期同步接管。
+	});
+}
+
+/**
+ * 停止桥接运行时并释放所有连接与订阅。
+ */
+export function stopBridgeRuntime(): void {
+	if (!started) {
+		return;
+	}
+
+	started = false;
+	clearReconnectTimer();
+	clearContextSyncTimer();
+	stopTransport();
+	configSubscription?.cancel();
+	configSubscription = null;
+	bridgeLogPipeline.setListener(undefined);
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+}
+
+/**
+ * 手动重启桥接连接，保留运行时与配置订阅。
+ */
+export function restartBridgeServer(): void {
+	if (!started) {
+		startBridgeRuntime();
+		return;
+	}
+
+	clearReconnectTimer();
+	stopTransport();
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+	statusReporter.markConnecting();
+	void isEditablePage().then((editable) => {
+		if (editable) {
+			void ensureConnected();
+		}
+		else {
+			statusReporter.markNotOnEditablePage();
+		}
+	}).catch((error: unknown) => {
+		statusReporter.markFailed(toSafeErrorMessage(error));
 	});
 }

@@ -1,18 +1,20 @@
-# MCP Bridge
+# MCP Bridge 社区版
 
-本扩展为嘉立创 EDA **AI 设计助手** 的 MCP 版，支持双协议连接（stdio / http），在 VS Code / Cursor 内的聊天工具（Copilot / Chat / Claude Code / Codex 等）中提供原理图分析、器件选型、交互放置等功能，配合 VS Code / Cursor 侧的 **JLCEDA MCP Hub** 扩展使用。
+> 本扩展不是嘉立创官方插件，也不代表嘉立创或原项目维护者。
 
-服务端还支持可选的 **透传 EDA API** 模式，开启后可向 AI 额外暴露底层 EDA API 的查询与调用能力，适合有进阶需求的用户使用。
+本扩展基于 [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP)
+项目中的 **MCP Bridge** 改进，由社区独立维护。社区版使用独立的原生 MCP
+Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 VS Code / Cursor
+侧的 MCP Hub 扩展。
 
-> 这套方案的链路是：EDA -> WebSocket (Bridge) -> stdio/http (MCP) -> MCP 客户端（Copilot / Cursor Chat / Claude Code / Codex）。
+主要改进包括原生 MCP 协议、多客户端页面选择、Bridge 凭据保护、语义级原理图读取、
+器件放置和网络标签等工具。
 
-B 站演示视频：https://www.bilibili.com/video/BV11QwuzxEDy/
+链路：嘉立创 EDA -> 本机 WebSocket (Bridge) -> 原生 MCP Server -> MCP 客户端。
 
-讨论QQ群：9041389，欢迎你反馈更多的问题和建议。
-
-![演示动画](images/demo.gif)
-
-项目地址：https://github.com/sengbin/JLCEDA-MCP
+- 社区仓库：https://github.com/hs150521/JLCEDA-MCP-Community
+- 上游项目：https://github.com/sengbin/JLCEDA-MCP
+- 社区联系邮箱：hs150521@proton.me
 
 内置专用工具：
 
@@ -22,6 +24,7 @@ B 站演示视频：https://www.bilibili.com/video/BV11QwuzxEDy/
 - `schematic_review`：读取全工程所有原理图页面的网表文件，覆盖多页电路，适合全局审查、BOM 核查与跨页信号追踪。
 - `component_select`：搜索器件候选项并返回确认结果。
 - `component_place`：引导放置已确认的器件列表。
+- `netlabel_place`：电源/地网络创建对应网络标识，其他信号创建普通网络标签。
 
 **透传 EDA API 工具（可选，需在服务端侧边栏开启）**
 
@@ -32,27 +35,42 @@ B 站演示视频：https://www.bilibili.com/video/BV11QwuzxEDy/
 
 ## 安装
 
-**服务端**和**客户端**两个扩展都需要安装。
+必须同时安装 EDA Bridge 和原生 JLCEDA MCP Server。本社区版不依赖旧版 MCP Hub。
 
-> 初次安装时，先确认 VS Code/Cursor 与嘉立创 EDA 两侧扩展都已安装，再检查聊天工具的 MCP 服务配置是否正确。
+### 1. EDA Bridge
 
-### 客户端（嘉立创 EDA）
+在嘉立创 EDA 专业版扩展管理器中安装“MCP Bridge 社区版”，重启 EDA，然后打开原理图或 PCB 页面。
 
-**从扩展管理器安装（推荐）：**
+### 2. 原生 MCP Server
 
-1. 打开嘉立创 EDA，进入扩展管理器。
-2. 搜索"MCP Bridge"并安装。
+从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.3.tgz`，执行：
 
-### 服务端（VS Code / Cursor）
+```powershell
+npm install --global .\jlceda-mcp-server-2.1.3.tgz
+```
 
-服务端文档：[MCP Hub README](https://github.com/sengbin/JLCEDA-MCP/blob/main/mcp-hub/README.md)
+安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。
 
-**从扩展商店安装（推荐）：**
+Codex 可运行：
 
-打开 VS Code 或 Cursor 扩展视图，搜索“JLCEDA MCP”并安装。
+```powershell
+codex mcp add jlceda --env JLCEDA_BRIDGE_PORT=8765 -- jlceda-mcp
+```
 
-- VS Code 扩展商店：https://marketplace.visualstudio.com/items?itemName=chengbin.jlceda-mcp-hub
-- Cursor（Open VSX）：https://open-vsx.org/extension/chengbin/jlceda-mcp-hub
+Claude Desktop、Claude Code、Cursor 等客户端应将 `jlceda-mcp` 注册为本地 STDIO MCP Server。
+
+### 3. Bridge 地址
+
+默认地址为 `ws://127.0.0.1:8765/bridge/ws`。若设置 `JLCEDA_BRIDGE_TOKEN`，EDA 设置页地址必须携带同一个 token。不要公开 token 或包含 token 的截图。
+
+## 安全、兼容性与已知限制
+
+- Server 仅监听 `127.0.0.1`；推荐配置 Bridge Token。
+- MCP 工具能够修改当前工程。操作前请保存工程，并审查 AI 提议的写操作。
+- `api_invoke` 是可选的 API 透传能力，只应在信任的 MCP 客户端中启用。
+- 已在嘉立创 EDA 专业版 3.2.181 上测试；其他 3.x 版本需自行验证。
+- `createNetLabel` 属于 Alpha API；3.2.181 中普通网络标签创建可能超时。Bridge 会明确报告失败并释放任务队列。
+- 扩展只在原理图或 PCB 页面建立 Bridge 连接。
 
 ## 状态说明
 
@@ -63,22 +81,14 @@ B 站演示视频：https://www.bilibili.com/video/BV11QwuzxEDy/
 
 仅在原理图或 PCB 页面可连接，连接失败后系统会自动重试。
 
-## 交互说明
+## 交互与注意事项
 
-1. 当 AI 需要用户确认具体器件型号时，VS Code / Cursor 侧会弹出器件选型面板，确认后流程继续。
-2. 当 AI 需要用户在原理图中实际放置器件时，VS Code / Cursor 侧会弹出交互放置面板，提示当前应放置的器件。
-3. 在选型或放置过程中点击取消，只会跳过当前器件，不会让整个任务中断。
-4. 电源符号和地符号需要用户手动添加，AI 不会自动放置这类符号。
-5. 如果服务端启用了“打开 EDA 时关闭侧边栏”，那么打开 EDA 后，以及器件选型或放置完成后，VS Code / Cursor 侧边栏会自动收起。
-
-## 注意事项
-
-1. 客户端与服务端必须同时安装。
-2. 如果修改了服务端监听端口，需要在 MCP Bridge 设置页同步更新地址。
-3. 多页面并行时，只有活动角色页面执行任务，待命页面属于正常状态。若当前页面与活动客户端不一致，请关闭其他 EDA 页面并刷新当前页。
-4. 电源符号和地符号需要用户手动放置。
-5. 状态异常时优先重启嘉立创 EDA 与 VS Code/Cursor。
-
+1. 写操作前保存工程，并确认活动项目和页面正确。
+2. `component_place` 会启动 EDA 内的交互放置；`component_place_auto` 才会按坐标直接创建。
+3. 多个 EDA 页面同时连接时，应先枚举客户端并明确选择目标页面。
+4. 修改端口或 token 后，必须同步更新 MCP Server 环境变量与 Bridge 地址。
+5. 普通网络标签创建失败时不要改用电源网络标识代替；请查看 Bridge 调试日志。
+6. 状态异常时先关闭旧版 MCP Hub，再重启 AI 客户端与 EDA Bridge。
 ## 常见问题
 
 ### 聊天里看不到工具怎么办？
@@ -91,8 +101,9 @@ EDA 页面可能未桥接成功，请回到连接设置页确认连接状态是�
 
 ### 保存地址后仍无法连接？
 
-请确认服务端扩展已安装并运行，连接地址与侧边栏显示值完全一致。
+请确认原生 MCP Server 已安装并由 AI 客户端启动，且端口、token 与 Bridge 地址一致。
 
 ## 许可证
 
 本扩展采用 [Apache License 2.0](LICENSE) 许可证。
+数据处理说明见 [PRIVACY.md](PRIVACY.md)。

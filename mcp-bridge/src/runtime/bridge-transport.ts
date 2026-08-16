@@ -10,6 +10,7 @@
  */
 
 import type {
+	BridgeClientContext,
 	BridgeClientMessage,
 	BridgeDebugSwitch,
 	BridgeQueueTask,
@@ -20,6 +21,7 @@ import type { UnifiedLogEntry } from '../logging/log.ts';
 import { bridgeLogPipeline } from '../logging/log.ts';
 import { BridgeStateManager } from '../state/state-manager.ts';
 import { isPlainObjectRecord, toSafeErrorMessage } from '../utils.ts';
+import { debugLog } from '../utils/debug-log.ts';
 
 // 底层 WebSocket 连接建立超时（从 register 到 onOpen 回调触发）。
 // 用于等待 stdio 进程与桥接通道启动就绪，再进入后续工具调用流程。
@@ -28,8 +30,8 @@ const OPEN_TIMEOUT_MS = 5000;
 const HANDSHAKE_TIMEOUT_MS = 5000;
 // 客户端发送心跳包的时间间隔。
 const HEARTBEAT_INTERVAL_MS = 1000;
-// 服务端无活动超时阈值。
-const SERVER_IDLE_TIMEOUT_MS = 5000;
+// 服务端无活动超时阈值。任务执行期间（如库搜索）可能耗时较长，设此值需大于 DEFAULT_BRIDGE_TIMEOUT_MS。
+const SERVER_IDLE_TIMEOUT_MS = 60000;
 // 检查服务端无活动状态的轮询间隔。
 const SERVER_IDLE_CHECK_INTERVAL_MS = 500;
 const BRIDGE_STATUS_TEXT = BridgeStateManager.text;
@@ -113,18 +115,25 @@ export class BridgeTransport {
 	private welcomed = false;
 	private lostNotified = false;
 	private lastServerActivityAt = 0;
+	private context: BridgeClientContext | undefined;
 
 	public constructor(
 		private readonly bridgeWebSocketUrl: string,
 		private readonly socketId: string,
 		private readonly clientId: string,
 		private readonly bridgeVersion: string,
+		initialContext: BridgeClientContext | undefined,
 		private readonly callbacks: BridgeTransportCallbacks,
 	) {
+		this.context = initialContext;
 		this.readyPromise = new Promise<void>((resolve, reject) => {
 			this.resolveReady = resolve;
 			this.rejectReady = reject;
 		});
+	}
+
+	public updateContext(context: BridgeClientContext | undefined): void {
+		this.context = context;
 	}
 
 	/**
@@ -157,21 +166,37 @@ export class BridgeTransport {
 	}
 
 	/**
-	 * 回传任务执行结果。
+	 * 刷新服务端活动时间戳，供外部在任务执行期间调用，
+	 * 避免长时间运行的任务被空闲超时检测误判断开。
+	 */
+	public refreshServerActivity(): void {
+		this.lastServerActivityAt = Date.now();
+	}
+
+	/**
+	 * 完成 Bridge 任务，并回传任务结果。
 	 * @param requestId 任务标识。
 	 * @param leaseTerm 任务租约。
 	 * @param result 任务结果。
 	 * @param taskError 任务错误。
 	 */
 	public completeTask(requestId: string, leaseTerm: number, result: unknown, taskError?: BridgeTaskError): void {
-		this.sendMessage({
-			type: 'bridge/result',
-			clientId: this.clientId,
-			requestId,
-			leaseTerm,
-			result,
-			error: taskError,
-		});
+		debugLog('[DEBUG] bridge-transport completeTask called, requestId:', requestId, 'leaseTerm:', leaseTerm, 'hasError:', !!taskError);
+		try {
+			this.sendMessage({
+				type: 'bridge/result',
+				clientId: this.clientId,
+				requestId,
+				leaseTerm,
+				result,
+				error: taskError,
+			});
+			debugLog('[DEBUG] bridge-transport completeTask message sent successfully');
+		}
+		catch (error: unknown) {
+			debugLog('[DEBUG] bridge-transport completeTask failed to send message:', error);
+			throw error;
+		}
 	}
 
 	/**
@@ -190,11 +215,13 @@ export class BridgeTransport {
 	 * 上报 Bridge 执行链路已就绪。
 	 */
 	public reportReady(): void {
+		debugLog('[DEBUG] bridge-transport reportReady called, clientId:', this.clientId);
 		this.sendMessage({
 			type: 'bridge/ready',
 			clientId: this.clientId,
 			readyAt: Date.now(),
 		});
+		debugLog('[DEBUG] bridge-transport ready message sent');
 	}
 
 	/**
@@ -227,6 +254,7 @@ export class BridgeTransport {
 			type: 'bridge/hello',
 			clientId: this.clientId,
 			bridgeVersion: this.bridgeVersion,
+			context: this.context,
 		});
 	}
 
@@ -306,10 +334,15 @@ export class BridgeTransport {
 
 	// 向服务端发送协议消息。
 	private sendMessage(message: BridgeClientMessage): void {
+		debugLog('[DEBUG] bridge-transport sendMessage called, type:', message.type, 'closed:', this.closed);
 		if (this.closed) {
+			debugLog('[DEBUG] bridge-transport sendMessage blocked: connection closed');
 			throw new Error(BRIDGE_STATUS_TEXT.transport.closed);
 		}
-		eda.sys_WebSocket.send(this.socketId, JSON.stringify(message));
+		const payload = JSON.stringify(message);
+		debugLog('[DEBUG] bridge-transport sendMessage sending, size:', payload.length);
+		eda.sys_WebSocket.send(this.socketId, payload);
+		debugLog('[DEBUG] bridge-transport sendMessage sent successfully');
 	}
 
 	// 启动连接建立超时保护，等待 WebSocket onOpen 回调。
@@ -353,6 +386,7 @@ export class BridgeTransport {
 					type: 'bridge/heartbeat',
 					clientId: this.clientId,
 					sentAt: Date.now(),
+					context: this.context,
 				});
 			}
 			catch (error: unknown) {

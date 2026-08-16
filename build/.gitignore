@@ -1,2 +1,4 @@
 *.vsix
 *.eext
+*.tgz
+SHA256SUMS-*.txt
