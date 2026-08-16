@@ -9,9 +9,9 @@
  * ------------------------------------------------------------------------
  */
 import * as extensionConfig from '../extension.json';
-import { startBridgeRuntime, stopBridgeRuntime, restartBridgeServer } from './runtime/bridge-runtime-client.ts';
-import { getDebugLog, clearDebugLog } from './utils/debug-log.ts';
-import { connectionStatusManager } from './state/connection-status.ts';
+import { restartBridgeServer, startBridgeRuntime, stopBridgeRuntime } from './runtime/bridge-runtime.ts';
+import { readConnectionStatus } from './state/status-store.ts';
+import { clearDebugLog, getDebugLog } from './utils/debug-log.ts';
 
 /**
  * 激活 Bridge 扩展。
@@ -43,7 +43,10 @@ export function restartServer(): void {
  * 查看连接状态
  */
 export function viewConnectionStatus(): void {
-	const statusText = connectionStatusManager.getStatusSummary();
+	const status = readConnectionStatus();
+	const statusText = status
+		? `桥接连接：${status.bridgeText}\nWebSocket：${status.websocketText}\n更新时间：${status.updatedAt}`
+		: '尚无连接状态。请打开原理图或 PCB 页面后重试。';
 	eda.sys_Dialog.showInformationMessage(statusText, 'MCP Bridge 连接状态');
 }
 
@@ -51,36 +54,7 @@ export function viewConnectionStatus(): void {
  * 打开连接设置页面（服务器模式说明）
  */
 export function openSettingsPage(): void {
-	const hasConnections = connectionStatusManager.hasActiveConnections();
-	const connectionCount = connectionStatusManager.getConnectionCount();
-	
-	let message = '═══════════════════════════════════════\n';
-	message += '  MCP Bridge 客户端模式 v2.0\n';
-	message += '═══════════════════════════════════════\n\n';
-	message += '服务器地址:\n';
-	message += '  ws://127.0.0.1:8765/bridge/ws\n\n';
-	
-	if (hasConnections) {
-		message += '✅ 当前状态: 已连接\n\n';
-	} else {
-		message += '⚠️  当前状态: 未连接\n\n';
-		message += '提示:\n';
-		message += '1. 请确保MCP服务器正在运行\n';
-		message += '2. 请确保OpenCode已启动\n\n';
-	}
-	
-	message += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-	message += '客户端模式说明:\n';
-	message += '• 自动检测页面类型\n';
-	message += '• 仅在原理图/PCB页面连接\n';
-	message += '• 连接到MCP服务器（端口8765）\n';
-	message += '• 如遇问题可手动重启\n\n';
-	message += '查看详细连接状态，请点击菜单:\n';
-	message += '「MCP Bridge → 连接状态」\n\n';
-	message += '重启连接，请点击菜单:\n';
-	message += '「MCP Bridge → 重启服务器」';
-	
-	eda.sys_Dialog.showInformationMessage(message, 'MCP Bridge 设置');
+	void eda.sys_IFrame.openIFrame('/iframe/settings.html', 600, 420, 'jlc-mcp-settings-dialog', { minimizeButton: true, minimizeStyle: 'collapsed' });
 }
 
 /**
@@ -102,7 +76,7 @@ export function viewDebugLog(): void {
 		eda.sys_Dialog.showInformationMessage('暂无调试日志', '调试日志');
 		return;
 	}
-	
+
 	// 显示日志内容
 	eda.sys_Dialog.showInformationMessage(log, '调试日志 (最近100条)');
 }
@@ -114,4 +88,3 @@ export function clearDebugLogAction(): void {
 	clearDebugLog();
 	eda.sys_Dialog.showInformationMessage('调试日志已清空', '调试日志');
 }
-

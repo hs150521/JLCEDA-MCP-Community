@@ -409,3 +409,50 @@ export function startBridgeRuntime(): void {
 		// 页面类型检测失败时跳过初次连接，由周期同步接管。
 	});
 }
+
+/**
+ * 停止桥接运行时并释放所有连接与订阅。
+ */
+export function stopBridgeRuntime(): void {
+	if (!started) {
+		return;
+	}
+
+	started = false;
+	clearReconnectTimer();
+	clearContextSyncTimer();
+	stopTransport();
+	configSubscription?.cancel();
+	configSubscription = null;
+	bridgeLogPipeline.setListener(undefined);
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+}
+
+/**
+ * 手动重启桥接连接，保留运行时与配置订阅。
+ */
+export function restartBridgeServer(): void {
+	if (!started) {
+		startBridgeRuntime();
+		return;
+	}
+
+	clearReconnectTimer();
+	stopTransport();
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+	statusReporter.markConnecting();
+	void isEditablePage().then((editable) => {
+		if (editable) {
+			void ensureConnected();
+		}
+		else {
+			statusReporter.markNotOnEditablePage();
+		}
+	}).catch((error: unknown) => {
+		statusReporter.markFailed(toSafeErrorMessage(error));
+	});
+}
