@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 
 interface BridgePeer {
@@ -45,6 +45,12 @@ function sendJson(socket: WebSocket, message: unknown): void {
   socket.send(JSON.stringify(message));
 }
 
+function secureEquals(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 export class EdaBridgeServer {
   private wss: WebSocketServer | null = null;
   private readonly peers = new Map<string, BridgePeer>();
@@ -58,6 +64,7 @@ export class EdaBridgeServer {
   private started = false;
   private isMainServer = false;
   private internalClient: WebSocket | null = null;
+  private readonly authToken = String(process.env.JLCEDA_BRIDGE_TOKEN ?? '').trim();
 
   public constructor(private readonly port: number = 8765) {}
 
@@ -85,11 +92,20 @@ export class EdaBridgeServer {
         settled = true;
         this.isMainServer = true;
         process.stderr.write(`[Main Server] WebSocket server listening on ws://127.0.0.1:${this.port}\n`);
+        if (!this.authToken) {
+          process.stderr.write('[Security] JLCEDA_BRIDGE_TOKEN is not set; local WebSocket authentication is disabled\n');
+        }
         resolve();
       });
 
       server.on('connection', (socket, request) => {
-        const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname;
+        const requestUrl = new URL(request.url || '/', 'http://127.0.0.1');
+        const pathname = requestUrl.pathname;
+        if (!this.isAuthorized(requestUrl)) {
+          process.stderr.write(`[Main Server] Rejected unauthorized WebSocket connection on ${pathname}\n`);
+          socket.close(1008, 'Unauthorized');
+          return;
+        }
         if (pathname === '/bridge/ws') {
           this.attachEdaSocket(socket);
           return;
@@ -115,7 +131,8 @@ export class EdaBridgeServer {
 
   private async startAsClient(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const url = `ws://127.0.0.1:${this.port}/mcp-internal`;
+      const tokenQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
+      const url = `ws://127.0.0.1:${this.port}/mcp-internal${tokenQuery}`;
       const socket = new WebSocket(url);
       this.internalClient = socket;
       let settled = false;
@@ -149,6 +166,13 @@ export class EdaBridgeServer {
         }
       });
     });
+  }
+
+  private isAuthorized(requestUrl: URL): boolean {
+    if (!this.authToken) {
+      return true;
+    }
+    return secureEquals(requestUrl.searchParams.get('token') ?? '', this.authToken);
   }
 
   private attachEdaSocket(socket: WebSocket): void {

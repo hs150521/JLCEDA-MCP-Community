@@ -1,5 +1,14 @@
 # JLCEDA MCP v2.0
 
+> **JLCEDA MCP Community** — community-maintained fork of
+> [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP). This project is
+> not affiliated with or endorsed by JLCEDA or the upstream maintainer.
+> Community contact: `yuanzl150521@gmail.com`.
+
+See [COMMUNITY.md](./COMMUNITY.md) for attribution and branch policy, and
+[docs/native-mcp-setup.md](./docs/native-mcp-setup.md) for the tested native
+MCP setup and local bridge security guidance.
+
 > 🎉 首个支持所有 MCP 客户端的嘉立创 EDA 集成方案
 
 将嘉立创 EDA 专业版集成到 MCP 生态系统，支持 Claude Desktop、OpenCode、Cline 等所有 MCP 客户端。

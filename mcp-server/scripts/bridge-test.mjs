@@ -25,6 +25,22 @@ async function connect(url) {
   return socket;
 }
 
+async function expectPolicyClose(url) {
+  const socket = new WebSocket(url);
+  const [code] = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out waiting for policy close')), 3000);
+    socket.once('close', (...args) => {
+      clearTimeout(timer);
+      resolve(args);
+    });
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+  assert.equal(code, 1008);
+}
+
 function waitForMessage(socket, predicate, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -76,6 +92,9 @@ async function registerEda(url, clientId) {
 
 const port = await reservePort();
 const url = `ws://127.0.0.1:${port}`;
+const originalToken = process.env.JLCEDA_BRIDGE_TOKEN;
+process.env.JLCEDA_BRIDGE_TOKEN = 'bridge-test-token';
+const tokenQuery = '?token=bridge-test-token';
 const mainServer = new EdaBridgeServer(port);
 const secondaryServer = new EdaBridgeServer(port);
 let blue;
@@ -85,11 +104,10 @@ try {
   await mainServer.start();
   assert.equal(mainServer.getMode(), 'main');
 
-  const invalid = await connect(`${url}/unsupported`);
-  const [invalidCode] = await new Promise((resolve) => invalid.once('close', (...args) => resolve(args)));
-  assert.equal(invalidCode, 1008);
+  await expectPolicyClose(`${url}/bridge/ws`);
+  await expectPolicyClose(`${url}/unsupported${tokenQuery}`);
 
-  blue = await registerEda(`${url}/bridge/ws`, 'blue-page');
+  blue = await registerEda(`${url}/bridge/ws${tokenQuery}`, 'blue-page');
   assert.equal(blue.initialRole.role, 'active');
   attachTaskResponder(blue.socket, 'blue-page', (message) => ({ source: 'blue', path: message.path }));
   assert.deepEqual(
@@ -97,7 +115,7 @@ try {
     { source: 'blue', path: '/bridge/test/blue' },
   );
 
-  red = await registerEda(`${url}/bridge/ws`, 'red-page');
+  red = await registerEda(`${url}/bridge/ws${tokenQuery}`, 'red-page');
   assert.equal(red.initialRole.role, 'standby');
   attachTaskResponder(red.socket, 'red-page', (message) => ({ source: 'red', path: message.path }));
   const promoted = waitForMessage(
@@ -124,4 +142,9 @@ try {
   red?.socket.close();
   secondaryServer.close();
   mainServer.close();
+  if (originalToken === undefined) {
+    delete process.env.JLCEDA_BRIDGE_TOKEN;
+  } else {
+    process.env.JLCEDA_BRIDGE_TOKEN = originalToken;
+  }
 }
