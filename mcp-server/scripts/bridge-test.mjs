@@ -87,11 +87,11 @@ function attachTaskResponder(socket, clientId, transform) {
   });
 }
 
-async function registerEda(url, clientId) {
+async function registerEda(url, clientId, context = undefined) {
   const socket = await connect(url);
   const welcome = waitForMessage(socket, (message) => message.type === 'bridge/welcome');
   const role = waitForMessage(socket, (message) => message.type === 'bridge/role');
-  socket.send(JSON.stringify({ type: 'bridge/hello', clientId, bridgeVersion: '2.1.0' }));
+  socket.send(JSON.stringify({ type: 'bridge/hello', clientId, bridgeVersion: '2.1.0', context }));
   assert.equal((await welcome).clientId, clientId);
   const initialRole = await role;
   socket.send(JSON.stringify({ type: 'bridge/ready', clientId, readyAt: Date.now() }));
@@ -131,6 +131,29 @@ try {
   red = await registerEda(`${url}/bridge/ws${tokenQuery}`, 'red-page');
   assert.equal(red.initialRole.role, 'standby');
   attachTaskResponder(red.socket, 'red-page', (message) => ({ source: 'red', path: message.path }));
+  const clientsBeforeSelection = await mainServer.request('/bridge/admin/clients', {}, 2000);
+  assert.equal(clientsBeforeSelection.activeClientId, 'blue-page');
+  assert.deepEqual(clientsBeforeSelection.clients.map((client) => client.clientId), ['blue-page', 'red-page']);
+  await mainServer.request('/bridge/admin/select-client', { clientId: 'red-page' }, 2000);
+  assert.deepEqual(
+    await mainServer.request('/bridge/test/selected-red', {}, 2000),
+    { source: 'red', path: '/bridge/test/selected-red' },
+  );
+  const contextHeartbeat = waitForMessage(red.socket, (message) => message.type === 'bridge/heartbeat-ack');
+  red.socket.send(JSON.stringify({
+    type: 'bridge/heartbeat',
+    clientId: 'red-page',
+    sentAt: Date.now(),
+    context: { projectUuid: 'project-2026', projectName: '2026', pageKind: 'schematic', pageUuid: 'red-sheet', pageName: 'RED HUB' },
+  }));
+  await contextHeartbeat;
+  const clientsAfterHeartbeat = await mainServer.request('/bridge/admin/clients', {}, 2000);
+  assert.equal(clientsAfterHeartbeat.clients[1].context.pageName, 'RED HUB');
+  await assert.rejects(
+    mainServer.request('/bridge/admin/select-client', { clientId: 'missing-page' }, 2000),
+    /not connected and ready/,
+  );
+  await mainServer.request('/bridge/admin/select-client', { clientId: 'blue-page' }, 2000);
   const promoted = waitForMessage(
     red.socket,
     (message) => message.type === 'bridge/role' && message.role === 'active',
@@ -144,6 +167,8 @@ try {
 
   await secondaryServer.start();
   assert.equal(secondaryServer.getMode(), 'client');
+  const sharedClients = await secondaryServer.request('/bridge/admin/clients', {}, 2000);
+  assert.equal(sharedClients.activeClientId, 'red-page');
   assert.deepEqual(
     await secondaryServer.request('/bridge/test/shared', { value: 3 }, 2000),
     { source: 'red', path: '/bridge/test/shared' },

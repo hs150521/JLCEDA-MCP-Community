@@ -10,6 +10,7 @@
  */
 
 import type {
+	BridgeClientContext,
 	BridgeClientMessage,
 	BridgeDebugSwitch,
 	BridgeQueueTask,
@@ -114,18 +115,25 @@ export class BridgeTransport {
 	private welcomed = false;
 	private lostNotified = false;
 	private lastServerActivityAt = 0;
+	private context: BridgeClientContext | undefined;
 
 	public constructor(
 		private readonly bridgeWebSocketUrl: string,
 		private readonly socketId: string,
 		private readonly clientId: string,
 		private readonly bridgeVersion: string,
+		initialContext: BridgeClientContext | undefined,
 		private readonly callbacks: BridgeTransportCallbacks,
 	) {
+		this.context = initialContext;
 		this.readyPromise = new Promise<void>((resolve, reject) => {
 			this.resolveReady = resolve;
 			this.rejectReady = reject;
 		});
+	}
+
+	public updateContext(context: BridgeClientContext | undefined): void {
+		this.context = context;
 	}
 
 	/**
@@ -184,7 +192,8 @@ export class BridgeTransport {
 				error: taskError,
 			});
 			debugLog('[DEBUG] bridge-transport completeTask message sent successfully');
-		} catch (error: unknown) {
+		}
+		catch (error: unknown) {
 			debugLog('[DEBUG] bridge-transport completeTask failed to send message:', error);
 			throw error;
 		}
@@ -245,6 +254,7 @@ export class BridgeTransport {
 			type: 'bridge/hello',
 			clientId: this.clientId,
 			bridgeVersion: this.bridgeVersion,
+			context: this.context,
 		});
 	}
 
@@ -376,6 +386,7 @@ export class BridgeTransport {
 					type: 'bridge/heartbeat',
 					clientId: this.clientId,
 					sentAt: Date.now(),
+					context: this.context,
 				});
 			}
 			catch (error: unknown) {

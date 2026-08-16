@@ -119,6 +119,8 @@ export class ToolDispatcher {
       'api_search': '/bridge/jlceda/api/search',
       'api_invoke': '/bridge/jlceda/api/invoke',
       'eda_context': '/bridge/jlceda/context',
+      'bridge_clients': '/bridge/admin/clients',
+      'bridge_select_client': '/bridge/admin/select-client',
     };
 
     const path = pathMap[toolName];

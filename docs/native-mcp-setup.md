@@ -51,7 +51,17 @@ The settings page displays the configured URL. Treat screenshots of that page as
 
 Do not run the legacy MCP Hub and the native MCP server on the same port. Stop the old MCP process or assign different ports before testing. A process that owns port 8765 but does not implement `/mcp-internal` will make additional native MCP sessions fail to start.
 
-## 6. Protocol support
+## 6. Select the EDA target
+
+When more than one editable JLCEDA page is open, call `bridge_clients` before
+any EDA operation. Match the returned project and page identity, then pass its
+exact `clientId` to `bridge_select_client`. The identity fields come from the
+official JLCEDA context APIs and refresh when the active editor tab changes.
+
+The server rejects unknown or unready clients. It also refuses to change the
+target while the current active page has an unfinished request.
+
+## 7. Protocol support
 
 The server uses the official MCP TypeScript Server SDK 2.x:
 

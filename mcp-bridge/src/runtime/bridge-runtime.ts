@@ -9,24 +9,23 @@
  * ------------------------------------------------------------------------
  */
 
-import type { BridgeDebugSwitch, BridgeRole, BridgeServerRoleMessage } from '../bridge/protocol.ts';
+import type { BridgeClientContext, BridgeDebugSwitch, BridgeRole, BridgeServerRoleMessage } from '../bridge/protocol.ts';
 import type { UnifiedLogEntry } from '../logging/log.ts';
 import extensionConfig from '../../extension.json';
 import { getConfiguredMcpUrl, getMcpServerUrlChangedTopic } from '../bridge/config.ts';
 import { BridgeLogDispatchPipeline } from '../logging/log-dispatch.ts';
 import { bridgeLogPipeline } from '../logging/log.ts';
-import { debugLog } from '../utils/debug-log.ts';
 import { handleApiIndexTask } from '../mcp/api-index-handler.ts';
 import { handleApiSearchTask } from '../mcp/api-search-handler.ts';
 import { handleAutoLayoutTask } from '../mcp/auto-layout-handler.ts';
 import { handleAutoRoutingTask } from '../mcp/auto-routing-handler.ts';
+import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import {
 	handleComponentPlaceCheckTask,
 	handleComponentPlaceCloseTask,
 	handleComponentPlaceStartTask,
 	handleComponentPlaceTask,
 } from '../mcp/component-place-handler.ts';
-import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
@@ -35,6 +34,7 @@ import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
 import { BridgeStateManager } from '../state/state-manager.ts';
 import { BridgeStatusReporter } from '../state/status-reporter.ts';
 import { safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
+import { debugLog } from '../utils/debug-log.ts';
 import { BridgeTransport } from './bridge-transport.ts';
 
 const RECONNECT_INTERVAL_MS = 1200;
@@ -130,6 +130,29 @@ function getClientId(): string {
 function getSocketId(): string {
 	socketSequence += 1;
 	return `jlc_mcp_bridge_socket_${getClientId()}_${socketSequence}`;
+}
+
+// 使用官方上下文 API 读取当前目标身份，避免多页面时仅按连接顺序选择。
+async function readBridgeClientContext(): Promise<BridgeClientContext | undefined> {
+	const [document, project, schematicPage, pcb] = await Promise.all([
+		safeCall(() => eda.dmt_SelectControl.getCurrentDocumentInfo()),
+		safeCall(() => eda.dmt_Project.getCurrentProjectInfo()),
+		safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo()),
+		safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
+	]);
+	if (!document && !schematicPage && !pcb) {
+		return undefined;
+	}
+	return {
+		documentType: document?.documentType,
+		documentUuid: document?.uuid,
+		tabId: document?.tabId,
+		projectUuid: document?.parentProjectUuid ?? project?.uuid,
+		projectName: project?.friendlyName,
+		pageKind: schematicPage ? 'schematic' : pcb ? 'pcb' : undefined,
+		pageUuid: schematicPage?.uuid ?? pcb?.uuid,
+		pageName: schematicPage?.name ?? pcb?.name,
+	};
 }
 
 // 清理重连定时器。
@@ -230,7 +253,8 @@ async function ensureConnected(): Promise<void> {
 	connecting = true;
 	statusReporter.markConnecting();
 	const activeClientId = getClientId();
-	const instance = new BridgeTransport(getConfiguredMcpUrl(), getSocketId(), activeClientId, String(extensionConfig.version), {
+	const initialContext = await readBridgeClientContext();
+	const instance = new BridgeTransport(getConfiguredMcpUrl(), getSocketId(), activeClientId, String(extensionConfig.version), initialContext, {
 		onRoleChanged: (message) => {
 			applyRole(message);
 		},
@@ -334,8 +358,9 @@ async function isEditablePage(): Promise<boolean> {
 function startContextSync(): void {
 	clearContextSyncTimer();
 	contextSyncTimer = globalThis.setInterval(() => {
-		void isEditablePage().then((editable) => {
+		void isEditablePage().then(async (editable) => {
 			if (editable) {
+				transport?.updateContext(await readBridgeClientContext());
 				// 在原理图或 PCB 页时正常维持连接。
 				void ensureConnected();
 				// 心跳刷新状态快照，让设置页的过期检测能区分活跃连接与历史遗留数据。

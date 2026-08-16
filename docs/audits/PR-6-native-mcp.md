@@ -22,6 +22,7 @@ Resolved:
 - optional shared-token authentication covers EDA and internal MCP routes, with log redaction;
 - EDA hello/welcome, heartbeat expiry, ready, active/standby lease, result validation and takeover are implemented;
 - request IDs include a process UUID and multi-MCP routing is integration-tested;
+- EDA peers report official project/document/page identity, and MCP tools can list and explicitly select the target client;
 - surviving MCP processes can compete to take over the listener after the owner exits;
 - the handwritten MCP implementation was replaced by the official TypeScript Server SDK 2.0;
 - tests cover legacy initialize, 2026-07-28 server/discover, tools/list, bridge routing, path/auth rejection and EDA takeover;
@@ -32,7 +33,6 @@ Resolved:
 Still open before release:
 
 - make shared-token authentication mandatory or provide a safe first-run token exchange;
-- add project/page identity and explicit target selection beyond active/standby ordering;
 - enable stricter TypeScript and establish a practical repository-wide lint baseline;
 - install the packaged EEXT in supported JLCEDA versions and run real EDA API integration tests; and
 - review every raw or mutating EDA tool for user-visible safety boundaries.
@@ -73,6 +73,12 @@ the exact endpoint path, and authenticate both EDA and internal MCP peers with
 an installation-scoped secret.
 
 ### High: no deterministic EDA page selection
+
+Resolved on the community `native-mcp-v2` branch. The bridge now carries the
+official API's project, document and page identifiers in hello/heartbeat
+messages. `bridge_clients` lists every ready peer and `bridge_select_client`
+changes the active lease by exact client ID. Selection rejects missing or
+unready clients and refuses to switch away while an active task is pending.
 
 All EDA sockets are stored in a `Set`, and requests go to the first socket.
 There is no client identity, project/page context, ready state, active/standby

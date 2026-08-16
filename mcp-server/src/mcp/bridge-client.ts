@@ -3,10 +3,23 @@ import { WebSocket, WebSocketServer, type RawData } from 'ws';
 
 interface BridgePeer {
   clientId: string;
+  bridgeVersion: string;
   connectedAt: number;
+  context?: BridgeClientContext;
   isReady: boolean;
   lastSeenAt: number;
   socket: WebSocket;
+}
+
+interface BridgeClientContext {
+  documentType?: number;
+  documentUuid?: string;
+  tabId?: string;
+  projectUuid?: string;
+  projectName?: string;
+  pageKind?: 'schematic' | 'pcb';
+  pageUuid?: string;
+  pageName?: string;
 }
 
 interface PendingRequest {
@@ -54,6 +67,33 @@ function secureEquals(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, 'utf8');
   const rightBuffer = Buffer.from(right, 'utf8');
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function optionalString(value: unknown): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || undefined;
+}
+
+function parseClientContext(value: unknown): BridgeClientContext | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const pageKind = value.pageKind === 'schematic' || value.pageKind === 'pcb'
+    ? value.pageKind
+    : undefined;
+  const documentType = typeof value.documentType === 'number' && Number.isFinite(value.documentType)
+    ? value.documentType
+    : undefined;
+  return {
+    documentType,
+    documentUuid: optionalString(value.documentUuid),
+    tabId: optionalString(value.tabId),
+    projectUuid: optionalString(value.projectUuid),
+    projectName: optionalString(value.projectName),
+    pageKind,
+    pageUuid: optionalString(value.pageUuid),
+    pageName: optionalString(value.pageName),
+  };
 }
 
 export class EdaBridgeServer {
@@ -277,7 +317,12 @@ export class EdaBridgeServer {
       if (!clientId) {
         throw new Error('bridge/hello requires clientId');
       }
-      const peer = this.registerPeer(clientId, socket);
+      const peer = this.registerPeer(
+        clientId,
+        socket,
+        optionalString(rawMessage.bridgeVersion) ?? 'unknown',
+        parseClientContext(rawMessage.context),
+      );
       this.trySend(socket, {
         type: 'bridge/welcome',
         clientId,
@@ -295,6 +340,7 @@ export class EdaBridgeServer {
     const peer = this.getBoundPeer(socket, rawMessage.clientId);
     peer.lastSeenAt = Date.now();
     if (type === 'bridge/heartbeat') {
+      peer.context = parseClientContext(rawMessage.context) ?? peer.context;
       this.trySend(socket, {
         type: 'bridge/heartbeat-ack',
         clientId: peer.clientId,
@@ -317,7 +363,12 @@ export class EdaBridgeServer {
     throw new Error(`Unsupported bridge message type: ${type}`);
   }
 
-  private registerPeer(clientId: string, socket: WebSocket): BridgePeer {
+  private registerPeer(
+    clientId: string,
+    socket: WebSocket,
+    bridgeVersion: string,
+    context: BridgeClientContext | undefined,
+  ): BridgePeer {
     const previous = this.peers.get(clientId);
     if (previous && previous.socket !== socket) {
       this.clientIdBySocket.delete(previous.socket);
@@ -326,7 +377,9 @@ export class EdaBridgeServer {
     const now = Date.now();
     const peer: BridgePeer = {
       clientId,
+      bridgeVersion,
       connectedAt: previous?.connectedAt ?? now,
+      context,
       isReady: previous?.socket === socket ? previous.isReady : false,
       lastSeenAt: now,
       socket,
@@ -421,7 +474,7 @@ export class EdaBridgeServer {
       }
       const requestId = String(message.requestId ?? '');
       const path = String(message.path ?? '');
-      void this.dispatchToEda(path, message.payload, 30000).then(
+      void this.dispatchRequest(path, message.payload, 30000).then(
         (result) => this.trySend(socket, { type: 'bridge/result', requestId, result }),
         (error) => this.trySend(socket, {
           type: 'bridge/result',
@@ -464,7 +517,56 @@ export class EdaBridgeServer {
     if (!this.isMainServer) {
       return this.dispatchViaInternalClient(path, payload, timeoutMs);
     }
+    return this.dispatchRequest(path, payload, timeoutMs);
+  }
+
+  private async dispatchRequest(path: string, payload: unknown, timeoutMs: number): Promise<unknown> {
+    if (path === '/bridge/admin/clients') {
+      return this.getClientSnapshot();
+    }
+    if (path === '/bridge/admin/select-client') {
+      const clientId = isRecord(payload) ? String(payload.clientId ?? '').trim() : '';
+      return this.selectClient(clientId);
+    }
     return this.dispatchToEda(path, payload, timeoutMs);
+  }
+
+  private getClientSnapshot(): Record<string, unknown> {
+    const now = Date.now();
+    const clients = [...this.peers.values()]
+      .sort((left, right) => left.connectedAt - right.connectedAt)
+      .map((peer) => ({
+        clientId: peer.clientId,
+        active: peer.clientId === this.activeClientId,
+        ready: peer.isReady && peer.socket.readyState === WebSocket.OPEN,
+        bridgeVersion: peer.bridgeVersion,
+        connectedAt: new Date(peer.connectedAt).toISOString(),
+        lastSeenMsAgo: Math.max(0, now - peer.lastSeenAt),
+        context: peer.context,
+      }));
+    return { activeClientId: this.activeClientId || null, leaseTerm: this.leaseTerm, clients };
+  }
+
+  private selectClient(clientId: string): Record<string, unknown> {
+    if (!clientId) {
+      throw new Error('clientId is required');
+    }
+    const peer = this.peers.get(clientId);
+    if (!peer || !peer.isReady || peer.socket.readyState !== WebSocket.OPEN) {
+      throw new Error(`EDA client is not connected and ready: ${clientId}`);
+    }
+    const hasPendingTask = [...this.pendingRequests.values()].some(
+      (pending) => pending.clientId === this.activeClientId,
+    );
+    if (hasPendingTask && this.activeClientId !== clientId) {
+      throw new Error('Cannot switch EDA client while the active client has a pending task');
+    }
+    if (this.activeClientId !== clientId) {
+      this.activeClientId = clientId;
+      this.leaseTerm += 1;
+      this.broadcastRoles('Client explicitly selected by MCP');
+    }
+    return this.getClientSnapshot();
   }
 
   private async dispatchToEda(path: string, payload: unknown, timeoutMs: number): Promise<unknown> {

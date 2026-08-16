@@ -1,5 +1,31 @@
 [
   {
+    "name": "bridge_clients",
+    "description": "列出当前连接的嘉立创 EDA 页面、项目/文档身份、就绪状态和活动目标。多页面环境下，在任何读取或修改 EDA 的操作前先调用本工具确认目标。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "bridge_select_client",
+    "description": "按精确 clientId 选择后续 MCP 操作所针对的嘉立创 EDA 页面。调用前必须先使用 bridge_clients 核对项目和页面；活动页面存在未完成任务时禁止切换。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "clientId": {
+          "type": "string",
+          "description": "bridge_clients 返回的精确客户端 ID"
+        }
+      },
+      "required": [
+        "clientId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "api_index",
     "description": "获取可调用 EDA API 索引列表。",
     "inputSchema": {
@@ -174,7 +200,12 @@
               },
               "rotation": {
                 "type": "number",
-                "enum": [0, 90, 180, 270],
+                "enum": [
+                  0,
+                  90,
+                  180,
+                  270
+                ],
                 "default": 0,
                 "description": "旋转角度（可选）。"
               },
@@ -184,12 +215,20 @@
                 "description": "是否镜像（可选）。"
               }
             },
-            "required": ["uuid", "libraryUuid"]
+            "required": [
+              "uuid",
+              "libraryUuid"
+            ]
           }
         },
         "layoutStrategy": {
           "type": "string",
-          "enum": ["grid", "vertical", "horizontal", "fixed"],
+          "enum": [
+            "grid",
+            "vertical",
+            "horizontal",
+            "fixed"
+          ],
           "default": "grid",
           "description": "自动布局策略（当器件未指定 x,y 时使用）：grid=网格布局，vertical=垂直排列，horizontal=水平排列，fixed=固定位置。"
         },
@@ -197,28 +236,64 @@
           "type": "object",
           "description": "网格布局参数（layoutStrategy=grid 时）。",
           "properties": {
-            "startX": { "type": "number", "default": 0, "description": "起始 X 坐标" },
-            "startY": { "type": "number", "default": 0, "description": "起始 Y 坐标" },
-            "spacingX": { "type": "number", "default": 1500, "description": "水平间距" },
-            "spacingY": { "type": "number", "default": 1500, "description": "垂直间距" },
-            "columns": { "type": "number", "default": 4, "description": "列数" }
+            "startX": {
+              "type": "number",
+              "default": 0,
+              "description": "起始 X 坐标"
+            },
+            "startY": {
+              "type": "number",
+              "default": 0,
+              "description": "起始 Y 坐标"
+            },
+            "spacingX": {
+              "type": "number",
+              "default": 1500,
+              "description": "水平间距"
+            },
+            "spacingY": {
+              "type": "number",
+              "default": 1500,
+              "description": "垂直间距"
+            },
+            "columns": {
+              "type": "number",
+              "default": 4,
+              "description": "列数"
+            }
           }
         },
         "linearLayout": {
           "type": "object",
           "description": "线性布局参数（layoutStrategy=vertical/horizontal 时）。",
           "properties": {
-            "startX": { "type": "number", "default": 0 },
-            "startY": { "type": "number", "default": 0 },
-            "spacing": { "type": "number", "default": 1500, "description": "间距" }
+            "startX": {
+              "type": "number",
+              "default": 0
+            },
+            "startY": {
+              "type": "number",
+              "default": 0
+            },
+            "spacing": {
+              "type": "number",
+              "default": 1500,
+              "description": "间距"
+            }
           }
         },
         "fixedPosition": {
           "type": "object",
           "description": "固定位置（layoutStrategy=fixed 时）。",
           "properties": {
-            "x": { "type": "number", "default": 0 },
-            "y": { "type": "number", "default": 0 }
+            "x": {
+              "type": "number",
+              "default": 0
+            },
+            "y": {
+              "type": "number",
+              "default": 0
+            }
           }
         }
       },
@@ -258,11 +333,17 @@
                       "description": "引脚编号。"
                     }
                   },
-                  "required": ["componentId", "pinNumber"]
+                  "required": [
+                    "componentId",
+                    "pinNumber"
+                  ]
                 }
               }
             },
-            "required": ["netName", "pinReferences"]
+            "required": [
+              "netName",
+              "pinReferences"
+            ]
           }
         },
         "pointToPointConnections": {
@@ -274,30 +355,51 @@
               "from": {
                 "type": "object",
                 "properties": {
-                  "componentId": { "type": "string" },
-                  "pinNumber": { "type": "string" }
+                  "componentId": {
+                    "type": "string"
+                  },
+                  "pinNumber": {
+                    "type": "string"
+                  }
                 },
-                "required": ["componentId", "pinNumber"]
+                "required": [
+                  "componentId",
+                  "pinNumber"
+                ]
               },
               "to": {
                 "type": "object",
                 "properties": {
-                  "componentId": { "type": "string" },
-                  "pinNumber": { "type": "string" }
+                  "componentId": {
+                    "type": "string"
+                  },
+                  "pinNumber": {
+                    "type": "string"
+                  }
                 },
-                "required": ["componentId", "pinNumber"]
+                "required": [
+                  "componentId",
+                  "pinNumber"
+                ]
               },
               "netName": {
                 "type": "string",
                 "description": "可选的网络名。"
               }
             },
-            "required": ["from", "to"]
+            "required": [
+              "from",
+              "to"
+            ]
           }
         },
         "routingStrategy": {
           "type": "string",
-          "enum": ["direct", "manhattan", "auto"],
+          "enum": [
+            "direct",
+            "manhattan",
+            "auto"
+          ],
           "default": "manhattan",
           "description": "布线策略：direct=直线，manhattan=正交布线（推荐），auto=自动选择。"
         }
@@ -329,13 +431,19 @@
                 "description": "网络名称。电源网络如 VCC、+5V、+3V3 会自动放置电源符号；地网络如 GND、VSS 会自动放置地符号；其他如 UART_TX、SPI_CLK 等放置普通网络标签。相同网络名的标签会自动形成电气连接。"
               }
             },
-            "required": ["componentId", "pinIdentifier", "netName"]
+            "required": [
+              "componentId",
+              "pinIdentifier",
+              "netName"
+            ]
           },
           "minItems": 1,
           "maxItems": 100
         }
       },
-      "required": ["placements"]
+      "required": [
+        "placements"
+      ]
     }
   },
   {
@@ -350,7 +458,10 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["primitiveId", "pin"],
+              "enum": [
+                "primitiveId",
+                "pin"
+              ],
               "description": "定位类型：primitiveId=直接使用图元 ID，pin=通过引脚位置查找。"
             },
             "primitiveId": {
@@ -366,14 +477,19 @@
               "description": "引脚标识符（当 type=pin 时必填）。"
             }
           },
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         "newNetName": {
           "type": "string",
           "description": "新的网络名称。"
         }
       },
-      "required": ["target", "newNetName"]
+      "required": [
+        "target",
+        "newNetName"
+      ]
     }
   },
   {
@@ -413,7 +529,16 @@
           "description": "可选。器件位号到类型的映射，帮助布局算法识别器件类型。例如：{\"R1\": \"resistor\", \"U1\": \"chip\"}",
           "additionalProperties": {
             "type": "string",
-            "enum": ["resistor", "capacitor", "inductive", "diode", "triode", "oscillator", "chip", "otherDevice"]
+            "enum": [
+              "resistor",
+              "capacitor",
+              "inductive",
+              "diode",
+              "triode",
+              "oscillator",
+              "chip",
+              "otherDevice"
+            ]
           }
         }
       }
@@ -456,7 +581,16 @@
           "description": "可选。器件位号到类型的映射，帮助布线算法识别器件类型。例如：{\"R1\": \"resistor\", \"U1\": \"chip\"}",
           "additionalProperties": {
             "type": "string",
-            "enum": ["resistor", "capacitor", "inductive", "diode", "triode", "oscillator", "chip", "otherDevice"]
+            "enum": [
+              "resistor",
+              "capacitor",
+              "inductive",
+              "diode",
+              "triode",
+              "oscillator",
+              "chip",
+              "otherDevice"
+            ]
           }
         }
       }
