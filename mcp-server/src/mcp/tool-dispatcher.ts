@@ -28,6 +28,12 @@ export interface ToolDefinition {
   inputSchema: Record<string, unknown>;
 }
 
+export interface ToolCallResult {
+  [key: string]: unknown;
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+}
+
 function isPlainObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -78,7 +84,7 @@ export class ToolDispatcher {
   /**
    * 分发工具调用到EDA插件
    */
-  public async dispatch(toolCallParams: ToolCallParams): Promise<unknown> {
+  public async dispatch(toolCallParams: ToolCallParams): Promise<ToolCallResult> {
     const args = isPlainObjectRecord(toolCallParams.arguments) ? toolCallParams.arguments : {};
     
     try {
@@ -126,16 +132,16 @@ export class ToolDispatcher {
   /**
    * 包装为MCP tools/call响应格式
    */
-  private toToolContent(result: unknown): { 
-    content: Array<{ type: 'text'; text: string }>; 
-    structuredContent: unknown;
-  } {
-    return {
+  private toToolContent(result: unknown): ToolCallResult {
+    const response: ToolCallResult = {
       content: [{
         type: 'text',
         text: JSON.stringify(result, null, 2),
       }],
-      structuredContent: result,
     };
+    if (isPlainObjectRecord(result)) {
+      response.structuredContent = result;
+    }
+    return response;
   }
 }

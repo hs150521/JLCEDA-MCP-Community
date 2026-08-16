@@ -31,7 +31,9 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "@modelcontextprotocol/server": "^2.0.0",
+    "ws": "^8.16.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -1,121 +1,78 @@
 #!/usr/bin/env node
-/**
- * ------------------------------------------------------------------------
- * JLCEDA MCP Server
- * 说明：嘉立创EDA的Model Context Protocol服务器
- *      通过stdio与MCP客户端通信，通过WebSocket调用EDA插件执行操作
- * ------------------------------------------------------------------------
- */
 
-import { createStdioTransport } from './mcp/transport.js';
-import { RpcHandler } from './mcp/rpc-handler.js';
-import { ToolDispatcher } from './mcp/tool-dispatcher.js';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { EdaBridgeServer } from './mcp/bridge-client.js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { createMcpServer } from './mcp/server.js';
+import { ToolDispatcher } from './mcp/tool-dispatcher.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(
+  readFileSync(join(currentDirectory, '..', 'package.json'), 'utf8'),
+) as { version?: string };
+const serverVersion = packageJson.version || '2.0.0';
+const agentInstructions = readFileSync(
+  join(currentDirectory, 'resources', 'agent-instructions.md'),
+  'utf8',
+).trimEnd();
 
-// 读取版本号
-const packageJsonPath = join(__dirname, '..', 'package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-const SERVER_VERSION = packageJson.version || '2.0.0';
-
-// 从环境变量或默认值获取端口
-const BRIDGE_PORT = parseInt(process.env.JLCEDA_BRIDGE_PORT || '8765', 10);
-
-async function main() {
-  process.stderr.write(`JLCEDA MCP Server v${SERVER_VERSION}\n`);
-  process.stderr.write(`Starting WebSocket server on port ${BRIDGE_PORT}...\n`);
-
-  // 初始化WebSocket服务器
-  const bridgeServer = new EdaBridgeServer(BRIDGE_PORT);
-
-  try {
-    await bridgeServer.start();
-    const mode = bridgeServer.getMode();
-    if (mode === 'main') {
-      process.stderr.write(`Started as MAIN server\n`);
-    } else if (mode === 'client') {
-      process.stderr.write(`Started as CLIENT (connected to main server)\n`);
-    }
-  } catch (error) {
-    process.stderr.write(`Failed to start: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(1);
+function readBridgePort(): number {
+  const rawPort = process.env.JLCEDA_BRIDGE_PORT || '8765';
+  const port = Number.parseInt(rawPort, 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(`Invalid JLCEDA_BRIDGE_PORT: ${rawPort}`);
   }
+  return port;
+}
 
-  // 初始化工具分发器
+async function main(): Promise<void> {
+  const bridgePort = readBridgePort();
+  process.stderr.write(`JLCEDA MCP Server v${serverVersion}\n`);
+  process.stderr.write(`Starting WebSocket server on port ${bridgePort}...\n`);
+
+  const bridgeServer = new EdaBridgeServer(bridgePort);
+  await bridgeServer.start();
+  process.stderr.write(`Bridge mode: ${bridgeServer.getMode()}\n`);
+
   const toolDispatcher = new ToolDispatcher(bridgeServer);
+  const stdioServer = serveStdio(
+    () => createMcpServer(toolDispatcher, serverVersion, agentInstructions),
+    {
+      onerror: (error) => process.stderr.write(`MCP transport error: ${error.message}\n`),
+    },
+  );
 
-  // 初始化RPC处理器
-  const rpcHandler = new RpcHandler(toolDispatcher, SERVER_VERSION);
-
-  // 创建stdio传输层
-  const transport = createStdioTransport(async (line: string) => {
-    try {
-      // 解析JSON-RPC请求
-      const request = rpcHandler.parseRequestBody(line);
-
-      // 处理请求
-      const response = await rpcHandler.handleRequest(request);
-
-      // 如果有响应，写回stdout
-      if (response) {
-        transport.write(response);
-      }
-    } catch (error) {
-      // 发送错误响应
-      const errorResponse = {
-        jsonrpc: '2.0',
-        id: null,
-        error: {
-          code: -32700,
-          message: error instanceof Error ? error.message : String(error),
-        },
-      };
-      transport.write(errorResponse);
-    }
-  });
-
-  // 启动传输层
-  transport.start();
-
-  // 输出启动日志到stderr（不影响stdio通信）
-  process.stderr.write(`MCP Server started successfully\n`);
-  process.stderr.write(`Listening on stdio for JSON-RPC requests\n`);
-
-  // 清理函数
+  process.stderr.write('MCP server listening on stdio\n');
   let shuttingDown = false;
-  const cleanup = () => {
+  const cleanup = async (): Promise<void> => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
-    process.stderr.write(`Shutting down...\n`);
+    process.stderr.write('Shutting down...\n');
+    await stdioServer.close();
     bridgeServer.close();
     process.exit(0);
   };
 
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
-  process.stdin.on('end', cleanup);
+  process.on('SIGINT', () => void cleanup());
+  process.on('SIGTERM', () => void cleanup());
+  process.stdin.on('end', () => void cleanup());
 }
 
-// 错误处理
 process.on('uncaughtException', (error) => {
   process.stderr.write(`Uncaught exception: ${error.message}\n`);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
-  process.stderr.write(`Unhandled rejection: ${reason}\n`);
+  process.stderr.write(`Unhandled rejection: ${String(reason)}\n`);
   process.exit(1);
 });
 
-// 启动服务器
-main().catch((error) => {
-  process.stderr.write(`Failed to start server: ${error.message}\n`);
+void main().catch((error) => {
+  process.stderr.write(`Failed to start server: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(1);
 });
