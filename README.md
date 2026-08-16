@@ -1,5 +1,13 @@
 ﻿# JLCEDA MCP
 
+> **JLCEDA MCP Community** — community-maintained fork of
+> [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP). This project is
+> not affiliated with or endorsed by JLCEDA or the upstream maintainer.
+> Community contact: `yuanzl150521@gmail.com`.
+
+See [COMMUNITY.md](./COMMUNITY.md) for maintenance policy, attribution and the
+native MCP modernization roadmap.
+
 JLCEDA MCP 是一套面向嘉立创 EDA 的本地 MCP 双扩展方案，由 mcp-hub 和 mcp-bridge 组成。接入后，你可以直接在 Copilot、Cursor Chat 中检查原理图、分析电路、辅助设计电路方案，并让 AI 在嘉立创 EDA 中完成相关操作。
 
 ## 整体链路
