@@ -226,6 +226,7 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		let handlerSettled: Promise<void> | undefined;
 		try {
 			debugLog('[DEBUG] calling handler for path:', task.path);
+			currentTransport.reportTaskStarted(task.requestId, task.leaseTerm);
 			// 任务执行前刷新服务端活动时间戳，避免空闲超时误判
 			currentTransport.refreshServerActivity();
 			const timeoutMs = resolveBridgeTaskTimeoutMs(task.path, task.payload);

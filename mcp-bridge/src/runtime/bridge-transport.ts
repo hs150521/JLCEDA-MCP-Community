@@ -177,6 +177,16 @@ export class BridgeTransport {
 		this.lastServerActivityAt = Date.now();
 	}
 
+	public reportTaskStarted(requestId: string, leaseTerm: number): void {
+		this.sendMessage({
+			type: 'bridge/task-started',
+			clientId: this.clientId,
+			requestId,
+			leaseTerm,
+			startedAt: Date.now(),
+		});
+	}
+
 	/**
 	 * 完成 Bridge 任务，并回传任务结果。
 	 * @param requestId 任务标识。

@@ -78,6 +78,13 @@ function attachTaskResponder(socket, clientId, transform) {
       return;
     }
     socket.send(JSON.stringify({
+      type: 'bridge/task-started',
+      clientId,
+      requestId: message.requestId,
+      leaseTerm: message.leaseTerm,
+      startedAt: Date.now(),
+    }));
+    socket.send(JSON.stringify({
       type: 'bridge/result',
       clientId,
       requestId: message.requestId,
@@ -109,8 +116,10 @@ const tokenQuery = '?token=bridge-test-token';
 const mainServer = new EdaBridgeServer(port);
 const secondaryServer = new EdaBridgeServer(port);
 let expiryServer;
+let queueServer;
 let blue;
 let red;
+let queued;
 
 try {
   await mainServer.start();
@@ -174,6 +183,50 @@ try {
     { source: 'red', path: '/bridge/test/shared' },
   );
 
+  const queuePort = await reservePort();
+  queueServer = new EdaBridgeServer(queuePort);
+  await queueServer.start();
+  queued = await registerEda(
+    `ws://127.0.0.1:${queuePort}/bridge/ws${tokenQuery}`,
+    'queued-page',
+  );
+  let queuedTaskIndex = 0;
+  queued.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type !== 'bridge/task') {
+      return;
+    }
+    const taskIndex = queuedTaskIndex;
+    queuedTaskIndex += 1;
+    const queueDelayMs = taskIndex === 0 ? 0 : 100;
+    setTimeout(() => {
+      queued.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'queued-page',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
+      setTimeout(() => {
+        queued.socket.send(JSON.stringify({
+          type: 'bridge/result',
+          clientId: 'queued-page',
+          requestId: message.requestId,
+          leaseTerm: message.leaseTerm,
+          result: { taskIndex },
+        }));
+      }, 40);
+    }, queueDelayMs);
+  });
+  const firstQueuedRequest = queueServer.request('/bridge/test/queued-1', {}, 80);
+  const secondQueuedRequest = queueServer.request('/bridge/test/queued-2', {}, 80);
+  assert.deepEqual(await firstQueuedRequest, { taskIndex: 0 });
+  assert.deepEqual(await secondQueuedRequest, { taskIndex: 1 });
+  queued.socket.close();
+  queued = undefined;
+  queueServer.close();
+  queueServer = undefined;
+
   const expiryPort = await reservePort();
   expiryServer = new EdaBridgeServer(expiryPort, { peerTtlMs: 250, peerSweepIntervalMs: 25 });
   await expiryServer.start();
@@ -204,7 +257,9 @@ try {
 } finally {
   blue?.socket.close();
   red?.socket.close();
+  queued?.socket.close();
   expiryServer?.close();
+  queueServer?.close();
   secondaryServer.close();
   mainServer.close();
   if (originalToken === undefined) {
