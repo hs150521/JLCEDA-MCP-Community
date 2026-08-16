@@ -1,11 +1,12 @@
 const assert = require('node:assert/strict');
+const process = require('node:process');
 
 process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
-const { detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
-const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-auto-handler.ts');
+const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
+const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
 
 for (const name of ['UART_TX', 'SPI_CLK', 'BLUE_LED_DATA']) {
 	assert.equal(detectNetLabelKind(name), 'NetLabel', `${name} must use an ordinary net label`);
@@ -35,13 +36,15 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 });
 
 async function main() {
+	await assert.rejects(
+		createNetLabelWithTimeout(new Promise(() => {}), 'UART_TX', 10),
+		/createNetLabel alpha API timed out/,
+	);
+
 	const createNetLabelCalls = [];
 	const regionCalls = [];
 	const modifyCalls = [];
 	globalThis.eda = {
-		sch_PrimitiveComponent: {
-			getAllPinsByPrimitiveId: async () => [sdkPin],
-		},
 		sch_PrimitiveAttribute: {
 			createNetLabel: async (...args) => {
 				createNetLabelCalls.push(args);

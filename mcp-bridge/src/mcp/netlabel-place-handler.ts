@@ -41,6 +41,7 @@ interface NetLabelApi {
 }
 
 export type NetLabelKind = 'Power' | 'Ground' | 'AnalogGround' | 'ProtectGround' | 'NetLabel';
+const NET_LABEL_CREATE_TIMEOUT_MS = 5_000;
 
 interface PinObject {
 	x: number;
@@ -114,6 +115,29 @@ function resolveNetFlagApi(): NetFlagApi {
 			mirror?: boolean,
 		) => Promise<unknown>,
 	};
+}
+
+export async function createNetLabelWithTimeout(
+	task: Promise<unknown>,
+	netName: string,
+	timeoutMs = NET_LABEL_CREATE_TIMEOUT_MS,
+): Promise<unknown> {
+	let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			task,
+			new Promise<never>((_resolve, reject) => {
+				timeoutId = globalThis.setTimeout(() => {
+					reject(new Error(`JLCEDA createNetLabel alpha API timed out for ${netName}`));
+				}, timeoutMs);
+			}),
+		]);
+	}
+	finally {
+		if (timeoutId !== undefined) {
+			globalThis.clearTimeout(timeoutId);
+		}
+	}
 }
 
 // 获取普通网络标签 API。
@@ -275,13 +299,14 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 			const labelY = pin.y + offset.y;
 
 			const result = netLabelKind === 'NetLabel'
-				? await Promise.resolve(
-						netLabelApi.createNetLabel.call(
+				? await createNetLabelWithTimeout(
+						Promise.resolve(netLabelApi.createNetLabel.call(
 							netLabelApi.context,
 							labelX,
 							labelY,
 							placement.netName,
-						),
+						)),
+						placement.netName,
 					)
 				: await Promise.resolve(
 						netFlagApi.createNetFlag.call(

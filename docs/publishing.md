@@ -49,7 +49,7 @@ Official requirements:
 
 ## Naming and trademark
 
-The marketplace display name is **MCP Bridge 社区版（非官方）**. The description
+The marketplace display name is **MCP Bridge 社区版**. The description
 must continue to state that it is based on the upstream MCP Bridge and is not an
 official JLCEDA plugin. The repository remains under Apache-2.0; retain the
 repository LICENSE and upstream attribution when distributing source or binary
