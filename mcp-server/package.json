@@ -8,11 +8,14 @@
     "jlceda-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run clean && tsc && node scripts/copy-resources.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test:bridge": "node scripts/bridge-test.mjs",
+    "test": "npm run build && npm run test:smoke && npm run test:bridge"
   },
   "keywords": [
     "mcp",
@@ -22,7 +25,7 @@
     "schematic",
     "pcb"
   ],
-  "author": "JLCEDA",
+  "author": "JLCEDA MCP Community <yuanzl150521@gmail.com>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=20.0.0"
@@ -33,10 +36,10 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/ws": "^8.5.10",
-    "typescript": "^5.3.0",
-    "rimraf": "^5.0.5",
-    "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0"
+    "@typescript-eslint/parser": "^6.19.0",
+    "eslint": "^8.56.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.0"
   }
 }

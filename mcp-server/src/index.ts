@@ -87,7 +87,12 @@ async function main() {
   process.stderr.write(`Listening on stdio for JSON-RPC requests\n`);
 
   // 清理函数
+  let shuttingDown = false;
   const cleanup = () => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
     process.stderr.write(`Shutting down...\n`);
     bridgeServer.close();
     process.exit(0);
@@ -95,6 +100,7 @@ async function main() {
 
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
+  process.stdin.on('end', cleanup);
 }
 
 // 错误处理
