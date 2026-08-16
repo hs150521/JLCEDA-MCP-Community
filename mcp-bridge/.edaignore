@@ -16,3 +16,6 @@
 /tsconfig.json
 .eslintcache
 debug.log
+/images/demo.gif
+/images/logo.png
+/images/community-logo.png

@@ -1,10 +1,10 @@
 {
-	"name": "pro-api-sdk",
-  "version": "2.0.0",
+	"name": "jlceda-mcp-community-bridge",
+	"version": "2.0.0",
 	"description": "嘉立创EDA & EasyEDA 专业版扩展 API 开发工具",
-	"author": "JLCEDA <support@lceda.cn>",
+	"author": "JLCEDA MCP Community <yuanzl150521@gmail.com>",
 	"license": "Apache-2.0",
-	"homepage": "https://pro.lceda.cn/",
+	"homepage": "https://github.com/hs150521/JLCEDA-MCP-Community",
 	"engines": {
 		"node": ">=20.17.0"
 	},

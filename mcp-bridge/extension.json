@@ -1,150 +1,150 @@
 {
-	"name": "jlceda-mcp-bridge",
-	"uuid": "1f41b7a0f9784d6aa5fd77478de4a25c",
-	"displayName": "MCP Bridge",
-	"description": "免配置开箱即用，语义级原理图审查，支持 EDA API 透传。",
-	"version": "2.0.0",
-	"publisher": "Lion",
-	"engines": {
-		"eda": "^3.0.0"
-	},
-	"license": "Apache-2.0",
-	"repository": {
-		"type": "extension-store",
-		"url": ""
-	},
-	"categories": "Other",
-	"keywords": [
-		"MCP Bridge",
-		"Copilot",
-		"ClaudeCode",
-		"Codex",
-		"AI"
-	],
-	"images": {
-		"logo": "./images/logo.png"
-	},
-	"homepage": "https://github.com/sengbin/JLCEDA-MCP",
-	"bugs": "https://github.com/sengbin/JLCEDA-MCP/issues",
-	"activationEvents": {
-		"onStartupFinished": true
-	},
-	"entry": "./dist/index",
-	"dependentExtensions": {},
-	"headerMenus": {
-		"home": [
-			{
-				"id": "MCP Bridge",
-				"title": "MCP Bridge",
-				"menuItems": [
-					{
-						"id": "连接状态",
-						"title": "连接状态",
-						"registerFn": "viewConnectionStatus"
-					},
-					{
-						"id": "重启服务器",
-						"title": "重启服务器",
-						"registerFn": "restartServer"
-					},
-					{
-						"id": "连接设置",
-						"title": "连接设置",
-						"registerFn": "openSettingsPage"
-					},
-					{
-						"id": "查看调试日志",
-						"title": "查看调试日志",
-						"registerFn": "viewDebugLog"
-					},
-					{
-						"id": "清空调试日志",
-						"title": "清空调试日志",
-						"registerFn": "clearDebugLogAction"
-					},
-					{
-						"id": "About",
-						"title": "About...",
-						"registerFn": "about"
-					}
-				]
-			}
-		],
-		"sch": [
-			{
-				"id": "MCP Bridge",
-				"title": "MCP Bridge",
-				"menuItems": [
-					{
-						"id": "连接状态",
-						"title": "连接状态",
-						"registerFn": "viewConnectionStatus"
-					},
-					{
-						"id": "重启服务器",
-						"title": "重启服务器",
-						"registerFn": "restartServer"
-					},
-					{
-						"id": "连接设置",
-						"title": "连接设置",
-						"registerFn": "openSettingsPage"
-					},
-					{
-						"id": "查看调试日志",
-						"title": "查看调试日志",
-						"registerFn": "viewDebugLog"
-					},
-					{
-						"id": "清空调试日志",
-						"title": "清空调试日志",
-						"registerFn": "clearDebugLogAction"
-					},
-					{
-						"id": "About",
-						"title": "About...",
-						"registerFn": "about"
-					}
-				]
-			}
-		],
-		"pcb": [
-			{
-				"id": "MCP Bridge",
-				"title": "MCP Bridge",
-				"menuItems": [
-					{
-						"id": "连接状态",
-						"title": "连接状态",
-						"registerFn": "viewConnectionStatus"
-					},
-					{
-						"id": "重启服务器",
-						"title": "重启服务器",
-						"registerFn": "restartServer"
-					},
-					{
-						"id": "连接设置",
-						"title": "连接设置",
-						"registerFn": "openSettingsPage"
-					},
-					{
-						"id": "查看调试日志",
-						"title": "查看调试日志",
-						"registerFn": "viewDebugLog"
-					},
-					{
-						"id": "清空调试日志",
-						"title": "清空调试日志",
-						"registerFn": "clearDebugLogAction"
-					},
-					{
-						"id": "About",
-						"title": "About...",
-						"registerFn": "about"
-					}
-				]
-			}
-		]
-	}
+  "name": "jlceda-mcp-community-bridge",
+  "uuid": "4bf111f3be7d45ea94fa619409c3a79d",
+  "displayName": "JLCEDA MCP Community Bridge",
+  "description": "免配置开箱即用，语义级原理图审查，支持 EDA API 透传。",
+  "version": "2.0.0",
+  "publisher": "JLCEDA MCP Community",
+  "engines": {
+    "eda": "^3.0.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hs150521/JLCEDA-MCP-Community.git"
+  },
+  "categories": "Other",
+  "keywords": [
+    "MCP Bridge",
+    "Copilot",
+    "ClaudeCode",
+    "Codex",
+    "AI"
+  ],
+  "images": {
+    "logo": "./images/community-logo-512.png"
+  },
+  "homepage": "https://github.com/hs150521/JLCEDA-MCP-Community",
+  "bugs": "https://github.com/hs150521/JLCEDA-MCP-Community/issues",
+  "activationEvents": {
+    "onStartupFinished": true
+  },
+  "entry": "./dist/index",
+  "dependentExtensions": {},
+  "headerMenus": {
+    "home": [
+      {
+        "id": "MCP Bridge",
+        "title": "MCP Bridge",
+        "menuItems": [
+          {
+            "id": "连接状态",
+            "title": "连接状态",
+            "registerFn": "viewConnectionStatus"
+          },
+          {
+            "id": "重启服务器",
+            "title": "重启服务器",
+            "registerFn": "restartServer"
+          },
+          {
+            "id": "连接设置",
+            "title": "连接设置",
+            "registerFn": "openSettingsPage"
+          },
+          {
+            "id": "查看调试日志",
+            "title": "查看调试日志",
+            "registerFn": "viewDebugLog"
+          },
+          {
+            "id": "清空调试日志",
+            "title": "清空调试日志",
+            "registerFn": "clearDebugLogAction"
+          },
+          {
+            "id": "About",
+            "title": "About...",
+            "registerFn": "about"
+          }
+        ]
+      }
+    ],
+    "sch": [
+      {
+        "id": "MCP Bridge",
+        "title": "MCP Bridge",
+        "menuItems": [
+          {
+            "id": "连接状态",
+            "title": "连接状态",
+            "registerFn": "viewConnectionStatus"
+          },
+          {
+            "id": "重启服务器",
+            "title": "重启服务器",
+            "registerFn": "restartServer"
+          },
+          {
+            "id": "连接设置",
+            "title": "连接设置",
+            "registerFn": "openSettingsPage"
+          },
+          {
+            "id": "查看调试日志",
+            "title": "查看调试日志",
+            "registerFn": "viewDebugLog"
+          },
+          {
+            "id": "清空调试日志",
+            "title": "清空调试日志",
+            "registerFn": "clearDebugLogAction"
+          },
+          {
+            "id": "About",
+            "title": "About...",
+            "registerFn": "about"
+          }
+        ]
+      }
+    ],
+    "pcb": [
+      {
+        "id": "MCP Bridge",
+        "title": "MCP Bridge",
+        "menuItems": [
+          {
+            "id": "连接状态",
+            "title": "连接状态",
+            "registerFn": "viewConnectionStatus"
+          },
+          {
+            "id": "重启服务器",
+            "title": "重启服务器",
+            "registerFn": "restartServer"
+          },
+          {
+            "id": "连接设置",
+            "title": "连接设置",
+            "registerFn": "openSettingsPage"
+          },
+          {
+            "id": "查看调试日志",
+            "title": "查看调试日志",
+            "registerFn": "viewDebugLog"
+          },
+          {
+            "id": "清空调试日志",
+            "title": "清空调试日志",
+            "registerFn": "clearDebugLogAction"
+          },
+          {
+            "id": "About",
+            "title": "About...",
+            "registerFn": "about"
+          }
+        ]
+      }
+    ]
+  }
 }
