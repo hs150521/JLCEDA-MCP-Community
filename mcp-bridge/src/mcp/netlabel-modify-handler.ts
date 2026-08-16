@@ -10,14 +10,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { isPlainObjectRecord, toSafeErrorMessage } from '../utils';
-
-interface NetLabelModifyRequest {
-	target:
-		| { type: 'primitiveId'; primitiveId: string }
-		| { type: 'pin'; componentId: string; pinIdentifier: string };
-	newNetName: string;
-}
+import { getSyncState, isPlainObjectRecord } from '../utils';
 
 interface ComponentApi {
 	context: unknown;
@@ -36,11 +29,11 @@ interface AttributeApi {
 interface DocumentApi {
 	context: unknown;
 	getPrimitivesInRegion: (
-		x1: number,
-		y1: number,
-		x2: number,
-		y2: number,
-	) => Promise<Array<unknown>>;
+		left: number,
+		right: number,
+		top: number,
+		bottom: number,
+	) => Array<unknown> | Promise<Array<unknown>>;
 }
 
 interface PinObject {
@@ -102,11 +95,11 @@ function resolveDocumentApi(): DocumentApi {
 	return {
 		context: documentModule,
 		getPrimitivesInRegion: documentModule.getPrimitivesInRegion as (
-			x1: number,
-			y1: number,
-			x2: number,
-			y2: number,
-		) => Promise<Array<unknown>>,
+			left: number,
+			right: number,
+			top: number,
+			bottom: number,
+		) => Array<unknown> | Promise<Array<unknown>>,
 	};
 }
 
@@ -118,13 +111,13 @@ function findPin(pins: Array<unknown>, identifier: string): PinObject | null {
 			continue;
 		}
 
-		const pinNumber = String(pin.pinNumber ?? '').trim();
-		const pinName = String(pin.pinName ?? '').trim();
+		const pinNumber = String(getSyncState(pin, 'getState_PinNumber', '')).trim();
+		const pinName = String(getSyncState(pin, 'getState_PinName', '')).trim();
 
 		if (pinNumber === identifier || pinName === identifier) {
 			return {
-				x: Number(pin.x ?? 0),
-				y: Number(pin.y ?? 0),
+				x: Number(getSyncState(pin, 'getState_X', 0)),
+				y: Number(getSyncState(pin, 'getState_Y', 0)),
 				pinNumber,
 				pinName,
 			};
@@ -145,17 +138,17 @@ function findNetLabelNearPin(primitives: Array<unknown>, pinX: number, pinY: num
 		}
 
 		// 检查是否是属性图元（网络标签）
-		const primitiveType = String(primitive.primitiveType ?? '');
-		if (primitiveType !== 'ATTRIBUTE') {
+		const primitiveType = String(getSyncState(primitive, 'getState_PrimitiveType', ''));
+		if (primitiveType !== 'Attribute') {
 			continue;
 		}
 
-		const x = Number(primitive.x ?? 0);
-		const y = Number(primitive.y ?? 0);
+		const x = Number(getSyncState(primitive, 'getState_X', 0));
+		const y = Number(getSyncState(primitive, 'getState_Y', 0));
 		const distance = Math.sqrt((x - pinX) ** 2 + (y - pinY) ** 2);
 
 		if (distance <= searchRadius) {
-			const primitiveId = String(primitive.primitiveId ?? '').trim();
+			const primitiveId = String(getSyncState(primitive, 'getState_PrimitiveId', '')).trim();
 			if (primitiveId.length > 0) {
 				return primitiveId;
 			}
@@ -233,21 +226,22 @@ export async function handleNetLabelModifyTask(payload: unknown): Promise<unknow
 			documentApi.getPrimitivesInRegion.call(
 				documentApi.context,
 				pin.x - searchRadius,
-				pin.y - searchRadius,
 				pin.x + searchRadius,
+				pin.y - searchRadius,
 				pin.y + searchRadius,
 			),
 		);
 
 		if (!Array.isArray(primitives)) {
-			throw new Error('getPrimitivesInRegion 返回无效结果。');
+			throw new TypeError('getPrimitivesInRegion 返回无效结果。');
 		}
 
 		primitiveId = findNetLabelNearPin(primitives, pin.x, pin.y);
 		if (!primitiveId) {
 			throw new Error(`在引脚 "${pinIdentifier}" 附近未找到网络标签，请检查是否已放置。`);
 		}
-	} else {
+	}
+	else {
 		throw new Error('target.type 必须为 "primitiveId" 或 "pin"。');
 	}
 
@@ -261,7 +255,8 @@ export async function handleNetLabelModifyTask(payload: unknown): Promise<unknow
 		if (isPlainObjectRecord(currentAttribute)) {
 			oldNetName = String(currentAttribute.value ?? '').trim();
 		}
-	} catch {
+	}
+	catch {
 		// 忽略获取失败，继续修改
 	}
 

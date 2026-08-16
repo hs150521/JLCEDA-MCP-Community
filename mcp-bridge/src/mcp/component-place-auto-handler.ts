@@ -370,7 +370,7 @@ export async function handleComponentPlaceAutoTask(payload: unknown): Promise<un
 		);
 
 		try {
-			await Promise.resolve(
+			const createdComponent = await Promise.resolve(
 				api.create.call(
 					api.context,
 					{ uuid: component.uuid, libraryUuid: component.libraryUuid },
@@ -383,6 +383,9 @@ export async function handleComponentPlaceAutoTask(payload: unknown): Promise<un
 					true,
 				),
 			);
+			if (createdComponent === undefined || createdComponent === null) {
+				throw new Error('sch_PrimitiveComponent.create returned undefined');
+			}
 
 			placedComponents.push({
 				uuid: component.uuid,

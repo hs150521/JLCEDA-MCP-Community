@@ -1,18 +1,22 @@
-# MCP Bridge
+# MCP Bridge 社区版（非官方）
 
-本扩展为嘉立创 EDA **AI 设计助手** 的 MCP 版，支持双协议连接（stdio / http），在 VS Code / Cursor 内的聊天工具（Copilot / Chat / Claude Code / Codex 等）中提供原理图分析、器件选型、交互放置等功能，配合 VS Code / Cursor 侧的 **JLCEDA MCP Hub** 扩展使用。
+> 本扩展不是嘉立创官方插件，也不代表嘉立创或原项目维护者。
 
-服务端还支持可选的 **透传 EDA API** 模式，开启后可向 AI 额外暴露底层 EDA API 的查询与调用能力，适合有进阶需求的用户使用。
+本扩展基于 [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP)
+项目中的 **MCP Bridge** 改进，由社区独立维护。社区版使用独立的原生 MCP
+Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 VS Code / Cursor
+侧的 MCP Hub 扩展。
 
-> 这套方案的链路是：EDA -> WebSocket (Bridge) -> stdio/http (MCP) -> MCP 客户端（Copilot / Cursor Chat / Claude Code / Codex）。
+主要改进包括原生 MCP 协议、多客户端页面选择、Bridge 凭据保护、语义级原理图读取、
+器件放置和网络标签等工具。
 
-B 站演示视频：https://www.bilibili.com/video/BV11QwuzxEDy/
+链路：嘉立创 EDA -> 本机 WebSocket (Bridge) -> 原生 MCP Server -> MCP 客户端。
 
-讨论QQ群：9041389，欢迎你反馈更多的问题和建议。
+- 社区仓库：https://github.com/hs150521/JLCEDA-MCP-Community
+- 上游项目：https://github.com/sengbin/JLCEDA-MCP
+- 社区联系邮箱：yuanzl150521@gmail.com
 
 ![演示动画](images/demo.gif)
-
-项目地址：https://github.com/sengbin/JLCEDA-MCP
 
 内置专用工具：
 

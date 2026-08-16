@@ -18,6 +18,21 @@ export function isPlainObjectRecord(value: unknown): value is Record<string, unk
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Read primitive state through a public synchronous SDK getter. */
+export function getSyncState<T>(obj: unknown, method: string, fallback: T): T {
+	try {
+		const fn = (obj as Record<string, unknown>)?.[method];
+		if (typeof fn === 'function') {
+			const result: unknown = (fn as () => unknown).call(obj);
+			return result != null ? (result as T) : fallback;
+		}
+	}
+	catch {
+		// State reads are best-effort; callers receive the supplied fallback.
+	}
+	return fallback;
+}
+
 /**
  * 将未知异常转换为可读文本。
  * @param error 原始异常对象。

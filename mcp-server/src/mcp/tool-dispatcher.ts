@@ -38,6 +38,10 @@ function isPlainObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // 加载工具定义
 function loadToolDefinitions(): readonly ToolDefinition[] {
   const parsed: unknown = rawToolDefinitions;
@@ -88,6 +92,10 @@ export class ToolDispatcher {
     const args = isPlainObjectRecord(toolCallParams.arguments) ? toolCallParams.arguments : {};
     
     try {
+      if (toolCallParams.name === 'component_place') {
+        return await this.dispatchInteractiveComponentPlace(args);
+      }
+
       // 获取桥接路径
       const bridgePath = this.getBridgePath(toolCallParams.name);
       
@@ -145,5 +153,106 @@ export class ToolDispatcher {
       response.structuredContent = result;
     }
     return response;
+  }
+
+  private async dispatchInteractiveComponentPlace(args: Record<string, unknown>): Promise<ToolCallResult> {
+    const descriptorResult = await this.bridgeServer.request('/bridge/jlceda/component/place', args);
+    if (!isPlainObjectRecord(descriptorResult) || !isPlainObjectRecord(descriptorResult.placement)) {
+      throw new Error('Bridge did not return a component placement descriptor');
+    }
+
+    const placement = descriptorResult.placement;
+    const components = Array.isArray(placement.components) ? placement.components : [];
+    if (components.length === 0) {
+      throw new Error('Component placement descriptor contains no components');
+    }
+
+    const timeoutSeconds = Math.max(30, Math.min(180, Number(placement.timeoutSeconds) || 60));
+    const retryCount = Math.max(0, Math.min(3, Number(placement.retryCount) || 0));
+    const results: Array<Record<string, unknown>> = [];
+
+    for (let componentIndex = 0; componentIndex < components.length; componentIndex += 1) {
+      const component = components[componentIndex];
+      let placed = false;
+      let userCancelled = false;
+      let errorMessage = '';
+      let attempts = 0;
+
+      for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+        attempts = attempt + 1;
+        let sessionId = '';
+        try {
+          const startResult = await this.bridgeServer.request('/bridge/jlceda/component/place/start', {
+            component,
+            timeoutSeconds,
+          });
+          if (!isPlainObjectRecord(startResult) || startResult.ok !== true) {
+            throw new Error(String(isPlainObjectRecord(startResult) ? startResult.error ?? 'placement start failed' : 'placement start returned invalid data'));
+          }
+
+          sessionId = String(startResult.sessionId ?? '').trim();
+          if (!sessionId) {
+            throw new Error('placement start returned no sessionId');
+          }
+
+          const deadline = Date.now() + timeoutSeconds * 1000;
+          while (Date.now() < deadline) {
+            await delay(250);
+            const checkResult = await this.bridgeServer.request('/bridge/jlceda/component/place/check', { sessionId }, 5000);
+            if (!isPlainObjectRecord(checkResult) || checkResult.ok !== true) {
+              throw new Error(String(isPlainObjectRecord(checkResult) ? checkResult.error ?? 'placement check failed' : 'placement check returned invalid data'));
+            }
+            if (checkResult.placed === true) {
+              placed = true;
+              break;
+            }
+            if (checkResult.userCancelled === true) {
+              userCancelled = true;
+              break;
+            }
+          }
+
+          if (!placed && !userCancelled) {
+            errorMessage = `Placement timed out after ${String(timeoutSeconds)} seconds`;
+          }
+        } catch (error) {
+          errorMessage = error instanceof Error ? error.message : String(error);
+        } finally {
+          if (sessionId) {
+            try {
+              await this.bridgeServer.request('/bridge/jlceda/component/place/close', { sessionId }, 5000);
+            } catch {
+              // The check handler may already have cleaned up a completed session.
+            }
+          }
+        }
+
+        if (placed || userCancelled) {
+          break;
+        }
+      }
+
+      results.push({
+        componentIndex,
+        component,
+        placed,
+        userCancelled,
+        attempts,
+        ...(placed || userCancelled ? {} : { error: errorMessage || 'placement failed' }),
+      });
+    }
+
+    const placedCount = results.filter((result) => result.placed === true).length;
+    const cancelledCount = results.filter((result) => result.userCancelled === true).length;
+    const failedCount = results.length - placedCount - cancelledCount;
+    return this.toToolContent({
+      ok: placedCount === results.length,
+      placedCount,
+      cancelledCount,
+      failedCount,
+      totalCount: results.length,
+      results,
+      message: `Interactive placement completed: ${String(placedCount)}/${String(results.length)} placed`,
+    });
   }
 }

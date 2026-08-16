@@ -10,7 +10,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { isPlainObjectRecord, toSafeErrorMessage } from '../utils';
+import { getSyncState, isPlainObjectRecord, toSafeErrorMessage } from '../utils';
 
 interface NetLabelPlacement {
 	componentId: string;
@@ -137,30 +137,24 @@ function resolveNetLabelApi(): NetLabelApi {
 }
 
 // 查找引脚
-function findPin(pins: Array<unknown>, identifier: string): PinObject | null {
+export function findPin(pins: Array<unknown>, identifier: string): PinObject | null {
 	for (let i = 0; i < pins.length; i += 1) {
 		const pin = pins[i];
-		if (!isPlainObjectRecord(pin)) {
+		if (pin === null || (typeof pin !== 'object' && typeof pin !== 'function')) {
 			continue;
 		}
 
-		const pinNumber = String(pin.pinNumber ?? '').trim();
-		const pinName = String(pin.pinName ?? '').trim();
-		const net = String(pin.net ?? '').trim();
+		const pinNumber = String(getSyncState(pin, 'getState_PinNumber', '')).trim();
+		const pinName = String(getSyncState(pin, 'getState_PinName', '')).trim();
 
-		if (
-			pinNumber === identifier
-			|| pinName === identifier
-			|| (net.length > 0 && net === identifier)
-		) {
+		if (pinNumber === identifier || pinName === identifier) {
 			return {
-				x: Number(pin.x ?? 0),
-				y: Number(pin.y ?? 0),
-				rotation: Number(pin.rotation ?? 0),
-				pinLength: Number(pin.pinLength ?? 0),
+				x: Number(getSyncState(pin, 'getState_X', 0)),
+				y: Number(getSyncState(pin, 'getState_Y', 0)),
+				rotation: Number(getSyncState(pin, 'getState_Rotation', 0)),
+				pinLength: Number(getSyncState(pin, 'getState_PinLength', 0)),
 				pinNumber,
 				pinName,
-				net: net.length > 0 ? net : undefined,
 			};
 		}
 	}
@@ -339,7 +333,8 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 	}
 
 	return {
-		ok: true,
+		ok: failureCount === 0,
+		partial: successCount > 0 && failureCount > 0,
 		successCount,
 		failureCount,
 		total: placements.length,

@@ -1,6 +1,10 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 
+export function formatInternalClientEndpoint(port: number): string {
+  return `ws://127.0.0.1:${String(port)}/mcp-internal`;
+}
+
 interface BridgePeer {
   clientId: string;
   bridgeVersion: string;
@@ -204,7 +208,7 @@ export class EdaBridgeServer {
           if (isRecord(message) && message.type === 'bridge/internal-ready' && !settled) {
             settled = true;
             clearTimeout(timer);
-            process.stderr.write(`[Client Mode] Connected to main server at ${url}\n`);
+            process.stderr.write(`[Client Mode] Connected to main server at ${formatInternalClientEndpoint(this.port)}\n`);
             resolve();
             return;
           }

@@ -42,6 +42,26 @@ import { BridgeTransport } from './bridge-transport.ts';
 const RECONNECT_INTERVAL_MS = 1200;
 const CONTEXT_SYNC_INTERVAL_MS = 1000;
 const CONNECT_SUCCESS_TOAST_TIMER_SECONDS = 3;
+const BRIDGE_TASK_TIMEOUT_MS = 25_000;
+
+async function withTaskTimeout<T>(task: Promise<T>, path: string): Promise<T> {
+	let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			task,
+			new Promise<T>((_resolve, reject) => {
+				timeoutId = globalThis.setTimeout(() => {
+					reject(new Error(`Bridge task timed out after ${String(BRIDGE_TASK_TIMEOUT_MS)}ms: ${path}`));
+				}, BRIDGE_TASK_TIMEOUT_MS);
+			}),
+		]);
+	}
+	finally {
+		if (timeoutId !== undefined) {
+			globalThis.clearTimeout(timeoutId);
+		}
+	}
+}
 
 const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown>> = {
 	'/bridge/jlceda/api/index': handleApiIndexTask,
@@ -227,7 +247,10 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 			debugLog('[DEBUG] calling handler for path:', task.path);
 			// 任务执行前刷新服务端活动时间戳，避免空闲超时误判
 			currentTransport.refreshServerActivity();
-			result = await toSerializableAsync(await handler(task.payload));
+			result = await withTaskTimeout(
+				(async () => toSerializableAsync(await handler(task.payload)))(),
+				task.path,
+			);
 			// 任务完成后再次刷新，确保结果回传前连接不被断开
 			currentTransport.refreshServerActivity();
 			debugLog('[DEBUG] handler completed successfully, result:', typeof result);

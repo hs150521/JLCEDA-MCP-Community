@@ -10,20 +10,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { safeCall } from '../utils';
-
-// 安全调用同步 getter 方法，获取指定类型的值。
-function getSyncState<T>(obj: unknown, method: string, fallback: T): T {
-	try {
-		const fn = (obj as Record<string, unknown>)?.[method];
-		if (typeof fn === 'function') {
-			const result: unknown = (fn as () => unknown).call(obj);
-			return result != null ? (result as T) : fallback;
-		}
-	}
-	catch { /* ignore */ }
-	return fallback;
-}
+import { getSyncState, safeCall } from '../utils';
 
 // 引脚连接点坐标键，用于在坐标→网络名映射中查找。
 // 使用 Math.round 消除 EDA 坐标中的浮点精度误差（如 324.99999999999994 vs 325）。

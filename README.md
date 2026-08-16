@@ -7,7 +7,8 @@
 See [COMMUNITY.md](./COMMUNITY.md) for maintenance policy, attribution and
 branch policy, and
 [docs/native-mcp-setup.md](./docs/native-mcp-setup.md) for the tested native
-MCP setup and local bridge security guidance.
+MCP setup and local bridge security guidance. Release maintainers should also
+follow [docs/publishing.md](./docs/publishing.md).
 
 > 🎉 首个支持所有 MCP 客户端的嘉立创 EDA 集成方案
 
