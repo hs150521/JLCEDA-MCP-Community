@@ -13,6 +13,13 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 主要改进包括原生 MCP 协议、多客户端页面选择、Bridge 凭据保护、语义级原理图读取、
 器件放置和网络标签等工具。
 
+## 功能演示
+
+![MCP Bridge 功能演示：原理图读取、器件放置和网络标签修改](images/feature-demo.png)
+
+上图展示 Bridge 已连接时的典型工作流：MCP 客户端读取原理图、放置器件并修改网络标签，
+嘉立创 EDA 页面负责执行和呈现对应操作。图片为功能流程示意，实际界面以当前 EDA 版本为准。
+
 链路：嘉立创 EDA -> 本机 WebSocket (Bridge) -> 原生 MCP Server -> MCP 客户端。
 
 - 社区仓库：https://github.com/hs150521/JLCEDA-MCP-Community
