@@ -141,13 +141,13 @@
   },
   {
     "name": "component_select",
-    "description": "搜索器件并返回候选列表（最多5个），供 AI 根据规格、库存、价格选择最合适的器件。",
+    "description": "搜索器件并返回候选列表（最多5个），供 AI 根据规格、库存、价格选择最合适的器件。可直接输入 LCSC C 编号以查询已关联的 EasyEDA 器件。",
     "inputSchema": {
       "type": "object",
       "properties": {
         "keyword": {
           "type": "string",
-          "description": "器件搜索关键词。对于电阻/电容/电感，必须带单位（如 1kΩ、100nF、10uH）。"
+          "description": "器件搜索关键词或 LCSC C 编号。对于电阻/电容/电感，必须带单位（如 1kΩ、100nF、10uH）。"
         },
         "limit": {
           "type": "integer",

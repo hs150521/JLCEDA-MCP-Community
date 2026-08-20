@@ -1,5 +1,9 @@
 ## 未发布
 
+### 变更
+
+- `component_select` 现在识别 LCSC C 编号，并通过官方 `eda.lib_Device.getByLcscIds` 直接解析已关联的 EasyEDA 器件；未关联的 C 编号会明确报告无法获取可放置的符号和封装。
+
 ### 修复
 
 - 拒绝显式空 UUID 选择，避免自动布局或自动布线意外作用于整张图。

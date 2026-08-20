@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
 - 将校验后的 `api_invoke` 和 `eda_context` 超时值传递给 Bridge 请求。
 - 收到 Bridge 的任务开始确认后才启动执行超时，并完整转发主/次 Server 的超时值。
 - 增加超时参数传递的回归测试。
