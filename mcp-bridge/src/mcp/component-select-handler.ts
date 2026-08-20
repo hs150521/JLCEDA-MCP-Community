@@ -45,14 +45,6 @@ interface LibDeviceApi {
 		itemsOfPage?: number,
 		page?: number,
 	) => Promise<unknown[]>;
-	searchByProperties?: (
-		properties: Record<string, string>,
-		libraryUuid?: string,
-		classification?: unknown,
-		symbolType?: unknown,
-		itemsOfPage?: number,
-		page?: number,
-	) => Promise<unknown[]> | unknown[];
 }
 
 const COMPONENT_SELECT_PROTOCOL = 'component-select/v1';
@@ -72,10 +64,6 @@ const VALUE_UNIT_REQUIRED_COMPONENT_KEYWORDS: readonly string[] = [
 function keywordRequiresValueUnit(keyword: string): boolean {
 	const normalizedKeyword = keyword.toLowerCase();
 	return VALUE_UNIT_REQUIRED_COMPONENT_KEYWORDS.some(componentKeyword => normalizedKeyword.includes(componentKeyword));
-}
-
-function looksLikeExactManufacturerPartNumber(keyword: string): boolean {
-	return /^[A-Za-z0-9][A-Za-z0-9._+\/-]{2,}$/.test(keyword) && /[A-Za-z]/.test(keyword) && /\d/.test(keyword);
 }
 
 // 检查关键词中是否存在缺少单位符号的数值参数。
@@ -164,26 +152,10 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 		throw new Error(`器件搜索失败：${toSafeErrorMessage(error)}`);
 	}
 
-	let exactLookupAttempted = false;
-	if ((!Array.isArray(rawResults) || rawResults.length === 0)
-		&& looksLikeExactManufacturerPartNumber(keyword)
-		&& typeof libDevice.searchByProperties === 'function') {
-		exactLookupAttempted = true;
-		try {
-			const exactResults = await libDevice.searchByProperties({ partNumber: keyword }, undefined, undefined, undefined, limit, page);
-			if (Array.isArray(exactResults) && exactResults.length > 0) rawResults = exactResults;
-		} catch (error: unknown) {
-			debugLog('[DEBUG] component-select exact MPN search failed:', error);
-		}
-	}
-
 	if (!Array.isArray(rawResults) || rawResults.length === 0) {
 		return {
 			ok: false,
-			status: exactLookupAttempted ? 'not_found_in_easyeda_library' : 'not_found',
-			error: exactLookupAttempted
-				? `未在 EasyEDA 器件库中找到精确型号“${keyword}”。这不表示该型号不在 LCSC 商品目录中。`
-				: `未在 EasyEDA 器件库中找到匹配“${keyword}”的器件，请调整关键词后重试。`,
+			error: `未在立创商城中找到匹配“${keyword}”的器件，请调整关键词后重试。`,
 		};
 	}
 
@@ -209,7 +181,6 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 
 	return {
 		ok: true,
-		status: exactLookupAttempted ? 'exact_mpn_match' : 'indexed_match',
 		selection,
 	};
 }
