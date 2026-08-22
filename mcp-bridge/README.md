@@ -13,6 +13,9 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 主要改进包括原生 MCP 协议、多客户端页面选择、Bridge 凭据保护、语义级原理图读取、
 器件放置和网络标签等工具。
 
+当活动页面任务已确认卡死时，MCP 客户端可通过 `bridge_select_client` 的 `force: true`
+切换到新的就绪页面。切换会使旧租约的未开始任务失效，但不会取消已经在 EDA 内执行的 API 调用。
+
 链路：嘉立创 EDA -> 本机 WebSocket (Bridge) -> 原生 MCP Server -> MCP 客户端。
 
 - 社区仓库：https://github.com/hs150521/JLCEDA-MCP-Community

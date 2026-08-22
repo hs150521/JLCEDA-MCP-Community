@@ -117,9 +117,12 @@ const mainServer = new EdaBridgeServer(port);
 const secondaryServer = new EdaBridgeServer(port);
 let expiryServer;
 let queueServer;
+let recoveryServer;
 let blue;
 let red;
 let queued;
+let stuck;
+let replacement;
 
 try {
   await mainServer.start();
@@ -227,6 +230,44 @@ try {
   queueServer.close();
   queueServer = undefined;
 
+  const recoveryPort = await reservePort();
+  recoveryServer = new EdaBridgeServer(recoveryPort);
+  await recoveryServer.start();
+  stuck = await registerEda(
+    `ws://127.0.0.1:${recoveryPort}/bridge/ws${tokenQuery}`,
+    'stuck-page',
+  );
+  let receivedStuckTask = false;
+  stuck.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type === 'bridge/task') {
+      receivedStuckTask = true;
+    }
+  });
+  replacement = await registerEda(
+    `ws://127.0.0.1:${recoveryPort}/bridge/ws${tokenQuery}`,
+    'replacement-page',
+  );
+  attachTaskResponder(replacement.socket, 'replacement-page', (message) => ({ source: 'replacement', path: message.path }));
+  const stuckRequest = recoveryServer.request('/bridge/test/stuck', {}, 2000);
+  await waitUntil(() => receivedStuckTask);
+  await assert.rejects(
+    recoveryServer.request('/bridge/admin/select-client', { clientId: 'replacement-page' }, 2000),
+    /pending task/,
+  );
+  await recoveryServer.request('/bridge/admin/select-client', { clientId: 'replacement-page', force: true }, 2000);
+  await assert.rejects(stuckRequest, /force-switched/);
+  assert.deepEqual(
+    await recoveryServer.request('/bridge/test/recovered', {}, 2000),
+    { source: 'replacement', path: '/bridge/test/recovered' },
+  );
+  stuck.socket.close();
+  stuck = undefined;
+  replacement.socket.close();
+  replacement = undefined;
+  recoveryServer.close();
+  recoveryServer = undefined;
+
   const expiryPort = await reservePort();
   expiryServer = new EdaBridgeServer(expiryPort, { peerTtlMs: 250, peerSweepIntervalMs: 25 });
   await expiryServer.start();
@@ -258,8 +299,11 @@ try {
   blue?.socket.close();
   red?.socket.close();
   queued?.socket.close();
+  stuck?.socket.close();
+  replacement?.socket.close();
   expiryServer?.close();
   queueServer?.close();
+  recoveryServer?.close();
   secondaryServer.close();
   mainServer.close();
   if (originalToken === undefined) {

@@ -1,5 +1,9 @@
 ## 未发布
 
+### 修复
+
+- 恢复 Bridge 的角色与租约检查；故障恢复切换后，旧活动页面中尚未开始的排队任务不会继续执行。
+
 ### 变更
 
 - `component_select` 现在识别 LCSC C 编号，并通过官方 `eda.lib_Device.getByLcscIds` 直接解析已关联的 EasyEDA 器件；未关联的 C 编号会明确报告无法获取可放置的符号和封装。

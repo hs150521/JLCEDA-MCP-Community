@@ -197,20 +197,19 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 	debugLog('[DEBUG] enqueueTask called, path:', task.path, 'requestId:', task.requestId);
 	taskChain = taskChain.then(async () => {
 		debugLog('[DEBUG] executing task, path:', task.path);
-		// 本地MCP运行模式，移除角色和租约检查
-		// if (currentRole !== 'active') {
-		// 	currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
-		// 		message: BRIDGE_STATUS_TEXT.runtime.taskRejectedStandby,
-		// 	});
-		// 	return;
-		// }
+		if (currentRole !== 'active') {
+			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+				message: BRIDGE_STATUS_TEXT.runtime.taskRejectedStandby,
+			});
+			return;
+		}
 
-		// if (task.leaseTerm !== currentLeaseTerm) {
-		// 	currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
-		// 		message: BRIDGE_STATUS_TEXT.runtime.taskLeaseExpired,
-		// 	});
-		// 	return;
-		// }
+		if (task.leaseTerm !== currentLeaseTerm) {
+			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+				message: BRIDGE_STATUS_TEXT.runtime.taskLeaseExpired,
+			});
+			return;
+		}
 
 		const handler = BRIDGE_TASK_HANDLERS[task.path];
 		debugLog('[DEBUG] handler found:', !!handler, 'for path:', task.path);
