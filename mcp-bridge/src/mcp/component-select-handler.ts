@@ -45,11 +45,21 @@ interface LibDeviceApi {
 		itemsOfPage?: number,
 		page?: number,
 	) => Promise<unknown[]>;
+	getByLcscIds?: (
+		lcscIds: string,
+		libraryUuid?: string,
+		allowMultiMatch?: boolean,
+	) => Promise<unknown[] | unknown>;
+}
+
+interface LibLibrariesListApi {
+	getSystemLibraryUuid: () => Promise<string | undefined>;
 }
 
 const COMPONENT_SELECT_PROTOCOL = 'component-select/v1';
 const COMPONENT_SELECT_DEFAULT_LIMIT = 20;
 const AMBIGUOUS_VALUE_TOKEN_PATTERN = /^\d+(?:\.\d+)?[kmgunp]$/i;
+const LCSC_PART_NUMBER_PATTERN = /^C\d+$/i;
 const VALUE_UNIT_REQUIRED_COMPONENT_KEYWORDS: readonly string[] = [
 	'电阻',
 	'resistor',
@@ -86,17 +96,20 @@ function findKeywordTokenMissingUnit(keyword: string): string | null {
 }
 
 // 将搜索结果项映射为统一候选器件结构。
-function mapDeviceSearchItem(raw: unknown): ComponentSelectCandidate {
+function mapDeviceSearchItem(raw: unknown, fallbackLibraryUuid = ''): ComponentSelectCandidate {
 	const item = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+	const symbol = isPlainObjectRecord(item.symbol) ? item.symbol : {};
+	const footprint = isPlainObjectRecord(item.footprint) ? item.footprint : {};
+	const manufacturerId = String(item.manufacturerId ?? item.manufacturerid ?? '').trim();
 	return {
 		uuid: String(item.uuid ?? '').trim(),
-		libraryUuid: String(item.libraryUuid ?? item.libraryuuid ?? '').trim(),
-		name: String(item.name ?? '').trim(),
-		symbolName: String(item.symbolName ?? item.symbolname ?? '').trim(),
-		footprintName: String(item.footprintName ?? item.footprintname ?? '').trim(),
+		libraryUuid: String(item.libraryUuid ?? item.libraryuuid ?? fallbackLibraryUuid).trim(),
+		name: String(item.name ?? manufacturerId).trim(),
+		symbolName: String(item.symbolName ?? item.symbolname ?? symbol.name ?? '').trim(),
+		footprintName: String(item.footprintName ?? item.footprintname ?? footprint.name ?? '').trim(),
 		description: String(item.description ?? '').trim(),
 		manufacturer: String(item.manufacturer ?? '').trim(),
-		manufacturerId: String(item.manufacturerId ?? item.manufacturerid ?? '').trim(),
+		manufacturerId,
 		supplier: String(item.supplier ?? '').trim(),
 		supplierId: String(item.supplierId ?? item.supplierid ?? '').trim(),
 		lcscInventory: Number(item.lcscInventory ?? item.lcscinventory ?? 0),
@@ -112,6 +125,14 @@ function getLibDeviceApi(): LibDeviceApi {
 	}
 
 	return libDevice as unknown as LibDeviceApi;
+}
+
+function getSystemLibraryUuidApi(): LibLibrariesListApi {
+	const librariesList = (eda as unknown as { lib_LibrariesList?: unknown }).lib_LibrariesList;
+	if (!isPlainObjectRecord(librariesList) || typeof librariesList.getSystemLibraryUuid !== 'function') {
+		throw new Error('未找到 eda.lib_LibrariesList.getSystemLibraryUuid API。');
+	}
+	return librariesList as unknown as LibLibrariesListApi;
 }
 
 /**
@@ -152,15 +173,35 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 		throw new Error(`器件搜索失败：${toSafeErrorMessage(error)}`);
 	}
 
+	let usedLcscPartNumberLookup = false;
+	let fallbackLibraryUuid = '';
+	if (rawResults.length === 0 && LCSC_PART_NUMBER_PATTERN.test(keyword) && typeof libDevice.getByLcscIds === 'function') {
+		usedLcscPartNumberLookup = true;
+		try {
+			const lookupResult = await libDevice.getByLcscIds(keyword.toUpperCase(), undefined, true);
+			rawResults = Array.isArray(lookupResult) ? lookupResult : lookupResult ? [lookupResult] : [];
+			if (rawResults.length > 0) {
+				fallbackLibraryUuid = String(await getSystemLibraryUuidApi().getSystemLibraryUuid() ?? '').trim();
+			}
+			debugLog('[DEBUG] component-select LCSC part number lookup returned:', rawResults.length, 'items');
+		}
+		catch (error: unknown) {
+			debugLog('[DEBUG] component-select LCSC part number lookup failed:', error);
+		}
+	}
+
 	if (!Array.isArray(rawResults) || rawResults.length === 0) {
 		return {
 			ok: false,
-			error: `未在立创商城中找到匹配“${keyword}”的器件，请调整关键词后重试。`,
+			status: usedLcscPartNumberLookup ? 'lcsc_part_not_linked_to_easyeda_library' : 'not_found_in_easyeda_library',
+			error: usedLcscPartNumberLookup
+				? `LCSC 编号“${keyword.toUpperCase()}”未关联到当前 EasyEDA 器件库，无法获取可放置的符号和封装。`
+				: `未在 EasyEDA 器件库中找到匹配“${keyword}”的器件。`,
 		};
 	}
 
 	const candidates = rawResults
-		.map(mapDeviceSearchItem)
+		.map(item => mapDeviceSearchItem(item, fallbackLibraryUuid))
 		.filter(item => item.uuid.length > 0 && item.libraryUuid.length > 0);
 
 	if (candidates.length === 0) {
@@ -181,6 +222,7 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 
 	return {
 		ok: true,
+		status: usedLcscPartNumberLookup ? 'lcsc_part_match' : 'indexed_match',
 		selection,
 	};
 }

@@ -10,13 +10,18 @@
   },
   {
     "name": "bridge_select_client",
-    "description": "按精确 clientId 选择后续 MCP 操作所针对的嘉立创 EDA 页面。调用前必须先使用 bridge_clients 核对项目和页面；活动页面存在未完成任务时禁止切换。",
+    "description": "按精确 clientId 选择后续 MCP 操作所针对的嘉立创 EDA 页面。调用前必须先使用 bridge_clients 核对项目和页面；活动页面存在未完成任务时禁止切换，除非该任务已确认卡死并明确设置 force=true 进行故障恢复。",
     "inputSchema": {
       "type": "object",
       "properties": {
         "clientId": {
           "type": "string",
           "description": "bridge_clients 返回的精确客户端 ID"
+        },
+        "force": {
+          "type": "boolean",
+          "default": false,
+          "description": "仅在活动页面任务已确认卡死时使用。会取消服务端对旧页面任务的等待并切换到目标页面；不能取消已在 EDA 内执行的 API 调用。"
         }
       },
       "required": [
@@ -141,13 +146,13 @@
   },
   {
     "name": "component_select",
-    "description": "搜索器件并返回候选列表（最多5个），供 AI 根据规格、库存、价格选择最合适的器件。",
+    "description": "搜索器件并返回候选列表（最多5个），供 AI 根据规格、库存、价格选择最合适的器件。可直接输入 LCSC C 编号以查询已关联的 EasyEDA 器件。",
     "inputSchema": {
       "type": "object",
       "properties": {
         "keyword": {
           "type": "string",
-          "description": "器件搜索关键词。对于电阻/电容/电感，必须带单位（如 1kΩ、100nF、10uH）。"
+          "description": "器件搜索关键词或 LCSC C 编号。对于电阻/电容/电感，必须带单位（如 1kΩ、100nF、10uH）。"
         },
         "limit": {
           "type": "integer",

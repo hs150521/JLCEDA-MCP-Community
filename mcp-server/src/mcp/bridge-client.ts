@@ -261,12 +261,10 @@ export class EdaBridgeServer {
   private expireStalePeers(): void {
     const now = Date.now();
     for (const peer of [...this.peers.values()]) {
-      const hasPendingTask = [...this.pendingRequests.values()].some(
-        (pending) => pending.clientId === peer.clientId,
-      );
-      if (hasPendingTask || now - peer.lastSeenAt <= this.peerTtlMs) {
+      if (now - peer.lastSeenAt <= this.peerTtlMs) {
         continue;
       }
+      this.rejectPendingForClient(peer.clientId, 'EDA client heartbeat timed out');
       peer.socket.close(4000, 'Bridge heartbeat timeout');
       this.removeEdaSocket(peer.socket);
     }
@@ -564,7 +562,8 @@ export class EdaBridgeServer {
     }
     if (path === '/bridge/admin/select-client') {
       const clientId = isRecord(payload) ? String(payload.clientId ?? '').trim() : '';
-      return this.selectClient(clientId);
+      const force = isRecord(payload) && payload.force === true;
+      return this.selectClient(clientId, force);
     }
     return this.dispatchToEda(path, payload, timeoutMs);
   }
@@ -585,7 +584,7 @@ export class EdaBridgeServer {
     return { activeClientId: this.activeClientId || null, leaseTerm: this.leaseTerm, clients };
   }
 
-  private selectClient(clientId: string): Record<string, unknown> {
+  private selectClient(clientId: string, force: boolean): Record<string, unknown> {
     if (!clientId) {
       throw new Error('clientId is required');
     }
@@ -597,7 +596,10 @@ export class EdaBridgeServer {
       (pending) => pending.clientId === this.activeClientId,
     );
     if (hasPendingTask && this.activeClientId !== clientId) {
-      throw new Error('Cannot switch EDA client while the active client has a pending task');
+      if (!force) {
+        throw new Error('Cannot switch EDA client while the active client has a pending task');
+      }
+      this.rejectPendingForClient(this.activeClientId, `Active EDA client was force-switched to ${clientId}`);
     }
     if (this.activeClientId !== clientId) {
       this.activeClientId = clientId;

@@ -68,6 +68,8 @@ ws://127.0.0.1:8765/bridge/ws?token=YOUR_RANDOM_TOKEN
 - API 透传工具是可选功能，仅应在受信任的 MCP 客户端中启用。
 
 完整安装、多客户端选择和故障排查说明：
+
+当 `bridge_clients` 显示活动页面任务卡死且另一个页面已就绪时，可使用 `bridge_select_client` 并设置 `force: true` 进行恢复。该选项会取消服务器对旧页面任务的等待并切换租约，但不能取消已经在 EDA 内运行的 API 调用。
 [docs/native-mcp-setup.md](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)
 
 ## 支持与许可证

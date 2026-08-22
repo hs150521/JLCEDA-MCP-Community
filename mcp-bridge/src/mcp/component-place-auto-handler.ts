@@ -236,10 +236,9 @@ function calculateComponentPosition(
 	linearConfig: LinearLayoutConfig,
 	fixedConfig: FixedPositionConfig,
 ): { x: number; y: number } {
-	// 如果器件已指定坐标，直接使用。
-	if (component.x !== undefined && component.y !== undefined) {
-		return { x: component.x, y: component.y };
-	}
+	// Compute the strategy position first, then preserve each independently
+	// supplied axis below. This keeps partial coordinate requests deterministic.
+	let layoutPosition: { x: number; y: number };
 
 	if (layoutStrategy === 'grid') {
 		const startX = gridConfig.startX ?? DEFAULT_GRID_START_X;
@@ -251,54 +250,50 @@ function calculateComponentPosition(
 		const row = Math.floor(index / columns);
 		const col = index % columns;
 
-		return {
+		layoutPosition = {
 			x: startX + col * spacingX,
 			y: startY + row * spacingY,
 		};
 	}
-
-	if (layoutStrategy === 'horizontal') {
+	else if (layoutStrategy === 'horizontal') {
 		const startX = linearConfig.startX ?? DEFAULT_LINEAR_START_X;
 		const startY = linearConfig.startY ?? DEFAULT_LINEAR_START_Y;
 		const spacing = linearConfig.spacing ?? DEFAULT_LINEAR_SPACING;
 
-		return {
+		layoutPosition = {
 			x: startX + index * spacing,
 			y: startY,
 		};
 	}
-
-	if (layoutStrategy === 'vertical') {
+	else if (layoutStrategy === 'vertical') {
 		const startX = linearConfig.startX ?? DEFAULT_LINEAR_START_X;
 		const startY = linearConfig.startY ?? DEFAULT_LINEAR_START_Y;
 		const spacing = linearConfig.spacing ?? DEFAULT_LINEAR_SPACING;
 
-		return {
+		layoutPosition = {
 			x: startX,
 			y: startY + index * spacing,
 		};
 	}
-
-	if (layoutStrategy === 'fixed') {
+	else if (layoutStrategy === 'fixed') {
 		const x = fixedConfig.x ?? DEFAULT_FIXED_X;
 		const y = fixedConfig.y ?? DEFAULT_FIXED_Y;
 
-		return { x, y };
+		layoutPosition = { x, y };
+	}
+	else {
+		// 默认使用网格布局。
+		const row = Math.floor(index / DEFAULT_GRID_COLUMNS);
+		const col = index % DEFAULT_GRID_COLUMNS;
+		layoutPosition = {
+			x: DEFAULT_GRID_START_X + col * DEFAULT_GRID_SPACING_X,
+			y: DEFAULT_GRID_START_Y + row * DEFAULT_GRID_SPACING_Y,
+		};
 	}
 
-	// 默认使用网格布局。
-	const startX = DEFAULT_GRID_START_X;
-	const startY = DEFAULT_GRID_START_Y;
-	const spacingX = DEFAULT_GRID_SPACING_X;
-	const spacingY = DEFAULT_GRID_SPACING_Y;
-	const columns = DEFAULT_GRID_COLUMNS;
-
-	const row = Math.floor(index / columns);
-	const col = index % columns;
-
 	return {
-		x: startX + col * spacingX,
-		y: startY + row * spacingY,
+		x: component.x ?? layoutPosition.x,
+		y: component.y ?? layoutPosition.y,
 	};
 }
 

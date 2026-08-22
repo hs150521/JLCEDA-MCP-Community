@@ -13,6 +13,9 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 主要改进包括原生 MCP 协议、多客户端页面选择、Bridge 凭据保护、语义级原理图读取、
 器件放置和网络标签等工具。
 
+当活动页面任务已确认卡死时，MCP 客户端可通过 `bridge_select_client` 的 `force: true`
+切换到新的就绪页面。切换会使旧租约的未开始任务失效，但不会取消已经在 EDA 内执行的 API 调用。
+
 ## 功能演示
 
 ![MCP Bridge 功能演示：原理图读取、器件放置和网络标签修改](images/feature-demo.png)
@@ -32,7 +35,7 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 - `schematic_read`：读取当前原理图页面的完整电路语义快照，包含器件列表、引脚网络连接关系与 DRC 检查结果。
 - `schematic_review`：读取全工程所有原理图页面的网表文件，覆盖多页电路，适合全局审查、BOM 核查与跨页信号追踪。
-- `component_select`：搜索器件候选项并返回确认结果。
+- `component_select`：搜索器件候选项并返回确认结果；可直接输入 LCSC C 编号以查询已关联的 EasyEDA 器件。
 - `component_place`：引导放置已确认的器件列表。
 - `netlabel_place`：电源/地网络创建对应网络标识，其他信号创建普通网络标签。
 
