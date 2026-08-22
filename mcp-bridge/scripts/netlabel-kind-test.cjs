@@ -181,6 +181,22 @@ async function main() {
 	assert.equal(failed.ok, false);
 	assert.equal(failed.failureCount, 1);
 
+	const autoPlacementCalls = [];
+	globalThis.eda.sch_PrimitiveComponent.create = async (...args) => {
+		autoPlacementCalls.push(args);
+		return { primitiveId: `auto-${autoPlacementCalls.length}` };
+	};
+	const partialCoordinates = await handleComponentPlaceAutoTask({
+		components: [
+			{ uuid: 'x-only', libraryUuid: 'test-library', x: 111 },
+			{ uuid: 'y-only', libraryUuid: 'test-library', y: 222 },
+		],
+		layoutStrategy: 'grid',
+		gridLayout: { startX: 10, startY: 20, spacingX: 100, spacingY: 200, columns: 4 },
+	});
+	assert.equal(partialCoordinates.ok, true);
+	assert.deepEqual(autoPlacementCalls.map(call => call.slice(1, 3)), [[111, 20], [110, 222]]);
+
 	globalThis.eda.sch_PrimitiveComponent.create = async () => undefined;
 	const autoPlacement = await handleComponentPlaceAutoTask({
 		components: [{ uuid: 'missing-device', libraryUuid: 'test-library', x: 10, y: 20 }],
