@@ -16,6 +16,13 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 当活动页面任务已确认卡死时，MCP 客户端可通过 `bridge_select_client` 的 `force: true`
 切换到新的就绪页面。切换会使旧租约的未开始任务失效，但不会取消已经在 EDA 内执行的 API 调用。
 
+## 功能演示
+
+![MCP Bridge 功能演示：原理图读取、器件放置和网络标签修改](images/feature-demo.png)
+
+上图展示 Bridge 已连接时的典型工作流：MCP 客户端读取原理图、放置器件并修改网络标签，
+嘉立创 EDA 页面负责执行和呈现对应操作。图片为功能流程示意，实际界面以当前 EDA 版本为准。
+
 链路：嘉立创 EDA -> 本机 WebSocket (Bridge) -> 原生 MCP Server -> MCP 客户端。
 
 - 社区仓库：https://github.com/hs150521/JLCEDA-MCP-Community
@@ -49,10 +56,10 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 2. 原生 MCP Server
 
-从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.3.tgz`，执行：
+从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.4.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.3.tgz
+npm install --global .\jlceda-mcp-server-2.1.4.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。

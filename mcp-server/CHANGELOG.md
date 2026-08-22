@@ -4,6 +4,8 @@
 
 - Bridge 会在心跳超时后释放挂起请求，避免失联页面永久占用活动租约；`bridge_select_client` 新增受限的 `force` 恢复选项，用于从已确认卡死的活动页面切换到新的就绪页面。
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
+## 2.1.4 - 2026-08-17
+
 - 将校验后的 `api_invoke` 和 `eda_context` 超时值传递给 Bridge 请求。
 - 收到 Bridge 的任务开始确认后才启动执行超时，并完整转发主/次 Server 的超时值。
 - 增加超时参数传递的回归测试。

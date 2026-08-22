@@ -1,5 +1,18 @@
 ## 未发布
 
+## [2.0.8] - 2026-08-23
+
+### Fixes
+
+- Preserve individually supplied `x` and `y` coordinates in automatic component placement.
+- Recover from stale active bridge tasks with guarded forced client switching.
+
+### Changes
+
+- Support direct LCSC C-number lookup through the official EasyEDA library API.
+
+---
+
 ### 修复
 
 - `component_place_auto` 现在保留单独提供的 X 或 Y 坐标，并仅对缺失轴使用布局策略计算的回退坐标。
@@ -8,6 +21,18 @@
 ### 变更
 
 - `component_select` 现在识别 LCSC C 编号，并通过官方 `eda.lib_Device.getByLcscIds` 直接解析已关联的 EasyEDA 器件；未关联的 C 编号会明确报告无法获取可放置的符号和封装。
+---
+
+## [2.0.7] - 2026-08-18
+
+### 发布修复
+
+- 在扩展 README 中加入功能演示图，展示原理图读取、器件放置、网络标签修改和 Bridge 连接状态。
+- 将演示图包含在 `.eext` 发布包中，满足扩展广场的功能展示要求。
+
+---
+
+## [2.0.6] - 2026-08-17
 
 ### 修复
 
