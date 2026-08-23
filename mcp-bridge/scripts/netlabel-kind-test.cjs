@@ -71,10 +71,27 @@ async function main() {
 	await new Promise(resolve => setTimeout(resolve, 0));
 	assert.equal(quarantine.getActive(), undefined, 'the bridge client must recover after the original mutation settles');
 
-	await assert.rejects(
-		createNetLabelWithTimeout(new Promise(() => {}), 'UART_TX', 10),
-		/createNetLabel alpha API timed out/,
-	);
+	let resolveNetLabelCreate;
+	const pendingNetLabelCreate = new Promise((resolve) => {
+		resolveNetLabelCreate = resolve;
+	});
+	let netLabelTimeout;
+	try {
+		await createNetLabelWithTimeout(pendingNetLabelCreate, 'UART_TX', 10);
+		assert.fail('createNetLabelWithTimeout must time out');
+	}
+	catch (error) {
+		assert(error instanceof BridgeTaskTimeoutError);
+		netLabelTimeout = error;
+	}
+	assert.match(netLabelTimeout.message, /createNetLabel alpha API timed out/);
+	const netLabelQuarantine = new BridgeTaskQuarantine();
+	netLabelQuarantine.enter('/bridge/jlceda/netlabel/place', netLabelTimeout.backgroundSettled);
+	assert.equal(netLabelQuarantine.getActive().path, '/bridge/jlceda/netlabel/place', 'handler-level EDA timeouts must quarantine the bridge client');
+	resolveNetLabelCreate({ primitiveId: 'label-late' });
+	await netLabelTimeout.backgroundSettled;
+	await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(netLabelQuarantine.getActive(), undefined, 'handler-level quarantine must clear only after the EDA call settles');
 
 	const createNetLabelCalls = [];
 	const regionCalls = [];

@@ -10,6 +10,7 @@
  * ------------------------------------------------------------------------
  */
 
+import { BridgeTaskTimeoutError } from '../runtime/task-timeout.ts';
 import { getSyncState, isPlainObjectRecord, toSafeErrorMessage } from '../utils';
 
 interface NetLabelPlacement {
@@ -123,12 +124,21 @@ export async function createNetLabelWithTimeout(
 	timeoutMs = NET_LABEL_CREATE_TIMEOUT_MS,
 ): Promise<unknown> {
 	let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+	const backgroundSettled = task.then(
+		() => undefined,
+		() => undefined,
+	);
 	try {
 		return await Promise.race([
 			task,
 			new Promise<never>((_resolve, reject) => {
 				timeoutId = globalThis.setTimeout(() => {
-					reject(new Error(`JLCEDA createNetLabel alpha API timed out for ${netName}`));
+					reject(new BridgeTaskTimeoutError(
+						'/bridge/jlceda/netlabel/place',
+						timeoutMs,
+						backgroundSettled,
+						`JLCEDA createNetLabel alpha API timed out for ${netName}`,
+					));
 				}, timeoutMs);
 			}),
 		]);

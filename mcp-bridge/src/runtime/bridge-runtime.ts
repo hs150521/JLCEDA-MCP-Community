@@ -257,8 +257,9 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		}
 		catch (error: unknown) {
 			if (error instanceof BridgeTaskTimeoutError) {
-				if (handlerSettled) {
-					taskQuarantine.enter(task.path, handlerSettled);
+				const backgroundSettled = error.backgroundSettled ?? handlerSettled;
+				if (backgroundSettled) {
+					taskQuarantine.enter(task.path, backgroundSettled);
 				}
 			}
 			debugLog('[DEBUG] handler threw error:', error);
