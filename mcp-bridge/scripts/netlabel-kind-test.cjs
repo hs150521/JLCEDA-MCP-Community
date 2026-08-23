@@ -10,7 +10,7 @@ const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-aut
 const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
-const { resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
+const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
 
 for (const name of ['UART_TX', 'SPI_CLK', 'BLUE_LED_DATA']) {
 	assert.equal(detectNetLabelKind(name), 'NetLabel', `${name} must use an ordinary net label`);
@@ -54,23 +54,22 @@ async function main() {
 		resolveBackgroundTask = resolve;
 	});
 	const timedTask = startTimedTask(backgroundTask, '/bridge/jlceda/component/place-auto', 10);
-	await assert.rejects(timedTask.result, /timed out/);
+	await assert.rejects(timedTask.result, BridgeTaskTimeoutError);
 	let backgroundSettled = false;
 	void timedTask.settled.then(() => {
 		backgroundSettled = true;
 	});
 	await new Promise(resolve => setTimeout(resolve, 0));
 	assert.equal(backgroundSettled, false, 'timed-out task must remain unsettled until its handler finishes');
-	let nextTaskRan = false;
-	const queueAfterTimeout = timedTask.result.catch(() => undefined).then(() => {
-		nextTaskRan = true;
-	});
-	await queueAfterTimeout;
-	assert.equal(nextTaskRan, true, 'a timed-out task must release the bridge queue before its handler settles');
-	assert.equal(backgroundSettled, false, 'the handler remains pending while the next task can run');
+	assert.equal(backgroundSettled, false, 'a timed-out mutation must keep its serialization barrier until it settles');
+	const quarantine = new BridgeTaskQuarantine();
+	quarantine.enter('/bridge/jlceda/component/place-auto', timedTask.settled);
+	assert.equal(quarantine.getActive().path, '/bridge/jlceda/component/place-auto', 'timed-out mutations must quarantine the bridge client');
 	resolveBackgroundTask('late result');
 	await timedTask.settled;
 	assert.equal(backgroundSettled, true);
+	await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(quarantine.getActive(), undefined, 'the bridge client must recover after the original mutation settles');
 
 	await assert.rejects(
 		createNetLabelWithTimeout(new Promise(() => {}), 'UART_TX', 10),

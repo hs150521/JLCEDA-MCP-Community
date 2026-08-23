@@ -38,7 +38,7 @@ import { BridgeStatusReporter } from '../state/status-reporter.ts';
 import { safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
 import { debugLog } from '../utils/debug-log.ts';
 import { BridgeTransport } from './bridge-transport.ts';
-import { resolveBridgeTaskTimeoutMs, startTimedTask } from './task-timeout.ts';
+import { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } from './task-timeout.ts';
 
 const RECONNECT_INTERVAL_MS = 1200;
 const CONTEXT_SYNC_INTERVAL_MS = 1000;
@@ -70,6 +70,7 @@ let reconnectTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 let contextSyncTimer: ReturnType<typeof globalThis.setInterval> | undefined;
 let configSubscription: ISYS_MessageBusTask | null = null;
 let taskChain: Promise<void> = Promise.resolve();
+const taskQuarantine = new BridgeTaskQuarantine();
 let currentRole: BridgeRole = 'standby';
 let currentLeaseTerm = 0;
 let currentActiveClientId = '';
@@ -195,8 +196,22 @@ function applyRole(message: BridgeServerRoleMessage): void {
 // 调度任务执行并回传结果。
 function enqueueTask(task: { requestId: string; path: string; payload: unknown; leaseTerm: number }, currentTransport: BridgeTransport): void {
 	debugLog('[DEBUG] enqueueTask called, path:', task.path, 'requestId:', task.requestId);
+	const activeQuarantine = taskQuarantine.getActive();
+	if (activeQuarantine) {
+		currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+			message: `Bridge client is quarantined while a timed-out task is still running: ${activeQuarantine.path}. Select a healthy EDA client or wait for the original task to finish.`,
+		});
+		return;
+	}
 	taskChain = taskChain.then(async () => {
 		debugLog('[DEBUG] executing task, path:', task.path);
+		const activeQuarantine = taskQuarantine.getActive();
+		if (activeQuarantine) {
+			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+				message: `Bridge client is quarantined while a timed-out task is still running: ${activeQuarantine.path}. Select a healthy EDA client or wait for the original task to finish.`,
+			});
+			return;
+		}
 		if (currentRole !== 'active') {
 			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
 				message: BRIDGE_STATUS_TEXT.runtime.taskRejectedStandby,
@@ -222,6 +237,7 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 
 		let result: unknown;
 		let taskError: { message: string; stack?: string } | undefined;
+		let handlerSettled: Promise<void> | undefined;
 		try {
 			debugLog('[DEBUG] calling handler for path:', task.path);
 			currentTransport.reportTaskStarted(task.requestId, task.leaseTerm);
@@ -233,12 +249,18 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 				task.path,
 				timeoutMs,
 			);
+			handlerSettled = timedTask.settled;
 			result = await timedTask.result;
 			// 任务完成后再次刷新，确保结果回传前连接不被断开
 			currentTransport.refreshServerActivity();
 			debugLog('[DEBUG] handler completed successfully, result:', typeof result);
 		}
 		catch (error: unknown) {
+			if (error instanceof BridgeTaskTimeoutError) {
+				if (handlerSettled) {
+					taskQuarantine.enter(task.path, handlerSettled);
+				}
+			}
 			debugLog('[DEBUG] handler threw error:', error);
 			taskError = {
 				message: toSafeErrorMessage(error),
@@ -247,9 +269,8 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		}
 
 		debugLog('[DEBUG] completing task, hasError:', !!taskError);
-		// A timed-out EDA beta API can remain pending forever. Do not let that
-		// background Promise block every later Bridge task; startTimedTask has
-		// already attached rejection handling to it.
+		// The underlying EDA API cannot be cancelled. On timeout, the quarantine
+		// rejects later work until that background Promise settles.
 		currentTransport.completeTask(task.requestId, task.leaseTerm, result, taskError);
 	}).catch((error: unknown) => {
 		const message = toSafeErrorMessage(error);
