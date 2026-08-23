@@ -31,6 +31,7 @@ interface PendingRequest {
   reject: (error: Error) => void;
   timeout?: NodeJS.Timeout;
   executionTimeoutMs?: number;
+  started?: boolean;
   clientId?: string;
   leaseTerm?: number;
   mcpSocket?: WebSocket;
@@ -481,9 +482,16 @@ export class EdaBridgeServer {
       return;
     }
 
+    pending.started = true;
     this.clearPendingTimeout(pending);
     const executionTimeoutMs = pending.executionTimeoutMs ?? 30000;
     pending.timeout = setTimeout(() => {
+      // The EDA handler cannot be cancelled when the server-side timeout wins.
+      // Keep this client quarantined for the execution window before admitting
+      // another task that could mutate the same document.
+      if (pending.clientId) {
+        this.enterReconnectBarrier(pending.clientId);
+      }
       this.pendingRequests.delete(requestId);
       pending.reject(new Error(`Request execution timeout after ${String(executionTimeoutMs)}ms`));
     }, executionTimeoutMs);
@@ -640,6 +648,7 @@ export class EdaBridgeServer {
         reject,
         timeout,
         executionTimeoutMs: timeoutMs,
+        started: false,
         clientId: peer.clientId,
         leaseTerm: this.leaseTerm,
         mcpSocket,
@@ -695,6 +704,9 @@ export class EdaBridgeServer {
   }
 
   private rejectPendingForClient(clientId: string, reason: string): void {
+    // Capture the timeout window before removing requests. EDA APIs are not
+    // cancellable, so a rejected request may still be mutating the document.
+    this.enterReconnectBarrier(clientId);
     for (const [requestId, pending] of this.pendingRequests) {
       if (pending.clientId !== clientId) {
         continue;
@@ -711,9 +723,16 @@ export class EdaBridgeServer {
     if (pending.length === 0) {
       return;
     }
-    const longestTimeout = Math.max(...pending.map(request => request.executionTimeoutMs ?? 30000));
+    const longestTimeout = Math.max(...pending.map(request => request.started
+      ? request.executionTimeoutMs ?? 30000
+      : BRIDGE_QUEUE_TIMEOUT_MS));
     const path = pending[0].path ?? '/bridge/jlceda/unknown';
-    this.reconnectBarriers.set(clientId, { path, until: Date.now() + longestTimeout });
+    const existing = this.reconnectBarriers.get(clientId);
+    const until = Date.now() + longestTimeout;
+    this.reconnectBarriers.set(clientId, {
+      path: existing && existing.until > until ? existing.path : path,
+      until: Math.max(existing?.until ?? 0, until),
+    });
   }
 
   private getReconnectBarrier(clientId: string): { path: string; until: number } | undefined {
@@ -732,6 +751,11 @@ export class EdaBridgeServer {
     for (const [requestId, pending] of this.pendingRequests) {
       if (pending.mcpSocket !== socket) {
         continue;
+      }
+      if (pending.clientId) {
+        // The MCP caller may disappear while the EDA mutation continues. Add
+        // the tombstone before deleting the pending request.
+        this.enterReconnectBarrier(pending.clientId);
       }
       this.clearPendingTimeout(pending);
       this.pendingRequests.delete(requestId);

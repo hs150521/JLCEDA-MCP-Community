@@ -119,6 +119,8 @@ let expiryServer;
 let queueServer;
 let recoveryServer;
 let disconnectServer;
+let edaFirstServer;
+let queuedDisconnectServer;
 let reconnectServer;
 let blue;
 let red;
@@ -127,6 +129,11 @@ let stuck;
 let replacement;
 let disconnectActive;
 let disconnectReplacement;
+let disconnectReconnected;
+let edaFirstOld;
+let edaFirstNew;
+let queuedDisconnectOld;
+let queuedDisconnectNew;
 let reconnectOld;
 let reconnectNew;
 let reconnectTarget;
@@ -287,6 +294,13 @@ try {
     const message = JSON.parse(data.toString());
     if (message.type === 'bridge/task') {
       receivedDisconnectedTask = true;
+      disconnectActive.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'disconnect-active',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
     }
   });
   disconnectReplacement = await registerEda(
@@ -307,9 +321,9 @@ try {
   mcpSocket.send(JSON.stringify({
     type: 'bridge/task',
     requestId: 'disconnected-mcp-request',
-    path: '/bridge/test/disconnected',
+    path: '/bridge/jlceda/api/invoke',
     payload: {},
-    timeoutMs: 15000,
+    timeoutMs: 300,
   }));
   await waitUntil(() => receivedDisconnectedTask);
   mcpSocket.close();
@@ -325,12 +339,147 @@ try {
     await disconnectServer.request('/bridge/test/disconnected-recovered', {}, 2000),
     { source: 'disconnect-replacement', path: '/bridge/test/disconnected-recovered' },
   );
+  disconnectReconnected = await registerEda(
+    `ws://127.0.0.1:${disconnectPort}/bridge/ws${tokenQuery}`,
+    'disconnect-active',
+  );
+  attachTaskResponder(disconnectReconnected.socket, 'disconnect-active', (message) => ({
+    source: 'disconnect-reconnected',
+    path: message.path,
+  }));
+  await disconnectServer.request('/bridge/admin/select-client', { clientId: 'disconnect-active' }, 2000);
+  await assert.rejects(
+    disconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    /quarantined after reconnect/,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.deepEqual(
+    await disconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    { source: 'disconnect-reconnected', path: '/bridge/jlceda/api/invoke' },
+  );
   disconnectActive.socket.close();
   disconnectActive = undefined;
   disconnectReplacement.socket.close();
   disconnectReplacement = undefined;
+  disconnectReconnected.socket.close();
+  disconnectReconnected = undefined;
   disconnectServer.close();
   disconnectServer = undefined;
+
+  const edaFirstPort = await reservePort();
+  edaFirstServer = new EdaBridgeServer(edaFirstPort);
+  await edaFirstServer.start();
+  edaFirstOld = await registerEda(
+    `ws://127.0.0.1:${edaFirstPort}/bridge/ws${tokenQuery}`,
+    'eda-first-page',
+  );
+  let receivedEdaFirstTask = false;
+  edaFirstOld.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type === 'bridge/task') {
+      receivedEdaFirstTask = true;
+      edaFirstOld.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'eda-first-page',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
+    }
+  });
+  const edaFirstPending = edaFirstServer.request('/bridge/jlceda/api/invoke', {}, 300);
+  await waitUntil(() => receivedEdaFirstTask);
+  edaFirstOld.socket.close();
+  await assert.rejects(edaFirstPending, /disconnected/);
+  await waitUntil(async () => {
+    const snapshot = await edaFirstServer.request('/bridge/admin/clients', {}, 2000);
+    return snapshot.clients.length === 0;
+  });
+  edaFirstNew = await registerEda(
+    `ws://127.0.0.1:${edaFirstPort}/bridge/ws${tokenQuery}`,
+    'eda-first-page',
+  );
+  attachTaskResponder(edaFirstNew.socket, 'eda-first-page', (message) => ({
+    source: 'eda-first-reconnected',
+    path: message.path,
+  }));
+  await assert.rejects(
+    edaFirstServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    /quarantined after reconnect/,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.deepEqual(
+    await edaFirstServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    { source: 'eda-first-reconnected', path: '/bridge/jlceda/api/invoke' },
+  );
+  edaFirstOld = undefined;
+  edaFirstNew.socket.close();
+  edaFirstNew = undefined;
+  edaFirstServer.close();
+  edaFirstServer = undefined;
+
+  const queuedDisconnectPort = await reservePort();
+  queuedDisconnectServer = new EdaBridgeServer(queuedDisconnectPort);
+  await queuedDisconnectServer.start();
+  queuedDisconnectOld = await registerEda(
+    `ws://127.0.0.1:${queuedDisconnectPort}/bridge/ws${tokenQuery}`,
+    'queued-disconnect-page',
+  );
+  let queuedDisconnectTaskCount = 0;
+  let queuedDisconnectFirstStarted = false;
+  let queuedDisconnectSecondReceived = false;
+  queuedDisconnectOld.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type !== 'bridge/task') {
+      return;
+    }
+    const taskIndex = queuedDisconnectTaskCount;
+    queuedDisconnectTaskCount += 1;
+    if (taskIndex === 0) {
+      queuedDisconnectFirstStarted = true;
+      queuedDisconnectOld.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'queued-disconnect-page',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
+      return;
+    }
+    queuedDisconnectSecondReceived = true;
+  });
+  const queuedDisconnectFirst = queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 200);
+  const queuedDisconnectSecond = queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 200);
+  await waitUntil(() => queuedDisconnectFirstStarted && queuedDisconnectSecondReceived);
+  queuedDisconnectOld.socket.close();
+  await assert.rejects(queuedDisconnectFirst, /disconnected/);
+  await assert.rejects(queuedDisconnectSecond, /disconnected/);
+  await waitUntil(async () => {
+    const snapshot = await queuedDisconnectServer.request('/bridge/admin/clients', {}, 2000);
+    return snapshot.clients.length === 0;
+  });
+  queuedDisconnectNew = await registerEda(
+    `ws://127.0.0.1:${queuedDisconnectPort}/bridge/ws${tokenQuery}`,
+    'queued-disconnect-page',
+  );
+  attachTaskResponder(queuedDisconnectNew.socket, 'queued-disconnect-page', (message) => ({
+    source: 'queued-disconnect-reconnected',
+    path: message.path,
+  }));
+  await assert.rejects(
+    queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    /quarantined after reconnect/,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await assert.rejects(
+    queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    /quarantined after reconnect/,
+  );
+  queuedDisconnectOld = undefined;
+  queuedDisconnectNew.socket.close();
+  queuedDisconnectNew = undefined;
+  queuedDisconnectServer.close();
+  queuedDisconnectServer = undefined;
 
   const reconnectPort = await reservePort();
   reconnectServer = new EdaBridgeServer(reconnectPort);
@@ -344,6 +493,13 @@ try {
     const message = JSON.parse(data.toString());
     if (message.type === 'bridge/task') {
       receivedReconnectTask = true;
+      reconnectOld.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'reconnect-page',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
     }
   });
   reconnectTarget = await registerEda(
@@ -425,6 +581,11 @@ try {
   replacement?.socket.close();
   disconnectActive?.socket.close();
   disconnectReplacement?.socket.close();
+  disconnectReconnected?.socket.close();
+  edaFirstOld?.socket.close();
+  edaFirstNew?.socket.close();
+  queuedDisconnectOld?.socket.close();
+  queuedDisconnectNew?.socket.close();
   reconnectOld?.socket.close();
   reconnectNew?.socket.close();
   reconnectTarget?.socket.close();
@@ -432,6 +593,8 @@ try {
   queueServer?.close();
   recoveryServer?.close();
   disconnectServer?.close();
+  edaFirstServer?.close();
+  queuedDisconnectServer?.close();
   reconnectServer?.close();
   secondaryServer.close();
   mainServer.close();
