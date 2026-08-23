@@ -355,6 +355,11 @@ export async function handleNetLabelPlaceTask(payload: unknown): Promise<unknown
 			}
 		}
 		catch (error: unknown) {
+			// A timeout means the EDA mutation may still be running. It must reach
+			// the runtime so the client stays quarantined until that call settles.
+			if (error instanceof BridgeTaskTimeoutError) {
+				throw error;
+			}
 			results.push({
 				index: i,
 				componentId: placement.componentId,

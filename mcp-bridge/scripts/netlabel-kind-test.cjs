@@ -152,6 +152,20 @@ async function main() {
 	assert.equal(placed.ok, true);
 	assert.deepEqual(createNetLabelCalls, [[320, 240, 'UART_TX']]);
 
+	globalThis.eda.sch_PrimitiveAttribute.createNetLabel = async () => {
+		throw new BridgeTaskTimeoutError('/bridge/jlceda/netlabel/place', 5_000, Promise.resolve());
+	};
+	await assert.rejects(
+		handleNetLabelPlaceTask({
+			placements: [{ componentId: 'component-1', pinIdentifier: '1', netName: 'UART_TX' }],
+		}),
+		BridgeTaskTimeoutError,
+	);
+	globalThis.eda.sch_PrimitiveAttribute.createNetLabel = async (...args) => {
+		createNetLabelCalls.push(args);
+		return { primitiveId: 'label-1' };
+	};
+
 	const modified = await handleNetLabelModifyTask({
 		target: { type: 'pin', componentId: 'component-1', pinIdentifier: '1' },
 		newNetName: 'SPI_CLK',
