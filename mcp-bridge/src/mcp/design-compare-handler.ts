@@ -1,7 +1,8 @@
-import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type CompareDomain = 'netlist' | 'schematic' | 'pcb';
 type CompareSource = string | Record<string, string>;
+const MAX_NETLIST_DIFFERENCES = 120;
 
 function normalizeSource(value: unknown, field: string, domain: CompareDomain): CompareSource {
 	if (typeof value === 'string' && value.trim().length > 0) {
@@ -37,9 +38,19 @@ export async function handleDesignCompareTask(payload: unknown): Promise<unknown
 		throw new TypeError(`EDA sys_Tool.${methodName} API is unavailable in this client version.`);
 	}
 	const result = await (api[methodName] as (a: CompareSource, b: CompareSource) => Promise<unknown>).call(api, sourceA, sourceB);
-	const serialized = await toSerializableAsync(result);
-	if (domain === 'netlist' && Array.isArray(serialized)) {
-		return { ok: serialized.length === 0, domain, sourceA, sourceB, differenceCount: serialized.length, differences: serialized };
+	if (domain === 'netlist' && Array.isArray(result)) {
+		const differences = preserveBoundedArray(await Promise.all(result.slice(0, MAX_NETLIST_DIFFERENCES).map(difference => toSerializableAsync(difference))));
+		return {
+			ok: result.length === 0,
+			domain,
+			sourceA,
+			sourceB,
+			differenceCount: result.length,
+			returned: differences.length,
+			truncated: result.length > MAX_NETLIST_DIFFERENCES,
+			differences,
+		};
 	}
+	const serialized = await toSerializableAsync(result);
 	return { ok: true, domain, sourceA, sourceB, result: serialized };
 }

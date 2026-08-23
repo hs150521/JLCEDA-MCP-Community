@@ -930,7 +930,7 @@
       "type": "object",
       "properties": {
         "action": { "type": "string", "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "select_primitives", "clear_selection", "primitive_type_by_id", "primitive_by_id", "primitives_by_id", "primitives_bbox", "primitive_at_point", "primitives_in_region", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates", "navigate_to_region", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
-        "routingType": { "type": "string", "enum": ["all", "net", "connection"], "default": "all", "description": "Required for clear_routing semantics; all clears all tracks/vias, net or connection limits the scope." },
+        "routingType": { "type": "string", "enum": ["all", "net", "connection"], "description": "Required for clear_routing; all clears all tracks/vias, net or connection limits the scope." },
         "x": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
         "y": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
         "left": { "type": "number", "description": "Required region bound for region inspection/navigation." },
@@ -939,6 +939,7 @@
         "bottom": { "type": "number", "description": "Required region bound for region inspection/navigation." },
         "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Primitive IDs for selection or primitive queries." },
         "id": { "type": "string", "minLength": 1, "description": "One primitive ID for primitive_by_id or primitive_type_by_id." },
+        "confirm": { "type": "boolean", "description": "Must be true before clear_routing changes PCB routing." },
         "leftToRight": { "type": "boolean", "default": true, "description": "Region selection direction passed to getPrimitivesInRegion." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "Maximum selected/region primitives returned." },
         "includeObjects": { "type": "boolean", "default": false, "description": "For selection, include serialized selected primitive objects in addition to IDs." },
@@ -950,79 +951,112 @@
       "oneOf": [
         {
           "type": "object",
-          "properties": { "action": { "const": "import_auto_route_json" }, "dataBase64": { "type": "string", "minLength": 4 } },
-          "required": ["action", "dataBase64"]
+          "properties": { "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "import_auto_route_ses" }, "dataBase64": { "type": "string", "minLength": 4 } },
-          "required": ["action", "dataBase64"]
+          "properties": { "action": { "const": "import_auto_route_json" }, "fileName": { "type": "string", "minLength": 1 }, "dataBase64": { "type": "string", "minLength": 4 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "dataBase64"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "import_auto_layout_json" }, "dataBase64": { "type": "string", "minLength": 4 } },
-          "required": ["action", "dataBase64"]
+          "properties": { "action": { "const": "import_auto_route_ses" }, "fileName": { "type": "string", "minLength": 1 }, "dataBase64": { "type": "string", "minLength": 4 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "dataBase64"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
-          "required": ["action", "ids"]
+          "properties": { "action": { "const": "import_auto_layout_json" }, "fileName": { "type": "string", "minLength": 1 }, "dataBase64": { "type": "string", "minLength": 4 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "dataBase64"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 } },
-          "required": ["action", "id"]
+          "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "ids"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "primitive_by_id" }, "id": { "type": "string", "minLength": 1 } },
-          "required": ["action", "id"]
+          "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "id"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
-          "required": ["action", "ids"]
+          "properties": { "action": { "const": "primitive_by_id" }, "id": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "id"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
-          "required": ["action", "ids"]
+          "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "ids"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "primitive_at_point" }, "x": { "type": "number" }, "y": { "type": "number" } },
-          "required": ["action", "x", "y"]
+          "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "ids"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "convert_canvas_to_data" }, "x": { "type": "number" }, "y": { "type": "number" } },
-          "required": ["action", "x", "y"]
+          "properties": { "action": { "enum": ["primitive_at_point", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates"] }, "x": { "type": "number" }, "y": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "x", "y"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "convert_data_to_canvas" }, "x": { "type": "number" }, "y": { "type": "number" } },
-          "required": ["action", "x", "y"]
+          "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "leftToRight": { "type": "boolean" }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "left", "right", "top", "bottom"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "navigate_to_coordinates" }, "x": { "type": "number" }, "y": { "type": "number" } },
-          "required": ["action", "x", "y"]
+          "properties": { "action": { "const": "navigate_to_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "left", "right", "top", "bottom"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } },
-          "required": ["action", "left", "right", "top", "bottom"]
+          "properties": { "action": { "const": "selection" }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 }, "includeObjects": { "type": "boolean" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "navigate_to_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } },
-          "required": ["action", "left", "right", "top", "bottom"]
+          "properties": { "action": { "const": "save" }, "uuid": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_changes" }, "uuid": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action"],
+          "additionalProperties": false
         },
         {
           "type": "object",
           "properties": {
-            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "clear_selection", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes"] }
-          }
+            "action": { "const": "clear_routing" },
+            "routingType": { "type": "string", "enum": ["all", "net", "connection"] },
+            "confirm": { "const": true, "description": "Must be true to clear PCB routing." },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action", "routingType", "confirm"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "mouse_position", "clear_selection", "zoom_to_board_outline", "start_ratline", "stop_ratline"] },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
         }
       ],
       "additionalProperties": false
@@ -1242,11 +1276,10 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] },
         "kind": {
           "type": "string",
-          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "ipc_2581c", "open_database", "interactive_bom", "dsn", "auto_route_json", "jrouter_auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
         },
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string" },
-        "oemNumber": { "type": "string", "enum": ["Device", "Manufacturer Part", "Supplier Part", "Comment"] },
         "template": { "type": "string", "minLength": 1 },
         "assemblyVariantsConfig": {
           "type": "object",
@@ -1266,46 +1299,79 @@
       "required": ["domain", "kind"],
       "oneOf": [
         {
+          "type": "object",
           "properties": {
             "domain": { "const": "pcb" },
-            "kind": { "enum": ["gerber", "bom", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "jrouter_auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] }
-          }
+            "kind": { "enum": ["bom", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] },
+            "unit": { "type": "null" }
+          },
+          "required": ["domain", "kind"]
         },
         {
+          "type": "object",
+          "properties": {
+            "domain": { "const": "pcb" },
+            "kind": { "const": "gerber" },
+            "unit": { "enum": ["mm", "in"] }
+          },
+          "required": ["domain", "kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "domain": { "const": "pcb" },
+            "kind": { "const": "pick_and_place" },
+            "unit": { "enum": ["mm", "mil"] }
+          },
+          "required": ["domain", "kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "domain": { "const": "pcb" },
+            "kind": { "const": "open_database" },
+            "unit": { "const": "in" }
+          },
+          "required": ["domain", "kind"]
+        },
+        {
+          "type": "object",
           "properties": {
             "domain": { "const": "pcb" },
             "kind": { "const": "netlist" },
-            "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] }
-          }
+            "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] },
+            "unit": { "type": "null" }
+          },
+          "required": ["domain", "kind"]
         },
         {
-          "properties": {
-            "domain": { "const": "pcb" },
-            "kind": { "const": "ipc_2581c" },
-            "fileType": { "enum": ["xml", "cvg", "2581"] },
-            "unit": { "enum": ["mm", "in"] },
-            "oemNumber": { "enum": ["Device", "Manufacturer Part", "Supplier Part", "Comment"] }
-          }
-        },
-        {
+          "type": "object",
           "properties": {
             "domain": { "const": "schematic" },
-            "kind": { "enum": ["bom", "document"] }
-          }
+            "kind": { "enum": ["bom", "document"] },
+            "unit": { "type": "null" }
+          },
+          "required": ["domain", "kind"]
         },
         {
+          "type": "object",
           "properties": {
             "domain": { "const": "schematic" },
             "kind": { "const": "netlist" },
-            "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] }
-          }
+            "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] },
+            "unit": { "type": "null" }
+          },
+          "required": ["domain", "kind"]
         },
         {
+          "type": "object",
           "properties": {
             "domain": { "const": "schematic" },
             "kind": { "const": "simulation_netlist" },
-            "netlistType": { "const": "Ngspice" }
-          }
+            "netlistType": { "const": "Ngspice" },
+            "unit": { "type": "null" }
+          },
+          "required": ["domain", "kind"]
         }
       ],
       "additionalProperties": false

@@ -70,7 +70,7 @@ export async function handleProjectInfoTask(payload: unknown): Promise<unknown> 
 		schematic: await toSerializableAsync(schematic),
 		pcb: await toSerializableAsync(pcb),
 		currentDocument: await toSerializableAsync(document),
-		...(includePages ? { schematicPages: await toSerializableAsync(pages) } : {}),
+		...(includePages ? { schematicPages: await serializeInventory(pages, 'dmt_Schematic', 'getCurrentSchematicAllSchematicPagesInfo', limit) } : {}),
 		...(includeSchematics ? { schematics: await serializeInventory(schematics, 'dmt_Schematic', 'getAllSchematicsInfo', limit) } : {}),
 		...(includePcbs ? { pcbs: await serializeInventory(pcbs, 'dmt_Pcb', 'getAllPcbsInfo', limit) } : {}),
 		...(includeBoards ? { boards: await serializeInventory(boards, 'dmt_Board', 'getAllBoardsInfo', limit) } : {}),

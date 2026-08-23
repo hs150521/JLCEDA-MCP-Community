@@ -25,7 +25,7 @@
 - `library_sources`: enumerates available system, personal, project, and favorite libraries for use with targeted searches.
 - `library_search`: searches or retrieves 0.4.15 device, symbol, footprint, 3D-model, reusable-module, and panel-library assets, and searches simulation models; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
-- `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, IPC-2581C, JRouter JSON, and related manufacturing artifacts.
+- `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 - `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.
 - `manufacture_export`: schematic BOM exports can select an assembly variant returned by `manufacture_templates_query`.
 

@@ -311,7 +311,11 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 	if (action === 'clear_routing') {
 		if (typeof api.clearRouting !== 'function')
 			throw new TypeError('EDA pcb_Document.clearRouting API is unavailable in this client version.');
-		const routingType = payload.routingType === undefined ? 'all' : payload.routingType;
+		if (payload.routingType === undefined)
+			throw new TypeError('routingType is required for clear_routing; choose all, net, or connection.');
+		if (payload.confirm !== true)
+			throw new TypeError('confirm must be true to clear PCB routing.');
+		const routingType = payload.routingType;
 		if (routingType !== 'all' && routingType !== 'net' && routingType !== 'connection')
 			throw new TypeError('routingType must be all, net, or connection.');
 		return { ok: true, action, routingType, cleared: await toSerializableAsync(await api.clearRouting(routingType)) };

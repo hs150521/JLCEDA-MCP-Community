@@ -16,12 +16,10 @@ const PCB_METHODS = new Set([
 	'dxf',
 	'pdf',
 	'ipc_d356a',
-	'ipc_2581c',
 	'open_database',
 	'interactive_bom',
 	'dsn',
 	'auto_route_json',
-	'jrouter_auto_route_json',
 	'auto_layout_json',
 	'altium',
 	'pads',
@@ -32,6 +30,11 @@ const PCB_METHODS = new Set([
 const SCHEMATIC_METHODS = new Set(['bom', 'netlist', 'simulation_netlist', 'document']);
 const STANDARD_NETLIST_TYPES = ['Allegro', 'PADS', 'Protel2', 'JLCEDA'] as const;
 const SIMULATION_NETLIST_TYPES = ['Ngspice'] as const;
+const PCB_EXPORT_UNITS: Record<string, readonly string[]> = {
+	gerber: ['mm', 'in'],
+	pick_and_place: ['mm', 'mil'],
+	open_database: ['in'],
+};
 
 function encodeBase64(bytes: Uint8Array): string {
 	let binary = '';
@@ -62,6 +65,18 @@ function optionalEnum(input: Record<string, unknown>, key: string, values: reado
 	if (value !== undefined && !values.includes(value))
 		throw new TypeError(`${key} must be one of: ${values.join(', ')}.`);
 	return value;
+}
+
+function optionalManufacturingUnit(domain: ExportDomain, kind: string, input: Record<string, unknown>): string | undefined {
+	const unit = optionalString(input, 'unit');
+	if (unit === undefined)
+		return undefined;
+	const allowedUnits = domain === 'pcb' ? PCB_EXPORT_UNITS[kind] : undefined;
+	if (!allowedUnits)
+		throw new TypeError(`unit is not supported for ${domain} ${kind} exports.`);
+	if (!allowedUnits.includes(unit))
+		throw new TypeError(`unit must be one of: ${allowedUnits.join(', ')}.`);
+	return unit;
 }
 
 function optionalAssemblyVariant(input: Record<string, unknown>): { text: string; value: string } | undefined {
@@ -107,7 +122,7 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 	const fileType = optionalString(input, 'fileType');
 	const template = optionalString(input, 'template');
 	const assemblyVariantsConfig = optionalAssemblyVariant(input);
-	const unit = optionalString(input, 'unit');
+	const unit = optionalManufacturingUnit(domain, kind, input);
 	if (domain === 'pcb') {
 		if (!PCB_METHODS.has(kind))
 			throw new TypeError(`Unsupported PCB export kind: ${kind}.`);
@@ -123,20 +138,10 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 			'dxf': { method: 'getDxfFile', args: [fileName] },
 			'pdf': { method: 'getPdfFile', args: [fileName] },
 			'ipc_d356a': { method: 'getIpcD356AFile', args: [fileName] },
-			'ipc_2581c': {
-				method: 'getIpc2581CFile',
-				args: [
-					fileName,
-					optionalEnum(input, 'fileType', ['xml', 'cvg', '2581']),
-					optionalEnum(input, 'unit', ['mm', 'in']),
-					optionalEnum(input, 'oemNumber', ['Device', 'Manufacturer Part', 'Supplier Part', 'Comment']),
-				],
-			},
 			'open_database': { method: 'getOpenDatabaseDoublePlusFile', args: [fileName, unit] },
 			'interactive_bom': { method: 'getInteractiveBomFile', args: [fileName] },
 			'dsn': { method: 'getDsnFile', args: [fileName] },
 			'auto_route_json': { method: 'getAutoRouteJsonFile', args: [fileName] },
-			'jrouter_auto_route_json': { method: 'getAutoRouteJsonFileForJRouter', args: [fileName] },
 			'auto_layout_json': { method: 'getAutoLayoutJsonFile', args: [fileName] },
 			'altium': { method: 'getAltiumDesignerFile', args: [fileName] },
 			'pads': { method: 'getPadsFile', args: [fileName] },

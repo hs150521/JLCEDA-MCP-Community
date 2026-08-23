@@ -228,6 +228,28 @@ assert.equal(librarySearchSchema.safeParse({ kind: 'simulation_model', keyword: 
 assert.equal(librarySearchSchema.safeParse({ kind: 'simulation_model', keyword: 'resistor', simulationModelType: 'invalid' }).success, false);
 assert.equal(librarySearchSchema.safeParse({ kind: 'simulation_model', uuid: 'simulation-1' }).success, false);
 
+const manufactureExportDefinition = definitions.find((definition) => definition.name === 'manufacture_export');
+assert.ok(manufactureExportDefinition);
+const manufactureExportSchema = z.fromJSONSchema(manufactureExportDefinition.inputSchema);
+for (const input of [
+  { domain: 'pcb', kind: 'gerber', unit: 'in' },
+  { domain: 'pcb', kind: 'pick_and_place', unit: 'mil' },
+  { domain: 'pcb', kind: 'open_database', unit: 'in' },
+]) {
+  assert.equal(manufactureExportSchema.safeParse(input).success, true, `manufacture_export should accept ${JSON.stringify(input)}`);
+}
+for (const input of [
+  { domain: 'pcb', kind: 'gerber', unit: 'mil' },
+  { domain: 'pcb', kind: 'pick_and_place', unit: 'in' },
+  { domain: 'pcb', kind: 'open_database', unit: 'mm' },
+	{ domain: 'pcb', kind: 'ipc_2581c' },
+	{ domain: 'pcb', kind: 'jrouter_auto_route_json' },
+  { domain: 'pcb', kind: 'bom', unit: 'mm' },
+  { domain: 'schematic', kind: 'bom', unit: 'mm' },
+]) {
+  assert.equal(manufactureExportSchema.safeParse(input).success, false, `manufacture_export should reject ${JSON.stringify(input)}`);
+}
+
 await assert.rejects(
   dispatcher.dispatch({
     name: 'api_invoke',

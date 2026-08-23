@@ -562,6 +562,10 @@ async function main() {
 				if (a === 'net-1') {
 					assert.deepEqual(b, { projectUuid: 'project-1', documentUuid: 'net-2' });
 				}
+				else if (a === 'net-many') {
+					assert.equal(b, 'net-many-other');
+					return Array.from({ length: 130 }, (_, index) => ({ type: 'Net', object: `N${index + 1}` }));
+				}
 				else {
 					assert.equal(a, 'pcb-1');
 					assert.deepEqual(b, { projectUuid: 'project-1', documentUuid: 'pcb-2' });
@@ -589,17 +593,6 @@ async function main() {
 			async getBomTemplates() { return ['jlcpcb', 'assembly']; },
 			async getFlyingProbeTestFile() { return new Blob(['probe,data\nP1,ok\n'], { type: 'text/csv' }); },
 			async getAutoLayoutJsonFile() { return new File(['{"components":[]}'], 'layout.json', { type: 'application/json' }); },
-			async getIpc2581CFile(fileName, fileType, unit, oemNumber) {
-				assert.equal(fileName, 'manufacturing');
-				assert.equal(fileType, 'xml');
-				assert.equal(unit, 'mm');
-				assert.equal(oemNumber, 'Device');
-				return new File(['<IPC-2581/>'], 'manufacturing.xml', { type: 'application/xml' });
-			},
-			async getAutoRouteJsonFileForJRouter(fileName) {
-				assert.equal(fileName, 'jrouter');
-				return new File(['{"nets":[]}'], 'jrouter.json', { type: 'application/json' });
-			},
 		},
 		sch_ManufactureData: {
 			async getBomTemplates() { return ['schematic-default']; },
@@ -614,7 +607,14 @@ async function main() {
 
 	const project = await handleProjectInfoTask({ includePages: true });
 	assert.equal(project.project.name, '2026');
-	assert.equal(project.schematicPages.length, 2);
+	assert.equal(project.schematicPages.total, 2);
+	assert.equal(project.schematicPages.returned, 2);
+	assert.equal(project.schematicPages.truncated, false);
+	assert.equal(project.schematicPages.items.length, 2);
+	const limitedPages = await handleProjectInfoTask({ includePages: true, limit: 1 });
+	assert.equal(limitedPages.schematicPages.total, 2);
+	assert.equal(limitedPages.schematicPages.returned, 1);
+	assert.equal(limitedPages.schematicPages.truncated, true);
 	const projectInventory = await handleProjectInfoTask({ includePages: false, includeSchematics: true, includePcbs: true, includeBoards: true, includePanels: true, limit: 2 });
 	assert.equal(projectInventory.schematics.items[1].name, 'Control');
 	assert.equal(projectInventory.pcbs.items[1].name, 'Auxiliary PCB');
@@ -698,7 +698,9 @@ async function main() {
 	assert.equal(savedPcb.uuid, 'pcb-1');
 	assert.equal((await handlePcbDocumentTask({ action: 'start_ratline' })).changed, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'stop_ratline' })).changed, true);
-	assert.equal((await handlePcbDocumentTask({ action: 'clear_routing', routingType: 'connection' })).cleared, true);
+	await assert.rejects(() => handlePcbDocumentTask({ action: 'clear_routing' }), /routingType is required/);
+	await assert.rejects(() => handlePcbDocumentTask({ action: 'clear_routing', routingType: 'connection' }), /confirm must be true/);
+	assert.equal((await handlePcbDocumentTask({ action: 'clear_routing', routingType: 'connection', confirm: true })).cleared, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_changes', uuid: 'sch-1' })).imported, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_route_json', fileName: 'route.json', dataBase64: 'e30=' })).bytes, 2);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_route_ses', fileName: 'route.ses', dataBase64: 'e30=' })).imported, true);
@@ -854,6 +856,13 @@ async function main() {
 	assert.equal(schematicComparison.result.changed, 2);
 	const designNetlistComparison = await handleDesignCompareTask({ domain: 'netlist', sourceA: 'net-1', sourceB: { projectUuid: 'project-1', documentUuid: 'net-2' } });
 	assert.equal(designNetlistComparison.differenceCount, 1);
+	assert.equal(designNetlistComparison.returned, 1);
+	assert.equal(designNetlistComparison.truncated, false);
+	const truncatedDesignComparison = await handleDesignCompareTask({ domain: 'netlist', sourceA: 'net-many', sourceB: 'net-many-other' });
+	assert.equal(truncatedDesignComparison.differenceCount, 130);
+	assert.equal(truncatedDesignComparison.returned, 120);
+	assert.equal(truncatedDesignComparison.differences.length, 120);
+	assert.equal(truncatedDesignComparison.truncated, true);
 	const pcbComparison = await handleDesignCompareTask({ domain: 'pcb', sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', pcbUuid: 'pcb-2' } });
 	assert.equal(pcbComparison.result.data.changed, 3);
 	const templates = await handleManufactureTemplatesQueryTask({ domain: 'pcb' });
@@ -871,11 +880,10 @@ async function main() {
 	assert.equal(flyingProbeExport.ok, true);
 	const autoLayoutExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'auto_layout_json' });
 	assert.equal(autoLayoutExport.file.preview, '{"components":[]}');
-	const ipcExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'ipc_2581c', fileName: 'manufacturing', fileType: 'xml', unit: 'mm', oemNumber: 'Device' });
-	assert.equal(ipcExport.file.type, 'application/xml');
-	const jrouterExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'jrouter_auto_route_json', fileName: 'jrouter' });
-	assert.equal(jrouterExport.file.preview, '{"nets":[]}');
-	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'ipc_2581c', fileType: 'zip' }), /fileType must be one of/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'gerber', unit: 'mil' }), /unit must be one of: mm, in/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'pick_and_place', unit: 'in' }), /unit must be one of: mm, mil/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mm' }), /unit must be one of: in/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'bom', unit: 'mm' }), /unit is not supported/);
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');
 }

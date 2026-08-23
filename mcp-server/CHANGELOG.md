@@ -14,7 +14,7 @@
 ## 2.1 development
 
 - Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
-- Add bounded IPC-2581C and JRouter automatic-routing JSON manufacturing exports.
+- Add bounded official manufacturing exports, including flying-probe test and auto-route/layout JSON files.
 - Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
 - Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
