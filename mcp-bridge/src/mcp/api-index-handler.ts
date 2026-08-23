@@ -28,6 +28,7 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.dmt_Schematic.getAllSchematicPagesInfo', summary: '获取工程内所有原理图图页的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.deleteSchematicPage', summary: '删除原理图图页' },
 	{ fullName: 'eda.dmt_Schematic.deleteSchematic', summary: '删除原理图' },
+	{ fullName: 'eda.dmt_EditorControl.getCurrentRenderedAreaImage', summary: '获取当前画布渲染图像' },
 
 	// ── sch_Document：画布文档操作 ─────────────────────────────────────────
 	{ fullName: 'eda.sch_Document.save', summary: '保存文档' },
@@ -137,6 +138,13 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.lib_LibrariesList.getSystemLibraryUuid', summary: '获取系统库的 UUID' },
 	{ fullName: 'eda.lib_LibrariesList.getPersonalLibraryUuid', summary: '获取个人库的 UUID' },
 	{ fullName: 'eda.lib_LibrariesList.getProjectLibraryUuid', summary: '获取工程库的 UUID' },
+	{ fullName: 'eda.lib_LibrariesList.getAllLibrariesList', summary: '获取所有库的列表' },
+	{ fullName: 'eda.lib_3DModel.search', summary: '搜索 3D 模型库资产' },
+	{ fullName: 'eda.lib_3DModel.get', summary: '按 UUID 获取 3D 模型库资产' },
+	{ fullName: 'eda.lib_Cbb.search', summary: '搜索复用模块库资产' },
+	{ fullName: 'eda.lib_Cbb.get', summary: '按 UUID 获取复用模块库资产' },
+	{ fullName: 'eda.lib_PanelLibrary.search', summary: '搜索面板库资产' },
+	{ fullName: 'eda.lib_PanelLibrary.get', summary: '按 UUID 获取面板库资产' },
 
 	// ── sch_Netlist：网表 ──────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Netlist.setNetlist', summary: '更新网表' },

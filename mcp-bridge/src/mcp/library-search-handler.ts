@@ -1,16 +1,28 @@
 import { isPlainObjectRecord, parseBoundedIntegerValue, toSerializableAsync } from '../utils.ts';
 
-type LibrarySearchKind = 'device' | 'symbol' | 'footprint';
+type LibrarySearchKind = 'device' | 'symbol' | 'footprint' | 'model_3d' | 'cbb' | 'panel_library';
+
+const API_MODULE_BY_KIND: Record<LibrarySearchKind, string> = {
+	device: 'lib_Device',
+	symbol: 'lib_Symbol',
+	footprint: 'lib_Footprint',
+	model_3d: 'lib_3DModel',
+	cbb: 'lib_Cbb',
+	panel_library: 'lib_PanelLibrary',
+};
 
 const PROPERTY_KEYS: Record<LibrarySearchKind, readonly string[]> = {
 	device: ['name', 'value', 'symbolName', 'footprintName', 'supplierFootprint', 'supplierId', 'partNumber', 'partCode'],
 	symbol: [],
 	footprint: [],
+	model_3d: [],
+	cbb: [],
+	panel_library: [],
 };
 
 function requiredKind(value: unknown): LibrarySearchKind {
-	if (value !== 'device' && value !== 'symbol' && value !== 'footprint')
-		throw new TypeError('kind must be device, symbol, or footprint.');
+	if (value !== 'device' && value !== 'symbol' && value !== 'footprint' && value !== 'model_3d' && value !== 'cbb' && value !== 'panel_library')
+		throw new TypeError('kind must be device, symbol, footprint, model_3d, cbb, or panel_library.');
 	return value;
 }
 
@@ -61,9 +73,10 @@ function normalizeLcscIds(raw: unknown): string[] | undefined {
 
 function getApi(kind: LibrarySearchKind): Record<string, unknown> {
 	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
-	const api = eda?.[kind === 'device' ? 'lib_Device' : kind === 'symbol' ? 'lib_Symbol' : 'lib_Footprint'];
+	const moduleName = API_MODULE_BY_KIND[kind];
+	const api = eda?.[moduleName];
 	if (!isPlainObjectRecord(api))
-		throw new TypeError(`EDA lib_${kind[0].toUpperCase()}${kind.slice(1)} API is unavailable in this client version.`);
+		throw new TypeError(`EDA ${moduleName} API is unavailable in this client version.`);
 	return api;
 }
 
@@ -93,7 +106,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	let rawResults: unknown;
 	if (uuid) {
 		if (typeof api.get !== 'function')
-			throw new TypeError(`EDA lib_${kind}.get API is unavailable in this client version.`);
+			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.get API is unavailable in this client version.`);
 		const item = await (api.get as (uuid: string, libraryUuid?: string) => Promise<unknown>).call(api, uuid, libraryUuid);
 		return {
 			ok: true,
@@ -111,14 +124,14 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	}
 	else if (properties) {
 		if (typeof api.searchByProperties !== 'function')
-			throw new TypeError(`EDA lib_${kind}.searchByProperties API is unavailable in this client version.`);
+			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.searchByProperties API is unavailable in this client version.`);
 		rawResults = kind === 'device'
 			? await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid, undefined, undefined, limit, page)
 			: await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid);
 	}
 	else {
 		if (typeof api.search !== 'function')
-			throw new TypeError(`EDA lib_${kind}.search API is unavailable in this client version.`);
+			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.search API is unavailable in this client version.`);
 		rawResults = kind === 'device' || kind === 'symbol'
 			? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
 			: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);

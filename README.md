@@ -8,13 +8,15 @@
 - `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
 - `eda_context` includes the detected JLCEDA/EasyEDA edition, online mode, editor version, and editor build date when exposed by the client.
+- `eda_canvas_snapshot`: capture active EDA canvas metadata and, when explicitly requested, a bounded read-only Base64 image for visual inspection.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers, the current layer, and copper-layer count.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
 - `pcb_document_action`: inspect PCB coordinates, selected/region primitives, filters, and canvas state; navigate the view; save the active board, import schematic changes, or import Base64 auto-layout/route files.
 - `pcb_document_action` also supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
 - `component_select`: supports exact device-property searches, including LCSC `supplierId`.
-- `library_search`: searches or retrieves 0.4.15 device, symbol, and footprint libraries; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
+- `library_sources`: enumerates available system, personal, project, and favorite libraries for use with targeted searches.
+- `library_search`: searches or retrieves 0.4.15 device, symbol, footprint, 3D-model, reusable-module, and panel-library assets; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
 - `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 - `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.

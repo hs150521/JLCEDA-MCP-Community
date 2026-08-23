@@ -129,6 +129,20 @@
     }
   },
   {
+    "name": "eda_canvas_snapshot",
+    "description": "Capture the rendered area of the active EDA canvas as a bounded image payload. This is read-only and does not modify the document or viewport.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "tabId": { "type": "string", "minLength": 1, "description": "Optional EDA tab ID; defaults to the current rendered tab." },
+        "includeData": { "type": "boolean", "default": false, "description": "Include Base64 image data when it fits maxBytes." },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304, "description": "Maximum image size returned as Base64." },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "schematic_read",
     "description": "读取当前原理图页面的完整电路语义快照。",
     "inputSchema": {
@@ -1013,8 +1027,20 @@
     }
   },
   {
+    "name": "library_sources",
+    "description": "List available EasyEDA library sources and their known system, personal, project, and favorite library UUIDs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "library_search",
-    "description": "Search or retrieve official EasyEDA device, symbol, or footprint library assets. Device searches also support exact properties and official LCSC C-number mapping.",
+    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets. Device searches also support exact properties and official LCSC C-number mapping.",
     "inputSchema": {
       "$defs": {
         "keyword": { "type": "string", "minLength": 1 },
@@ -1124,6 +1150,72 @@
           "type": "object",
           "properties": {
             "kind": { "const": "footprint" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "model_3d" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "model_3d" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "cbb" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "cbb" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "panel_library" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "panel_library" },
             "keyword": { "$ref": "#/$defs/keyword" },
             "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
             "limit": { "$ref": "#/$defs/limit" },

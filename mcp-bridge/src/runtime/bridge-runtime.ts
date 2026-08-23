@@ -19,6 +19,7 @@ import { handleApiIndexTask } from '../mcp/api-index-handler.ts';
 import { handleApiSearchTask } from '../mcp/api-search-handler.ts';
 import { handleAutoLayoutTask } from '../mcp/auto-layout-handler.ts';
 import { handleAutoRoutingTask } from '../mcp/auto-routing-handler.ts';
+import { handleCanvasSnapshotTask } from '../mcp/canvas-snapshot-handler.ts';
 import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import {
 	handleComponentPlaceCheckTask,
@@ -31,6 +32,7 @@ import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleDesignCompareTask } from '../mcp/design-compare-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleLibrarySearchTask } from '../mcp/library-search-handler.ts';
+import { handleLibrarySourcesTask } from '../mcp/library-sources-handler.ts';
 import { handleManufactureExportTask } from '../mcp/manufacture-export-handler.ts';
 import { handleManufactureTemplatesQueryTask } from '../mcp/manufacture-template-handler.ts';
 import { handlePcbNetQueryTask } from '../mcp/net-query-handler.ts';
@@ -69,6 +71,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/component/place': handleComponentPlaceTask,
 	'/bridge/jlceda/component/place-auto': handleComponentPlaceAutoTask,
 	'/bridge/jlceda/component/select': handleComponentSelectTask,
+	'/bridge/jlceda/canvas/snapshot': handleCanvasSnapshotTask,
 	'/bridge/jlceda/context': handleEdaContextTask,
 	'/bridge/jlceda/netlabel/modify': handleNetLabelModifyTask,
 	'/bridge/jlceda/netlabel/place': handleNetLabelPlaceTask,
@@ -85,6 +88,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/manufacture/export': handleManufactureExportTask,
 	'/bridge/jlceda/manufacture/templates-query': handleManufactureTemplatesQueryTask,
 	'/bridge/jlceda/library/search': handleLibrarySearchTask,
+	'/bridge/jlceda/library/sources': handleLibrarySourcesTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,

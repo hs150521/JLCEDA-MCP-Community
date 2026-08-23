@@ -4,10 +4,12 @@ const process = require('node:process');
 process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
+const { handleCanvasSnapshotTask } = require('../src/mcp/canvas-snapshot-handler.ts');
 const { handleComponentSelectTask } = require('../src/mcp/component-select-handler.ts');
 const { handleEdaContextTask } = require('../src/mcp/context-handler.ts');
 const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.ts');
 const { handleLibrarySearchTask } = require('../src/mcp/library-search-handler.ts');
+const { handleLibrarySourcesTask } = require('../src/mcp/library-sources-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
 const { handleManufactureTemplatesQueryTask } = require('../src/mcp/manufacture-template-handler.ts');
 const { handlePcbNetQueryTask } = require('../src/mcp/net-query-handler.ts');
@@ -156,7 +158,13 @@ async function main() {
 					: [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-duplicate', name: 'R0402-alt', supplierId: 'C1523' }];
 			},
 		},
-		lib_LibrariesList: { async getSystemLibraryUuid() { return 'system-library-1'; } },
+		lib_LibrariesList: {
+			async getSystemLibraryUuid() { return 'system-library-1'; },
+			async getPersonalLibraryUuid() { return 'personal-library-1'; },
+			async getProjectLibraryUuid() { return 'project-library-1'; },
+			async getFavoriteLibraryUuid() { return 'favorite-library-1'; },
+			async getAllLibrariesList() { return Array.from({ length: 130 }, (_value, index) => ({ uuid: `library-${index}`, name: `Library ${index}` })); },
+		},
 		lib_Symbol: {
 			async get(uuid, libraryUuid) {
 				assert.equal(uuid, 'symbol-1');
@@ -177,6 +185,33 @@ async function main() {
 			async search(keyword) {
 				assert.equal(keyword, 'SOIC-8');
 				return [{ uuid: 'footprint-1', libraryUuid: 'system-library-1', name: 'SOIC-8' }];
+			},
+		},
+		lib_3DModel: {
+			async get(uuid) { return { uuid, name: 'SOT-23 3D' }; },
+			async search(keyword) {
+				assert.equal(keyword, 'SOT-23');
+				return [{ uuid: 'model-1', name: 'SOT-23 3D' }];
+			},
+		},
+		lib_Cbb: {
+			async get(uuid) { return { uuid, name: 'Buck Module' }; },
+			async search(keyword) {
+				assert.equal(keyword, 'Buck');
+				return [{ uuid: 'cbb-1', name: 'Buck Module' }];
+			},
+		},
+		lib_PanelLibrary: {
+			async get(uuid) { return { uuid, name: 'Panel A' }; },
+			async search(keyword) {
+				assert.equal(keyword, 'Panel');
+				return [{ uuid: 'panel-1', name: 'Panel A' }];
+			},
+		},
+		dmt_EditorControl: {
+			async getCurrentRenderedAreaImage(tabId) {
+				assert.equal(tabId, undefined);
+				return new Blob(['canvas-image'], { type: 'image/png' });
 			},
 		},
 		pcb_Drc: {
@@ -320,6 +355,11 @@ async function main() {
 	const context = await handleEdaContextTask({});
 	assert.equal(context.environment.editorVersion, '3.2.181');
 	assert.equal(context.environment.isJLCEDAProEdition, true);
+	const canvasSnapshot = await handleCanvasSnapshotTask({ includeData: true });
+	assert.equal(canvasSnapshot.image.type, 'image/png');
+	assert.ok(typeof canvasSnapshot.image.dataBase64 === 'string');
+	const omittedCanvasSnapshot = await handleCanvasSnapshotTask({ maxBytes: 65536, includeData: false });
+	assert.equal(omittedCanvasSnapshot.image.dataBase64, undefined);
 	const pcbDrc = await handlePcbDrcCheckTask({});
 	assert.equal(pcbDrc.errorCount, 2);
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });
@@ -411,6 +451,18 @@ async function main() {
 	assert.equal(footprintGet.item.name, 'SOIC-8');
 	const footprintSearch = await handleLibrarySearchTask({ kind: 'footprint', keyword: 'SOIC-8' });
 	assert.equal(footprintSearch.items[0].name, 'SOIC-8');
+	const modelSearch = await handleLibrarySearchTask({ kind: 'model_3d', keyword: 'SOT-23' });
+	assert.equal(modelSearch.items[0].uuid, 'model-1');
+	const modelGet = await handleLibrarySearchTask({ kind: 'model_3d', uuid: 'model-1' });
+	assert.equal(modelGet.item.name, 'SOT-23 3D');
+	const cbbSearch = await handleLibrarySearchTask({ kind: 'cbb', keyword: 'Buck' });
+	assert.equal(cbbSearch.items[0].uuid, 'cbb-1');
+	const panelGet = await handleLibrarySearchTask({ kind: 'panel_library', uuid: 'panel-1' });
+	assert.equal(panelGet.item.name, 'Panel A');
+	const librarySources = await toSerializableAsync(await handleLibrarySourcesTask({ limit: 130 }));
+	assert.equal(librarySources.total, 130);
+	assert.equal(librarySources.libraries.length, 130);
+	assert.equal(librarySources.knownLibraryUuids.project, 'project-library-1');
 	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
 	assert.equal(lcscSearch.searchMode, 'lcsc_ids');
 	assert.equal(lcscSearch.items.length, 2);
