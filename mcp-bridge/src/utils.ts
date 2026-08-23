@@ -20,11 +20,11 @@ export function isPlainObjectRecord(value: unknown): value is Record<string, unk
 
 /** Resolve the EDA global in both browser-global layouts used by EasyEDA clients. */
 export function getEdaRuntime(): Record<string, unknown> | undefined {
+	if (typeof eda !== 'undefined' && isPlainObjectRecord(eda))
+		return eda as unknown as Record<string, unknown>;
 	const globalRuntime = (globalThis as unknown as { eda?: unknown }).eda;
 	if (isPlainObjectRecord(globalRuntime))
 		return globalRuntime;
-	if (typeof eda !== 'undefined' && isPlainObjectRecord(eda))
-		return eda as unknown as Record<string, unknown>;
 	return undefined;
 }
 

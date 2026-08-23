@@ -2,6 +2,7 @@
 
 ### Added
 
+- Fix runtime EDA binding resolution so dedicated PCB, layer, network, and DRC handlers use the same SDK object as `api_invoke` on EDA Pro 3.2.181.
 - Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
 - Add bounded IPC-2581C and JRouter automatic-routing JSON manufacturing exports.
 - Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
