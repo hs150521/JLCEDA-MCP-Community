@@ -7,6 +7,7 @@
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
 - `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
+- `eda_context` includes the detected JLCEDA/EasyEDA edition, online mode, editor version, and editor build date when exposed by the client.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.

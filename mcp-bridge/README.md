@@ -4,6 +4,8 @@
 
 The 2.1 release also adds `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 
+`eda_context` reports the client edition, connection mode, editor version, and build date when the installed EDA exposes those 0.4.15 APIs.
+
 `pcb_document_action` additionally supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
 
 The 2.1 release adds `pcb_drc_check`, `schematic_drc_check`, `pcb_net_query`, `pcb_constraints_query`, `pcb_layer_query`, `pcb_realtime_drc`, `pcb_document_action`, `project_info`, `netlist_compare`, `design_compare`, `manufacture_export`, read-only `manufacture_templates_query`, and `library_search`. Network queries support full details, name-only lists, exact official `getNet` lookup, and optional exact-net length/color/primitive analysis. `component_select` and device `library_search` support exact 0.4.15 property searches; device `library_search` also exposes official single/batch LCSC C-number mapping and exact UUID retrieval, while symbol and footprint searches/retrieval use their supported APIs. BOM exports can select a template returned by `manufacture_templates_query`; manufacturing exports include the official flying-probe test file. `pcb_constraints_query` exposes structured rule data and constraint groups. `pcb_document_action` can inspect PCB coordinates, selected/region primitives, filters, and canvas state; it also accepts Base64 JSON/SES imports, controls navigation/ratline calculation, and supports explicitly requested scoped routing cleanup. PCB auto-layout/auto-routing are intentionally not advertised because those methods are absent from the pinned 0.4.15 PCB API surface.
