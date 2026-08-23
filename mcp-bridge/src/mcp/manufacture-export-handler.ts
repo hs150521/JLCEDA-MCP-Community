@@ -31,9 +31,9 @@ const SCHEMATIC_METHODS = new Set(['bom', 'netlist', 'simulation_netlist', 'docu
 const STANDARD_NETLIST_TYPES = ['Allegro', 'PADS', 'Protel2', 'JLCEDA'] as const;
 const SIMULATION_NETLIST_TYPES = ['Ngspice'] as const;
 const PCB_EXPORT_UNITS: Record<string, readonly string[]> = {
-	gerber: ['mm', 'in'],
+	gerber: ['mm', 'inch'],
 	pick_and_place: ['mm', 'mil'],
-	open_database: ['in'],
+	open_database: ['inch'],
 };
 
 function encodeBase64(bytes: Uint8Array): string {

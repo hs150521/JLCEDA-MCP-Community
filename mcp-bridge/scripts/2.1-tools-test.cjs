@@ -880,9 +880,9 @@ async function main() {
 	assert.equal(flyingProbeExport.ok, true);
 	const autoLayoutExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'auto_layout_json' });
 	assert.equal(autoLayoutExport.file.preview, '{"components":[]}');
-	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'gerber', unit: 'mil' }), /unit must be one of: mm, in/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'gerber', unit: 'mil' }), /unit must be one of: mm, inch/);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'pick_and_place', unit: 'in' }), /unit must be one of: mm, mil/);
-	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mm' }), /unit must be one of: in/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mm' }), /unit must be one of: inch/);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'bom', unit: 'mm' }), /unit is not supported/);
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');

@@ -1291,7 +1291,7 @@
           "additionalProperties": false
         },
         "netlistType": { "type": "string" },
-        "unit": { "type": "string", "enum": ["mm", "in", "mil"] },
+        "unit": { "type": "string", "enum": ["mm", "inch", "mil"] },
         "documentScope": { "type": "string", "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] },
         "includeData": { "type": "boolean", "default": false },
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
@@ -1312,7 +1312,7 @@
           "properties": {
             "domain": { "const": "pcb" },
             "kind": { "const": "gerber" },
-            "unit": { "enum": ["mm", "in"] }
+            "unit": { "enum": ["mm", "inch"] }
           },
           "required": ["domain", "kind"]
         },
@@ -1330,7 +1330,7 @@
           "properties": {
             "domain": { "const": "pcb" },
             "kind": { "const": "open_database" },
-            "unit": { "const": "in" }
+            "unit": { "const": "inch" }
           },
           "required": ["domain", "kind"]
         },

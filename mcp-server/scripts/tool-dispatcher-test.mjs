@@ -232,15 +232,16 @@ const manufactureExportDefinition = definitions.find((definition) => definition.
 assert.ok(manufactureExportDefinition);
 const manufactureExportSchema = z.fromJSONSchema(manufactureExportDefinition.inputSchema);
 for (const input of [
-  { domain: 'pcb', kind: 'gerber', unit: 'in' },
+  { domain: 'pcb', kind: 'gerber', unit: 'inch' },
   { domain: 'pcb', kind: 'pick_and_place', unit: 'mil' },
-  { domain: 'pcb', kind: 'open_database', unit: 'in' },
+  { domain: 'pcb', kind: 'open_database', unit: 'inch' },
 ]) {
   assert.equal(manufactureExportSchema.safeParse(input).success, true, `manufacture_export should accept ${JSON.stringify(input)}`);
 }
 for (const input of [
   { domain: 'pcb', kind: 'gerber', unit: 'mil' },
-  { domain: 'pcb', kind: 'pick_and_place', unit: 'in' },
+	{ domain: 'pcb', kind: 'gerber', unit: 'in' },
+  { domain: 'pcb', kind: 'pick_and_place', unit: 'inch' },
   { domain: 'pcb', kind: 'open_database', unit: 'mm' },
 	{ domain: 'pcb', kind: 'ipc_2581c' },
 	{ domain: 'pcb', kind: 'jrouter_auto_route_json' },
