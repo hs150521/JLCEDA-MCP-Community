@@ -16,6 +16,7 @@ const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/pcb/drc-check',
 	'/bridge/jlceda/schematic/drc-check',
 	'/bridge/jlceda/netlist/compare',
+	'/bridge/jlceda/design/compare',
 	'/bridge/jlceda/manufacture/export',
 ]);
 
@@ -62,13 +63,13 @@ export function resolveBridgeTaskTimeoutMs(path: string, payload: unknown): numb
 	if (!isPlainObjectRecord(payload) || payload.timeoutMs === undefined) {
 		if (path.startsWith('/bridge/jlceda/pcb/auto-'))
 			return PCB_AUTO_TASK_DEFAULT_TIMEOUT_MS;
-		if (path === '/bridge/jlceda/pcb/drc-check' || path === '/bridge/jlceda/schematic/drc-check' || path === '/bridge/jlceda/netlist/compare' || path === '/bridge/jlceda/manufacture/export')
+		if (path === '/bridge/jlceda/pcb/drc-check' || path === '/bridge/jlceda/schematic/drc-check' || path === '/bridge/jlceda/netlist/compare' || path === '/bridge/jlceda/design/compare' || path === '/bridge/jlceda/manufacture/export')
 			return EXTENDED_READ_TASK_DEFAULT_TIMEOUT_MS;
 		return API_TASK_DEFAULT_TIMEOUT_MS;
 	}
 
 	const timeoutMs = Number(payload.timeoutMs);
-	const minimum = path.startsWith('/bridge/jlceda/pcb/auto-') ? PCB_AUTO_TASK_MIN_TIMEOUT_MS : path === '/bridge/jlceda/pcb/drc-check' || path === '/bridge/jlceda/schematic/drc-check' || path === '/bridge/jlceda/netlist/compare' || path === '/bridge/jlceda/manufacture/export' ? EXTENDED_READ_TASK_MIN_TIMEOUT_MS : API_TASK_MIN_TIMEOUT_MS;
+	const minimum = path.startsWith('/bridge/jlceda/pcb/auto-') ? PCB_AUTO_TASK_MIN_TIMEOUT_MS : path === '/bridge/jlceda/pcb/drc-check' || path === '/bridge/jlceda/schematic/drc-check' || path === '/bridge/jlceda/netlist/compare' || path === '/bridge/jlceda/design/compare' || path === '/bridge/jlceda/manufacture/export' ? EXTENDED_READ_TASK_MIN_TIMEOUT_MS : API_TASK_MIN_TIMEOUT_MS;
 	if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > API_TASK_MAX_TIMEOUT_MS) {
 		throw new RangeError(`timeoutMs 必须是 ${String(minimum)} 到 ${String(API_TASK_MAX_TIMEOUT_MS)} 之间的整数。`);
 	}

@@ -113,7 +113,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'manufacture_export', 'pcb_auto_layout', 'pcb_auto_routing'].includes(toolName)) {
+    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_auto_layout', 'pcb_auto_routing'].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
@@ -145,6 +145,7 @@ export class ToolDispatcher {
       'schematic_drc_check': '/bridge/jlceda/schematic/drc-check',
       'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
       'netlist_compare': '/bridge/jlceda/netlist/compare',
+      'design_compare': '/bridge/jlceda/design/compare',
       'project_info': '/bridge/jlceda/project/info',
       'manufacture_export': '/bridge/jlceda/manufacture/export',
       'pcb_auto_layout': '/bridge/jlceda/pcb/auto-layout',

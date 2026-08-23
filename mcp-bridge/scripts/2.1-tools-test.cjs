@@ -4,6 +4,7 @@ const process = require('node:process');
 process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
+const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
 const { handleNetlistCompareTask } = require('../src/mcp/netlist-compare-handler.ts');
 const { handlePcbConstraintsQueryTask } = require('../src/mcp/pcb-constraints-handler.ts');
@@ -29,9 +30,25 @@ async function main() {
 		sch_Drc: { async check() { return []; } },
 		sys_Tool: {
 			async netlistComparison(a, b) {
-				assert.equal(a, 'pcb-1');
-				assert.deepEqual(b, { projectUuid: 'project-1', documentUuid: 'pcb-2' });
+				if (a === 'net-1') {
+					assert.deepEqual(b, { projectUuid: 'project-1', documentUuid: 'net-2' });
+				}
+				else {
+					assert.equal(a, 'pcb-1');
+					assert.deepEqual(b, { projectUuid: 'project-1', documentUuid: 'pcb-2' });
+				}
 				return [{ type: 'Net', object: 'N1' }];
+			},
+			async schematicComparison(a, b) {
+				assert.equal(a, 'sch-1');
+				assert.equal(b, 'sch-2');
+				return { changed: 2 };
+			},
+			async pcbComparison(a, b, options) {
+				assert.equal(a, 'pcb-1');
+				assert.deepEqual(b, { projectUuid: 'project-1', pcbUuid: 'pcb-2' });
+				assert.equal(options.deviation, 1);
+				return { success: true, data: { changed: 3 } };
 			},
 		},
 		pcb_ManufactureData: {
@@ -50,6 +67,12 @@ async function main() {
 	assert.equal(constraints.count, 1);
 	const comparison = await handleNetlistCompareTask({ sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', documentUuid: 'pcb-2' } });
 	assert.equal(comparison.differenceCount, 1);
+	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });
+	assert.equal(schematicComparison.result.changed, 2);
+	const designNetlistComparison = await handleDesignCompareTask({ domain: 'netlist', sourceA: 'net-1', sourceB: { projectUuid: 'project-1', documentUuid: 'net-2' } });
+	assert.equal(designNetlistComparison.differenceCount, 1);
+	const pcbComparison = await handleDesignCompareTask({ domain: 'pcb', sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', pcbUuid: 'pcb-2' }, options: { deviation: 1 } });
+	assert.equal(pcbComparison.result.data.changed, 3);
 	const exportResult = await handleManufactureExportTask({ domain: 'pcb', kind: 'bom', includeData: true });
 	assert.equal(exportResult.ok, true);
 	assert.equal(exportResult.file.type, 'text/csv');

@@ -714,6 +714,44 @@
     }
   },
   {
+    "name": "design_compare",
+    "description": "Compare schematic, PCB, or netlist sources through the official EDA comparison APIs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string", "enum": ["netlist", "schematic", "pcb"] },
+        "sourceA": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "schematicUuid"], "additionalProperties": false },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "pcbUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "pcbUuid"], "additionalProperties": false }
+          ]
+        },
+        "sourceB": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "schematicUuid"], "additionalProperties": false },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "pcbUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "pcbUuid"], "additionalProperties": false }
+          ]
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "valUnit": { "type": "string", "enum": ["mm", "cm", "in", "mil"] },
+            "deviation": { "type": "number", "minimum": 0 },
+            "comparisonSize": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["domain", "sourceA", "sourceB"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "project_info",
     "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and schematic pages.",
     "inputSchema": {

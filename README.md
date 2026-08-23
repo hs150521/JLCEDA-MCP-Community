@@ -7,6 +7,7 @@
 - `pcb_auto_routing`: run PCB auto-routing with network, layer, corner-style, and optimization options.
 - `pcb_net_query` and `schematic_net_query`: query active PCB or project schematic networks with filtering and limits.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
+- `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 
 当前开发版会拒绝空的自动布局/自动布线 UUID 选择；EDA 操作超时后仍保持串行，
