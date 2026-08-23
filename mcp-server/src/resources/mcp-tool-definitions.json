@@ -552,5 +552,25 @@
         }
       }
     }
+  },
+  {
+    "name": "pcb_drc_check",
+    "description": "Run a read-only PCB design-rule check and return structured violations. The tool requires an active PCB document; it does not modify the design and does not open the EDA DRC panel unless showUi is explicitly true.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strict": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to use strict PCB rule checking. Defaults to true."
+        },
+        "showUi": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to show the EDA DRC panel. Defaults to false."
+        }
+      },
+      "additionalProperties": false
+    }
   }
 ]

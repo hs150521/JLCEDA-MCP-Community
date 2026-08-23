@@ -139,6 +139,7 @@ export class ToolDispatcher {
       'component_place_auto': '/bridge/jlceda/component/place-auto',
       'netlabel_place': '/bridge/jlceda/netlabel/place',
       'netlabel_modify': '/bridge/jlceda/netlabel/modify',
+      'pcb_drc_check': '/bridge/jlceda/pcb/drc-check',
       'schematic_auto_layout': '/bridge/jlceda/auto/layout',
       'schematic_auto_routing': '/bridge/jlceda/auto/routing',
       'api_index': '/bridge/jlceda/api/index',

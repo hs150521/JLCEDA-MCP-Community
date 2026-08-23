@@ -24,6 +24,7 @@ import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
 import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
+import { handlePcbDrcCheckTask } from '../mcp/pcb-drc-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
 import { connectionStatusManager } from '../state/connection-status.ts';
@@ -52,6 +53,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,
 	'/bridge/jlceda/netlabel/place': handleNetLabelPlaceTask,
 	'/bridge/jlceda/netlabel/modify': handleNetLabelModifyTask,
+	'/bridge/jlceda/pcb/drc-check': handlePcbDrcCheckTask,
 };
 
 let transport: BridgeTransport | undefined;

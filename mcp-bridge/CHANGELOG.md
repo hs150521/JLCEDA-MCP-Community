@@ -15,6 +15,10 @@
 
 ## Unreleased
 
+### 2.1 development
+
+- Add the read-only `pcb_drc_check` tool with structured violation results and a non-UI default.
+
 ### Fixes
 
 - Release the Bridge task queue after an EDA write API times out, so a permanently pending API call cannot block later read or write tasks.

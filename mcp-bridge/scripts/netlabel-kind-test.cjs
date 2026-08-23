@@ -9,6 +9,7 @@ const { handleAutoRoutingTask } = require('../src/mcp/auto-routing-handler.ts');
 const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-auto-handler.ts');
 const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
+const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
 
@@ -40,6 +41,27 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 });
 
 async function main() {
+	globalThis.eda = {
+		pcb_Drc: {
+			check: async (strict, showUi, verbose) => {
+				assert.equal(strict, true);
+				assert.equal(showUi, false);
+				assert.equal(verbose, true);
+				return [{ code: 'CLEARANCE', message: 'demo violation' }];
+			},
+		},
+	};
+	const detailedDrc = await handlePcbDrcCheckTask({});
+	assert.equal(detailedDrc.ok, false);
+	assert.equal(detailedDrc.resultType, 'detailed');
+	assert.equal(detailedDrc.errorCount, 1);
+	assert.equal(detailedDrc.errors[0].code, 'CLEARANCE');
+	globalThis.eda.pcb_Drc.check = async () => true;
+	const booleanDrc = await handlePcbDrcCheckTask({ strict: false, showUi: true });
+	assert.equal(booleanDrc.ok, true);
+	assert.equal(booleanDrc.resultType, 'boolean');
+	await assert.rejects(() => handlePcbDrcCheckTask({ showUi: 'yes' }), /booleans/);
+
 	assert.equal(shouldLogTransportMessage('bridge/heartbeat'), false);
 	assert.equal(shouldLogTransportMessage('bridge/result'), true);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', { timeoutMs: 42000 }), 42000);
