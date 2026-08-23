@@ -9,6 +9,8 @@ interface PcbNetAnalysis {
 	primitiveTypes?: string[];
 }
 
+const PCB_PRIMITIVE_TYPES = new Set(['ARC', 'COMPONENT', 'PAD', 'COMPONENT_PAD', 'POLYLINE', 'POUR', 'FILL', 'REGION', 'LINE', 'VIA', 'DIMENSION', 'IMAGE', 'OBJECT', 'POURED', 'STRING', 'ATTRIBUTE']);
+
 function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryMode, domain: NetDomain): PcbNetAnalysis | undefined {
 	if (input.analysis === undefined || input.analysis === null)
 		return undefined;
@@ -24,9 +26,9 @@ function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryM
 		}
 	}
 	if (analysis.primitiveTypes !== undefined) {
-		if (!Array.isArray(analysis.primitiveTypes) || analysis.primitiveTypes.some(value => typeof value !== 'string' || value.trim().length === 0))
-			throw new TypeError('analysis.primitiveTypes must be an array of non-empty strings.');
-		output.primitiveTypes = analysis.primitiveTypes.map(value => value.trim());
+		if (!Array.isArray(analysis.primitiveTypes) || analysis.primitiveTypes.some(value => typeof value !== 'string' || !PCB_PRIMITIVE_TYPES.has(value.trim().toUpperCase())))
+			throw new TypeError(`analysis.primitiveTypes must contain only supported PCB primitive types: ${Array.from(PCB_PRIMITIVE_TYPES).join(', ')}.`);
+		output.primitiveTypes = analysis.primitiveTypes.map(value => value.trim().toUpperCase());
 		output.primitives = true;
 	}
 	if (Object.keys(output).length === 0)

@@ -19,6 +19,7 @@
 - Expose official LCSC C-number mapping through `library_search`; simulation-model search is deferred because the pinned client does not expose `lib_SimulationModel`.
 - Extend `pcb_document_action` with bounded primitive/selection inspection, coordinate conversion, and canvas navigation.
 - Add exact UUID retrieval for device, symbol, and footprint library assets, plus bounded JSON export previews.
+- Reject mixed selectors, non-exact PCB analysis, unsupported primitive filters, and missing pad-pair group names at schema validation time.
 
 ## 2.2.0 - 2026-08-23
 

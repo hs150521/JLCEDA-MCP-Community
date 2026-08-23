@@ -123,9 +123,8 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 			? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
 			: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
 	}
-	const serializedResults = await toSerializableAsync(rawResults);
-	const allItems = Array.isArray(serializedResults) ? serializedResults : serializedResults === undefined || serializedResults === null ? [] : [serializedResults];
-	const items = allItems.slice(0, limit);
+	const allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
+	const items = await toSerializableAsync(allRawItems.slice(0, limit));
 	return {
 		ok: true,
 		kind,
@@ -133,8 +132,9 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
 		libraryUuid: libraryUuid ?? '',
 		page,
-		total: allItems.length,
-		returned: items.length,
+		total: allRawItems.length,
+		returned: Array.isArray(items) ? items.length : 0,
+		truncated: allRawItems.length > limit,
 		items,
 	};
 }

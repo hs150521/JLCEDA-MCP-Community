@@ -3,7 +3,7 @@
 ## 2.1 development tools
 
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
-- `pcb_net_query`: query active PCB networks with filtering and limits.
+- `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.

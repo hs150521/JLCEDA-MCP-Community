@@ -44,7 +44,7 @@ async function main() {
 			},
 			async getAllPrimitivesByNet(name, primitiveTypes) {
 				assert.equal(name, 'USB_D+');
-				assert.deepEqual(primitiveTypes, ['TRACK', 'VIA']);
+				assert.deepEqual(primitiveTypes, ['POLYLINE', 'VIA']);
 				return [{ uuid: 'track-1', type: 'TRACK' }];
 			},
 		},
@@ -118,6 +118,9 @@ async function main() {
 				assert.ok(Array.isArray(ids));
 				assert.equal(libraryUuid, undefined);
 				assert.equal(allowMultiMatch, true);
+				if (ids.includes('C99999')) {
+					return Array.from({ length: 130 }, (_, index) => ({ uuid: `device-${index}`, name: `R${index}` }));
+				}
 				return ids.includes('C17168')
 					? [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-2', name: 'C17168', supplierId: 'C17168' }]
 					: [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-duplicate', name: 'R0402-alt', supplierId: 'C1523' }];
@@ -259,7 +262,7 @@ async function main() {
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_route_json', fileName: 'route.json', dataBase64: 'e30=' })).bytes, 2);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_route_ses', fileName: 'route.ses', dataBase64: 'e30=' })).imported, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_layout_json', fileName: 'layout.json', dataBase64: 'e30=' })).imported, true);
-	const pcbNetAnalysis = await handlePcbNetQueryTask({ mode: 'exact', query: 'USB_D+', analysis: { length: true, color: true, primitiveTypes: ['TRACK', 'VIA'] } });
+	const pcbNetAnalysis = await handlePcbNetQueryTask({ mode: 'exact', query: 'USB_D+', analysis: { length: true, color: true, primitiveTypes: ['POLYLINE', 'VIA'] } });
 	assert.equal(pcbNetAnalysis.length, 42.5);
 	assert.equal(pcbNetAnalysis.color, '#00ff00');
 	assert.equal(pcbNetAnalysis.primitiveCount, 1);
@@ -293,6 +296,10 @@ async function main() {
 	assert.equal(lcscSearch.items.length, 2);
 	const singleLcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523'], allowMultiMatch: true });
 	assert.equal(singleLcscSearch.items.length, 2);
+	const manyLcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C99999'], allowMultiMatch: true, limit: 20 });
+	assert.equal(manyLcscSearch.total, 130);
+	assert.equal(manyLcscSearch.returned, 20);
+	assert.equal(manyLcscSearch.truncated, true);
 	const comparison = await handleNetlistCompareTask({ sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', documentUuid: 'pcb-2' } });
 	assert.equal(comparison.differenceCount, 1);
 	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });

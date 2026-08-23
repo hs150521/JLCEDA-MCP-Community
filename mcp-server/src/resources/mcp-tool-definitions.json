@@ -178,7 +178,7 @@
           "description": "返回候选数量，默认 5。"
         }
       },
-      "anyOf": [
+      "oneOf": [
         { "required": ["keyword"] },
         { "required": ["properties"] }
       ]
@@ -612,7 +612,42 @@
             "length": { "type": "boolean", "default": false },
             "color": { "type": "boolean", "default": false },
             "primitives": { "type": "boolean", "default": false },
-            "primitiveTypes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true }
+            "primitiveTypes": { "type": "array", "items": { "type": "string", "enum": ["ARC", "COMPONENT", "PAD", "COMPONENT_PAD", "POLYLINE", "POUR", "FILL", "REGION", "LINE", "VIA", "DIMENSION", "IMAGE", "OBJECT", "POURED", "STRING", "ATTRIBUTE"] }, "minItems": 1, "uniqueItems": true }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "default": "" },
+            "mode": { "enum": ["all", "names"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "minLength": 1 },
+            "mode": { "const": "exact" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+            "analysis": { "$ref": "#/$defs/pcbNetAnalysis" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      ],
+      "$defs": {
+        "pcbNetAnalysis": {
+          "type": "object",
+          "properties": {
+            "length": { "type": "boolean", "default": false },
+            "color": { "type": "boolean", "default": false },
+            "primitives": { "type": "boolean", "default": false },
+            "primitiveTypes": { "type": "array", "items": { "type": "string", "enum": ["ARC", "COMPONENT", "PAD", "COMPONENT_PAD", "POLYLINE", "POUR", "FILL", "REGION", "LINE", "VIA", "DIMENSION", "IMAGE", "OBJECT", "POURED", "STRING", "ATTRIBUTE"] }, "minItems": 1, "uniqueItems": true }
           },
           "minProperties": 1,
           "additionalProperties": false
@@ -649,6 +684,20 @@
         "padPairGroupName": { "type": "string", "minLength": 1 },
         "includeSystem": { "type": "boolean", "default": false }
       },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "const": "pad_pair_min_wire_length" },
+            "padPairGroupName": { "type": "string", "minLength": 1 }
+          },
+          "required": ["padPairGroupName"]
+        },
+        {
+          "properties": {
+            "kind": { "enum": ["current_rules", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"] }
+          }
+        }
+      ],
       "additionalProperties": false
     }
   },
