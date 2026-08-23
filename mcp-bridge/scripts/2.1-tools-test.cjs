@@ -27,6 +27,7 @@ const { handlePcbRealtimeDrcTask } = require('../src/mcp/pcb-realtime-drc-handle
 const { handleProjectInfoTask } = require('../src/mcp/project-info-handler.ts');
 const { handleSchematicDocumentTask } = require('../src/mcp/schematic-document-handler.ts');
 const { handleSchematicDrcCheckTask } = require('../src/mcp/schematic-drc-handler.ts');
+const { handleSchematicPagesManageTask } = require('../src/mcp/schematic-pages-manage-handler.ts');
 const { handleWorkspaceQueryTask } = require('../src/mcp/workspace-query-handler.ts');
 const { toSerializableAsync } = require('../src/utils.ts');
 
@@ -36,6 +37,11 @@ async function main() {
 	const differentialPairs = [{ name: 'USB_P', positiveNet: 'D+', negativeNet: 'D-' }];
 	const equalLengthGroups = [];
 	const padPairGroups = [];
+	const schematicPages = [
+		{ uuid: 'page-1', name: 'Power', parentSchematicUuid: 'sch-1', trusted: true },
+		{ uuid: 'page-2', name: 'Control', parentSchematicUuid: 'sch-1', trusted: true },
+		{ uuid: 'page-3', name: 'Other', parentSchematicUuid: 'sch-2', trusted: true },
+	];
 	globalThis.eda = {
 		dmt_Project: {
 			async getCurrentProjectInfo() { return { uuid: 'project-1', name: '2026' }; },
@@ -73,8 +79,35 @@ async function main() {
 		},
 		dmt_Schematic: {
 			async getCurrentSchematicInfo() { return { uuid: 'sch-1' }; },
-			async getCurrentSchematicAllSchematicPagesInfo() { return [{ uuid: 'page-1' }]; },
+			async getCurrentSchematicAllSchematicPagesInfo() { return schematicPages.filter(page => page.parentSchematicUuid === 'sch-1'); },
 			async getAllSchematicsInfo() { return [{ uuid: 'sch-1', name: 'Power' }, { uuid: 'sch-2', name: 'Control' }]; },
+			async getAllSchematicPagesInfo() { return schematicPages; },
+			async createSchematicPage(schematicUuid) {
+				const uuid = `page-${schematicPages.length + 1}`;
+				schematicPages.push({ uuid, name: `Page ${schematicPages.length + 1}`, parentSchematicUuid: schematicUuid, trusted: true });
+				return uuid;
+			},
+			async copySchematicPage(sourcePageUuid, schematicUuid) {
+				const source = schematicPages.find(page => page.uuid === sourcePageUuid);
+				assert.ok(source);
+				const uuid = `page-${schematicPages.length + 1}`;
+				schematicPages.push({ ...source, uuid, name: `${source.name} Copy`, parentSchematicUuid: schematicUuid ?? source.parentSchematicUuid });
+				return uuid;
+			},
+			async modifySchematicPageName(schematicPageUuid, newName) {
+				const page = schematicPages.find(item => item.uuid === schematicPageUuid);
+				if (page)
+					page.name = newName;
+				return Boolean(page);
+			},
+			async reorderSchematicPages(schematicUuid, pages) {
+				const current = schematicPages.filter(page => page.parentSchematicUuid === schematicUuid);
+				assert.equal(pages.length, current.length);
+				assert.ok(pages.every(page => current.includes(page) && page.trusted === true));
+				const others = schematicPages.filter(page => page.parentSchematicUuid !== schematicUuid);
+				schematicPages.splice(0, schematicPages.length, ...pages, ...others);
+				return true;
+			},
 		},
 		dmt_Pcb: {
 			async getCurrentPcbInfo() { return { uuid: 'pcb-1' }; },
@@ -267,6 +300,17 @@ async function main() {
 			async search(keyword) {
 				assert.equal(keyword, 'Panel');
 				return [{ uuid: 'panel-1', name: 'Panel A' }];
+			},
+		},
+		lib_SimulationModel: {
+			async search(keyword, libraryUuid, classification, simulationModelType, limit, page) {
+				assert.equal(keyword, 'resistor');
+				assert.equal(libraryUuid, 'system-library-1');
+				assert.equal(classification, undefined);
+				assert.equal(simulationModelType, 'Ngspice');
+				assert.equal(limit, 3);
+				assert.equal(page, 2);
+				return [{ uuid: 'simulation-1', name: 'Resistor', type: 'Ngspice' }];
 			},
 		},
 		dmt_EditorControl: {
@@ -539,6 +583,17 @@ async function main() {
 			async getBomTemplates() { return ['jlcpcb', 'assembly']; },
 			async getFlyingProbeTestFile() { return new Blob(['probe,data\nP1,ok\n'], { type: 'text/csv' }); },
 			async getAutoLayoutJsonFile() { return new File(['{"components":[]}'], 'layout.json', { type: 'application/json' }); },
+			async getIpc2581CFile(fileName, fileType, unit, oemNumber) {
+				assert.equal(fileName, 'manufacturing');
+				assert.equal(fileType, 'xml');
+				assert.equal(unit, 'mm');
+				assert.equal(oemNumber, 'Device');
+				return new File(['<IPC-2581/>'], 'manufacturing.xml', { type: 'application/xml' });
+			},
+			async getAutoRouteJsonFileForJRouter(fileName) {
+				assert.equal(fileName, 'jrouter');
+				return new File(['{"nets":[]}'], 'jrouter.json', { type: 'application/json' });
+			},
 		},
 		sch_ManufactureData: {
 			async getBomTemplates() { return ['schematic-default']; },
@@ -553,7 +608,7 @@ async function main() {
 
 	const project = await handleProjectInfoTask({ includePages: true });
 	assert.equal(project.project.name, '2026');
-	assert.equal(project.schematicPages.length, 1);
+	assert.equal(project.schematicPages.length, 2);
 	const projectInventory = await handleProjectInfoTask({ includePages: false, includeSchematics: true, includePcbs: true, includeBoards: true, includePanels: true, limit: 2 });
 	assert.equal(projectInventory.schematics.items[1].name, 'Control');
 	assert.equal(projectInventory.pcbs.items[1].name, 'Auxiliary PCB');
@@ -666,6 +721,21 @@ async function main() {
 	assert.deepEqual((await handleSchematicDocumentTask({ action: 'primitives_bbox', ids: ['sch-pin-1'] })).bounds, { minX: 1, minY: 2, maxX: 3, maxY: 4 });
 	assert.equal((await handleSchematicDocumentTask({ action: 'save' })).saved, true);
 	assert.equal((await handleSchematicDocumentTask({ action: 'import_changes' })).imported, true);
+	const createdPage = await handleSchematicPagesManageTask({ operation: 'create', schematicUuid: 'sch-1', confirm: true });
+	assert.equal(createdPage.pageUuid, 'page-4');
+	assert.equal(createdPage.readback.total, 3);
+	const copiedPage = await handleSchematicPagesManageTask({ operation: 'copy', sourcePageUuid: 'page-1', schematicUuid: 'sch-1', confirm: true });
+	assert.equal(copiedPage.pageUuid, 'page-5');
+	assert.equal(copiedPage.readback.total, 4);
+	const renamedPage = await handleSchematicPagesManageTask({ operation: 'rename', schematicPageUuid: 'page-4', newName: 'Interfaces', confirm: true });
+	assert.equal(renamedPage.readback.pages.find(page => page.uuid === 'page-4').name, 'Interfaces');
+	const reorderedPages = await handleSchematicPagesManageTask({ operation: 'reorder', schematicUuid: 'sch-1', orderedPageUuids: ['page-5', 'page-4', 'page-2', 'page-1'], confirm: true });
+	assert.equal(reorderedPages.readback.verified, true);
+	assert.deepEqual(reorderedPages.readback.pageUuids, ['page-5', 'page-4', 'page-2', 'page-1']);
+	await assert.rejects(() => handleSchematicPagesManageTask({ operation: 'reorder', schematicUuid: 'sch-1', orderedPageUuids: ['page-1', 'page-1'], confirm: true }), /must not contain duplicates/);
+	await assert.rejects(() => handleSchematicPagesManageTask({ operation: 'reorder', schematicUuid: 'sch-1', orderedPageUuids: ['page-1'], confirm: true }), /include every page/);
+	await assert.rejects(() => handleSchematicPagesManageTask({ operation: 'create', schematicUuid: 'sch-1', confirm: false }), /confirm must be true/);
+	await assert.rejects(() => handleSchematicPagesManageTask({ operation: 'rename', schematicPageUuid: 'page-1', newName: 'Unsafe', deleted: true, confirm: true }), /deleted is not supported/);
 	const constraints = await handlePcbConstraintsQueryTask({ kind: 'differential_pairs' });
 	assert.equal(constraints.count, 1);
 	assert.equal((await handlePcbConstraintsQueryTask({ kind: 'current_rule_configuration_name' })).result, 'current');
@@ -724,6 +794,9 @@ async function main() {
 	assert.equal(cbbSearch.items[0].uuid, 'cbb-1');
 	const panelGet = await handleLibrarySearchTask({ kind: 'panel_library', uuid: 'panel-1' });
 	assert.equal(panelGet.item.name, 'Panel A');
+	const simulationSearch = await handleLibrarySearchTask({ kind: 'simulation_model', keyword: 'resistor', simulationModelType: 'Ngspice', libraryUuid: 'system-library-1', limit: 3, page: 2 });
+	assert.equal(simulationSearch.items[0].uuid, 'simulation-1');
+	await assert.rejects(() => handleLibrarySearchTask({ kind: 'simulation_model', uuid: 'simulation-1' }), /only supports keyword search/);
 	const librarySources = await toSerializableAsync(await handleLibrarySourcesTask({ limit: 130 }));
 	assert.equal(librarySources.total, 130);
 	assert.equal(librarySources.libraries.length, 130);
@@ -760,6 +833,11 @@ async function main() {
 	assert.equal(flyingProbeExport.ok, true);
 	const autoLayoutExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'auto_layout_json' });
 	assert.equal(autoLayoutExport.file.preview, '{"components":[]}');
+	const ipcExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'ipc_2581c', fileName: 'manufacturing', fileType: 'xml', unit: 'mm', oemNumber: 'Device' });
+	assert.equal(ipcExport.file.type, 'application/xml');
+	const jrouterExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'jrouter_auto_route_json', fileName: 'jrouter' });
+	assert.equal(jrouterExport.file.preview, '{"nets":[]}');
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'ipc_2581c', fileType: 'zip' }), /fileType must be one of/);
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');
 }

@@ -671,6 +671,30 @@
     }
   },
   {
+    "name": "schematic_net_query",
+    "description": "Read schematic project networks from the active schematic using the official SCH_Net APIs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "default": "" },
+        "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
+      },
+      "oneOf": [
+        {
+          "properties": { "query": { "type": "string", "default": "" }, "mode": { "enum": ["all", "names"] }, "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 } },
+          "additionalProperties": false
+        },
+        {
+          "properties": { "query": { "type": "string", "minLength": 1 }, "mode": { "const": "exact" }, "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 } },
+          "required": ["query", "mode"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "schematic_drc_check",
     "description": "Run a read-only schematic design-rule check and return structured violations.",
     "inputSchema": {
@@ -765,6 +789,39 @@
         }
       ],
       "additionalProperties": false
+    }
+  },
+  {
+    "name": "schematic_pages_manage",
+    "description": "Create, copy, rename, or completely reorder schematic pages. Every mutation requires confirm: true; deletion is intentionally unavailable.",
+    "inputSchema": {
+      "type": "object",
+      "oneOf": [
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "create" }, "schematicUuid": { "type": "string", "minLength": 1 }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "schematicUuid", "confirm"],
+          "additionalProperties": false
+        },
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "copy" }, "sourcePageUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "sourcePageUuid", "confirm"],
+          "additionalProperties": false
+        },
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "rename" }, "schematicPageUuid": { "type": "string", "minLength": 1 }, "newName": { "type": "string", "minLength": 1 }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "schematicPageUuid", "newName", "confirm"],
+          "additionalProperties": false
+        },
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "reorder" }, "schematicUuid": { "type": "string", "minLength": 1 }, "orderedPageUuids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Every current page UUID of schematicUuid exactly once, in the requested final order." }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "schematicUuid", "orderedPageUuids", "confirm"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1174,10 +1231,11 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] },
         "kind": {
           "type": "string",
-          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "ipc_2581c", "open_database", "interactive_bom", "dsn", "auto_route_json", "jrouter_auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
         },
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string" },
+        "oemNumber": { "type": "string", "enum": ["Device", "Manufacturer Part", "Supplier Part", "Comment"] },
         "template": { "type": "string", "minLength": 1 },
         "assemblyVariantsConfig": {
           "type": "object",
@@ -1199,7 +1257,16 @@
         {
           "properties": {
             "domain": { "const": "pcb" },
-            "kind": { "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] }
+            "kind": { "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "jrouter_auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "pcb" },
+            "kind": { "const": "ipc_2581c" },
+            "fileType": { "enum": ["xml", "cvg", "2581"] },
+            "unit": { "enum": ["mm", "in"] },
+            "oemNumber": { "enum": ["Device", "Manufacturer Part", "Supplier Part", "Comment"] }
           }
         },
         {
@@ -1301,7 +1368,7 @@
   },
   {
     "name": "library_search",
-    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets. Device searches also support exact properties and official LCSC C-number mapping.",
+    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets, and search simulation models. Device searches also support exact properties and official LCSC C-number mapping.",
     "inputSchema": {
       "$defs": {
         "keyword": { "type": "string", "minLength": 1 },
@@ -1324,6 +1391,7 @@
           "additionalProperties": false
         },
         "libraryUuid": { "type": "string", "minLength": 1 },
+		"simulationModelType": { "type": "string", "enum": ["Ngspice", "SimulIDE"], "description": "Optional filter for simulation_model keyword searches." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
         "page": { "type": "integer", "minimum": 1, "maximum": 9999, "default": 1 }
       },
@@ -1484,7 +1552,20 @@
           },
           "required": ["kind", "keyword"],
           "additionalProperties": false
-        }
+		},
+		{
+		  "type": "object",
+		  "properties": {
+			"kind": { "const": "simulation_model" },
+			"keyword": { "$ref": "#/$defs/keyword" },
+			"simulationModelType": { "$ref": "#/$defs/simulationModelType" },
+			"libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+			"limit": { "$ref": "#/$defs/limit" },
+			"page": { "$ref": "#/$defs/page" }
+		  },
+		  "required": ["kind", "keyword"],
+		  "additionalProperties": false
+		}
       ]
     }
   }

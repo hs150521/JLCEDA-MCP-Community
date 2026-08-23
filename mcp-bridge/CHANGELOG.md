@@ -2,6 +2,9 @@
 
 ### Added
 
+- Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
+- Add bounded IPC-2581C and JRouter automatic-routing JSON manufacturing exports.
+- Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
 - Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 - Add read-only active-canvas snapshots, library-source discovery, and 3D-model/reusable-module/panel-library search and retrieval.
 - Add read-only workspace, team, project, and folder discovery through `workspace_query`.
@@ -10,6 +13,7 @@
 - Add `design_archive_export` for bounded, explicit native project/document archive retrieval without filesystem writes.
 - Include active canvas data unit in `eda_context`, and expose current/default PCB rule-configuration names through `pcb_constraints_query`.
 - Add confirmation-gated `pcb_constraints_manage` for bounded net-class, differential-pair, equal-length-group, and pad-pair-group changes with read-back verification.
+- Add `schematic_net_query` using the official 0.4.15 `SCH_Net` project-network APIs.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add structured PCB and schematic DRC tools with non-UI defaults.

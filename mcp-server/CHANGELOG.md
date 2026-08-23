@@ -6,6 +6,9 @@
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
 ## 2.1 development
 
+- Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
+- Add bounded IPC-2581C and JRouter automatic-routing JSON manufacturing exports.
+- Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
 - Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.

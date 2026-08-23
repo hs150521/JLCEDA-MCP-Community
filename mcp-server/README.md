@@ -4,6 +4,8 @@
 
 The server also exposes `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 
+`schematic_pages_manage` creates, copies, renames, or fully reorders pages only with `confirm: true`. A reorder must list every page UUID exactly once; the Bridge derives the ordered page objects from a fresh EDA read and returns verified bounded read-back data. Deletion is not exposed.
+
 `eda_context` reports the client edition, connection mode, editor version, build date, and current canvas data unit when available.
 
 `eda_canvas_snapshot` can return the rendered active canvas as a bounded MCP image without changing the document or viewport.
@@ -20,9 +22,11 @@ The server also exposes `schematic_document_action` for bounded schematic coordi
 
 `pcb_document_action` additionally supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
 
-The server exposes read-only PCB DRC, network-query, library-source/search, and manufacturing-query tools plus guarded document actions. Device `library_search` supports exact 0.4.15 properties, official single/batch LCSC C-number mapping, and exact UUID retrieval; symbol, footprint, 3D-model, reusable-module, and panel-library searches/retrieval use their supported APIs. PCB network exact queries can optionally include length, color, and associated primitives. Manufacturing export includes the official flying-probe test file. `pcb_document_action` exposes bounded PCB primitive/selection inspection, coordinate conversion/navigation, ratline control, and explicitly scoped routing cleanup. PCB auto-layout and auto-routing are not advertised because those methods are absent from the pinned 0.4.15 PCB API surface.
+The server exposes read-only PCB DRC, network-query, library-source/search, and manufacturing-query tools plus guarded document actions. Device `library_search` supports exact 0.4.15 properties, official single/batch LCSC C-number mapping, and exact UUID retrieval; symbol, footprint, 3D-model, reusable-module, and panel-library searches/retrieval use their supported APIs, while simulation-model search supports optional Ngspice/SimulIDE filtering. Its official model retrieval API requires a private deployment and is not exposed. PCB network exact queries can optionally include length, color, and associated primitives. Manufacturing export includes the official flying-probe test file, IPC-2581C, and JRouter JSON. `pcb_document_action` exposes bounded PCB primitive/selection inspection, coordinate conversion/navigation, ratline control, and explicitly scoped routing cleanup. PCB auto-layout and auto-routing are withheld pending isolated PCB runtime validation.
 
 `pcb_constraints_manage` provides a deliberately narrow, confirmation-gated interface for net classes, differential pairs, equal-length groups, and pad-pair groups. It validates operation-specific fields and returns a bounded read-back of the affected item; bulk rule-configuration replacement remains unavailable.
+
+`schematic_net_query` uses the official `SCH_Net` project-network APIs for bounded all, names, and exact lookups.
 
 公开的 `timeoutMs` 参数会传递到 WebSocket 请求。EDA 修改超时后，Bridge 仍会
 保持串行队列锁定，直到底层 API 真正结束；请求排队时间不计入 API 执行超时。

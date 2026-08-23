@@ -20,8 +20,10 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	// ── dmt_Schematic：原理图文档管理 ──────────────────────────────────────
 	{ fullName: 'eda.dmt_Schematic.createSchematic', summary: '创建原理图' },
 	{ fullName: 'eda.dmt_Schematic.createSchematicPage', summary: '创建原理图图页' },
+	{ fullName: 'eda.dmt_Schematic.copySchematicPage', summary: '复制原理图图页' },
 	{ fullName: 'eda.dmt_Schematic.modifySchematicName', summary: '修改原理图名称' },
 	{ fullName: 'eda.dmt_Schematic.modifySchematicPageName', summary: '修改原理图图页名称' },
+	{ fullName: 'eda.dmt_Schematic.reorderSchematicPages', summary: '重排原理图图页顺序' },
 	{ fullName: 'eda.dmt_Schematic.getCurrentSchematicInfo', summary: '获取当前原理图的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.getCurrentSchematicPageInfo', summary: '获取当前原理图图页的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.getAllSchematicsInfo', summary: '获取工程内所有原理图的详细属性' },
@@ -168,6 +170,10 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 
 	// ── sch_Netlist：网表 ──────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Netlist.setNetlist', summary: '更新网表' },
+	{ fullName: 'eda.sch_Net.getCurrentProjectAllNets', summary: '获取原理图工程网络' },
+	{ fullName: 'eda.sch_Net.getAllNets', summary: '获取原理图网络' },
+	{ fullName: 'eda.sch_Net.getNet', summary: '按名称获取原理图网络' },
+	{ fullName: 'eda.sch_Net.getAllNetsName', summary: '获取原理图网络名称' },
 
 	// ── sch_Utils：工具 ────────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Utils.splitLines', summary: '拆分多段线' },

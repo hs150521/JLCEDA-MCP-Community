@@ -3,6 +3,7 @@
 ## 2.1 development tools
 
 - `schematic_document_action`: inspect schematic coordinates, selected/region primitives, filters, and mouse position; navigate the view; select primitives; retrieve primitive properties/BBoxes; save or import schematic changes.
+- `schematic_pages_manage`: with `confirm: true`, create, copy, rename, or completely reorder pages in a schematic. Reorder accepts every current page UUID exactly once, reuses freshly read EDA page objects, and verifies the final order; deletion is not exposed.
 
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
 - `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
@@ -20,9 +21,9 @@
 - `pcb_document_action` also supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
 - `component_select`: supports exact device-property searches, including LCSC `supplierId`.
 - `library_sources`: enumerates available system, personal, project, and favorite libraries for use with targeted searches.
-- `library_search`: searches or retrieves 0.4.15 device, symbol, footprint, 3D-model, reusable-module, and panel-library assets; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
+- `library_search`: searches or retrieves 0.4.15 device, symbol, footprint, 3D-model, reusable-module, and panel-library assets, and searches simulation models; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
-- `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
+- `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, IPC-2581C, JRouter JSON, and related manufacturing artifacts.
 - `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.
 - `manufacture_export`: schematic BOM exports can select an assembly variant returned by `manufacture_templates_query`.
 
@@ -104,6 +105,7 @@ codex mcp list
 - 原理图语义读取与全工程审查
 - 器件搜索、交互放置和坐标自动放置
 - 电源/地网络标识及普通网络标签
+- 原理图与 PCB 网络查询（名称、详情、精确网络读取）
 - 多 EDA 页面枚举与明确选择
 - 受明确确认保护的 PCB 网类、差分对、等长组与 Pad 对组约束管理
 - 可选的官方 EDA API 搜索和透传调用

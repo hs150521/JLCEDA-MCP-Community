@@ -1,6 +1,6 @@
 import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, toSerializableAsync } from '../utils.ts';
 
-type LibrarySearchKind = 'device' | 'symbol' | 'footprint' | 'model_3d' | 'cbb' | 'panel_library';
+type LibrarySearchKind = 'device' | 'symbol' | 'footprint' | 'model_3d' | 'cbb' | 'panel_library' | 'simulation_model';
 
 const API_MODULE_BY_KIND: Record<LibrarySearchKind, string> = {
 	device: 'lib_Device',
@@ -9,6 +9,7 @@ const API_MODULE_BY_KIND: Record<LibrarySearchKind, string> = {
 	model_3d: 'lib_3DModel',
 	cbb: 'lib_Cbb',
 	panel_library: 'lib_PanelLibrary',
+	simulation_model: 'lib_SimulationModel',
 };
 
 const PROPERTY_KEYS: Record<LibrarySearchKind, readonly string[]> = {
@@ -18,11 +19,12 @@ const PROPERTY_KEYS: Record<LibrarySearchKind, readonly string[]> = {
 	model_3d: [],
 	cbb: [],
 	panel_library: [],
+	simulation_model: [],
 };
 
 function requiredKind(value: unknown): LibrarySearchKind {
-	if (value !== 'device' && value !== 'symbol' && value !== 'footprint' && value !== 'model_3d' && value !== 'cbb' && value !== 'panel_library')
-		throw new TypeError('kind must be device, symbol, footprint, model_3d, cbb, or panel_library.');
+	if (value !== 'device' && value !== 'symbol' && value !== 'footprint' && value !== 'model_3d' && value !== 'cbb' && value !== 'panel_library' && value !== 'simulation_model')
+		throw new TypeError('kind must be device, symbol, footprint, model_3d, cbb, panel_library, or simulation_model.');
 	return value;
 }
 
@@ -92,8 +94,11 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		throw new TypeError('Provide exactly one of keyword, properties, lcscIds, or uuid.');
 	if (lcscIds !== undefined && kind !== 'device')
 		throw new TypeError('lcscIds is only supported for device searches.');
-	if (payload.simulationModelType !== undefined)
-		throw new TypeError('simulationModelType is unavailable because lib_SimulationModel is not exposed by this client version.');
+	const simulationModelType = optionalNonEmptyString(payload, 'simulationModelType');
+	if (simulationModelType !== undefined && kind !== 'simulation_model')
+		throw new TypeError('simulationModelType is only supported for simulation_model searches.');
+	if (simulationModelType !== undefined && simulationModelType !== 'Ngspice' && simulationModelType !== 'SimulIDE')
+		throw new TypeError('simulationModelType must be Ngspice or SimulIDE.');
 	const allowMultiMatch = payload.allowMultiMatch === undefined ? false : payload.allowMultiMatch;
 	if (typeof allowMultiMatch !== 'boolean')
 		throw new TypeError('allowMultiMatch must be a boolean.');
@@ -105,6 +110,8 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	const api = getApi(kind);
 	let rawResults: unknown;
 	if (uuid) {
+		if (kind === 'simulation_model')
+			throw new TypeError('simulation_model only supports keyword search because the official get API requires a private deployment.');
 		if (typeof api.get !== 'function')
 			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.get API is unavailable in this client version.`);
 		const item = await (api.get as (uuid: string, libraryUuid?: string) => Promise<unknown>).call(api, uuid, libraryUuid);
@@ -132,9 +139,11 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	else {
 		if (typeof api.search !== 'function')
 			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.search API is unavailable in this client version.`);
-		rawResults = kind === 'device' || kind === 'symbol'
-			? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
-			: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
+		rawResults = kind === 'simulation_model'
+			? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, simulationModelType, limit, page)
+			: kind === 'device' || kind === 'symbol'
+				? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
+				: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
 	}
 	const allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
 	const items = await toSerializableAsync(allRawItems.slice(0, limit));
@@ -143,6 +152,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		kind,
 		searchMode: lcscIds ? 'lcsc_ids' : properties ? 'properties' : 'keyword',
 		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
+		...(simulationModelType ? { simulationModelType } : {}),
 		libraryUuid: libraryUuid ?? '',
 		page,
 		total: allRawItems.length,

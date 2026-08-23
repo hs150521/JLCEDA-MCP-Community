@@ -16,10 +16,12 @@ const PCB_METHODS = new Set([
 	'dxf',
 	'pdf',
 	'ipc_d356a',
+	'ipc_2581c',
 	'open_database',
 	'interactive_bom',
 	'dsn',
 	'auto_route_json',
+	'jrouter_auto_route_json',
 	'auto_layout_json',
 	'altium',
 	'pads',
@@ -51,6 +53,13 @@ function optionalString(input: Record<string, unknown>, key: string): string | u
 	if (typeof input[key] !== 'string' || input[key].trim().length === 0)
 		throw new TypeError(`${key} must be a non-empty string.`);
 	return input[key].trim();
+}
+
+function optionalEnum(input: Record<string, unknown>, key: string, values: readonly string[]): string | undefined {
+	const value = optionalString(input, key);
+	if (value !== undefined && !values.includes(value))
+		throw new TypeError(`${key} must be one of: ${values.join(', ')}.`);
+	return value;
 }
 
 function optionalAssemblyVariant(input: Record<string, unknown>): { text: string; value: string } | undefined {
@@ -112,10 +121,20 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 			'dxf': { method: 'getDxfFile', args: [fileName] },
 			'pdf': { method: 'getPdfFile', args: [fileName] },
 			'ipc_d356a': { method: 'getIpcD356AFile', args: [fileName] },
+			'ipc_2581c': {
+				method: 'getIpc2581CFile',
+				args: [
+					fileName,
+					optionalEnum(input, 'fileType', ['xml', 'cvg', '2581']),
+					optionalEnum(input, 'unit', ['mm', 'in']),
+					optionalEnum(input, 'oemNumber', ['Device', 'Manufacturer Part', 'Supplier Part', 'Comment']),
+				],
+			},
 			'open_database': { method: 'getOpenDatabaseDoublePlusFile', args: [fileName, unit] },
 			'interactive_bom': { method: 'getInteractiveBomFile', args: [fileName] },
 			'dsn': { method: 'getDsnFile', args: [fileName] },
 			'auto_route_json': { method: 'getAutoRouteJsonFile', args: [fileName] },
+			'jrouter_auto_route_json': { method: 'getAutoRouteJsonFileForJRouter', args: [fileName] },
 			'auto_layout_json': { method: 'getAutoLayoutJsonFile', args: [fileName] },
 			'altium': { method: 'getAltiumDesignerFile', args: [fileName] },
 			'pads': { method: 'getPadsFile', args: [fileName] },

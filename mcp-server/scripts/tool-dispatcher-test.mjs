@@ -27,7 +27,7 @@ const fakeBridge = {
     if (path === '/bridge/jlceda/component/place/close') {
       return { ok: true };
     }
-	if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query' || path === '/bridge/jlceda/design/source-export' || path === '/bridge/jlceda/pcb/constraints-manage') {
+	if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query' || path === '/bridge/jlceda/design/source-export' || path === '/bridge/jlceda/pcb/constraints-manage' || path === '/bridge/jlceda/schematic/pages-manage') {
 	  return { ok: true };
 	}
 	if (path === '/bridge/jlceda/library/preview') {
@@ -122,6 +122,14 @@ assert.equal(constraintsManageResult.structuredContent.ok, true);
 const constraintsManageCall = calls.find(call => call.path === '/bridge/jlceda/pcb/constraints-manage');
 assert.equal(constraintsManageCall.payload.confirm, true);
 
+const schematicPagesManageResult = await dispatcher.dispatch({
+	name: 'schematic_pages_manage',
+	arguments: { operation: 'reorder', schematicUuid: 'sch-1', orderedPageUuids: ['page-2', 'page-1'], confirm: true },
+});
+assert.equal(schematicPagesManageResult.structuredContent.ok, true);
+const schematicPagesManageCall = calls.find(call => call.path === '/bridge/jlceda/schematic/pages-manage');
+assert.deepEqual(schematicPagesManageCall.payload.orderedPageUuids, ['page-2', 'page-1']);
+
 const libraryPreviewResult = await dispatcher.dispatch({
   name: 'library_preview',
   arguments: { kind: 'symbol', uuid: 'symbol-1', libraryUuid: 'library-1', timeoutMs: 42000 },
@@ -190,6 +198,35 @@ const sourceExportSchema = z.fromJSONSchema(sourceExportDefinition.inputSchema);
 assert.equal(sourceExportSchema.safeParse({}).success, true);
 assert.equal(sourceExportSchema.safeParse({ action: 'footprints', limit: 1 }).success, true);
 assert.equal(sourceExportSchema.safeParse({ action: 'document', limit: 1 }).success, false);
+
+const schematicPagesDefinition = definitions.find((definition) => definition.name === 'schematic_pages_manage');
+assert.ok(schematicPagesDefinition);
+const schematicPagesSchema = z.fromJSONSchema(schematicPagesDefinition.inputSchema);
+for (const input of [
+	{ operation: 'create', schematicUuid: 'sch-1', confirm: true },
+	{ operation: 'copy', sourcePageUuid: 'page-1', confirm: true },
+	{ operation: 'copy', sourcePageUuid: 'page-1', schematicUuid: 'sch-2', confirm: true },
+	{ operation: 'rename', schematicPageUuid: 'page-1', newName: 'Power', confirm: true },
+	{ operation: 'reorder', schematicUuid: 'sch-1', orderedPageUuids: ['page-2', 'page-1'], confirm: true },
+]) {
+	assert.equal(schematicPagesSchema.safeParse(input).success, true, `schematic_pages_manage should accept ${JSON.stringify(input)}`);
+}
+for (const input of [
+	{ operation: 'create', schematicUuid: 'sch-1', confirm: false },
+	{ operation: 'copy', confirm: true },
+	{ operation: 'rename', schematicPageUuid: 'page-1', confirm: true },
+	{ operation: 'reorder', schematicUuid: 'sch-1', orderedPageUuids: [], confirm: true },
+	{ operation: 'delete', schematicPageUuid: 'page-1', confirm: true },
+]) {
+	assert.equal(schematicPagesSchema.safeParse(input).success, false, `schematic_pages_manage should reject ${JSON.stringify(input)}`);
+}
+
+const librarySearchDefinition = definitions.find((definition) => definition.name === 'library_search');
+assert.ok(librarySearchDefinition);
+const librarySearchSchema = z.fromJSONSchema(librarySearchDefinition.inputSchema);
+assert.equal(librarySearchSchema.safeParse({ kind: 'simulation_model', keyword: 'resistor', simulationModelType: 'Ngspice', limit: 3, page: 2 }).success, true);
+assert.equal(librarySearchSchema.safeParse({ kind: 'simulation_model', keyword: 'resistor', simulationModelType: 'invalid' }).success, false);
+assert.equal(librarySearchSchema.safeParse({ kind: 'simulation_model', uuid: 'simulation-1' }).success, false);
 
 await assert.rejects(
   dispatcher.dispatch({
