@@ -4,9 +4,13 @@ const DEFAULT_BRIDGE_TASK_TIMEOUT_MS = 25_000;
 const API_TASK_DEFAULT_TIMEOUT_MS = 15_000;
 const API_TASK_MIN_TIMEOUT_MS = 1_000;
 const API_TASK_MAX_TIMEOUT_MS = 120_000;
+const PCB_AUTO_TASK_DEFAULT_TIMEOUT_MS = 120_000;
+const PCB_AUTO_TASK_MIN_TIMEOUT_MS = 10_000;
 const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/api/invoke',
 	'/bridge/jlceda/context',
+	'/bridge/jlceda/pcb/auto-layout',
+	'/bridge/jlceda/pcb/auto-routing',
 ]);
 
 export class BridgeTaskTimeoutError extends Error {
@@ -50,12 +54,13 @@ export function resolveBridgeTaskTimeoutMs(path: string, payload: unknown): numb
 	}
 
 	if (!isPlainObjectRecord(payload) || payload.timeoutMs === undefined) {
-		return API_TASK_DEFAULT_TIMEOUT_MS;
+		return path.startsWith('/bridge/jlceda/pcb/auto-') ? PCB_AUTO_TASK_DEFAULT_TIMEOUT_MS : API_TASK_DEFAULT_TIMEOUT_MS;
 	}
 
 	const timeoutMs = Number(payload.timeoutMs);
-	if (!Number.isInteger(timeoutMs) || timeoutMs < API_TASK_MIN_TIMEOUT_MS || timeoutMs > API_TASK_MAX_TIMEOUT_MS) {
-		throw new RangeError(`timeoutMs 必须是 ${String(API_TASK_MIN_TIMEOUT_MS)} 到 ${String(API_TASK_MAX_TIMEOUT_MS)} 之间的整数。`);
+	const minimum = path.startsWith('/bridge/jlceda/pcb/auto-') ? PCB_AUTO_TASK_MIN_TIMEOUT_MS : API_TASK_MIN_TIMEOUT_MS;
+	if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > API_TASK_MAX_TIMEOUT_MS) {
+		throw new RangeError(`timeoutMs 必须是 ${String(minimum)} 到 ${String(API_TASK_MAX_TIMEOUT_MS)} 之间的整数。`);
 	}
 
 	return timeoutMs;

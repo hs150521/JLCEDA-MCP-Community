@@ -7,6 +7,8 @@
 ## 2.1 development
 
 - Add the read-only `pcb_drc_check` MCP tool with strict checking and structured violation results.
+- Add `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query` tool definitions and synchronized routes.
+- Expose supported PCB auto-routing controls from `@jlceda/pro-api-types@0.4.15`.
 
 ## 2.1.5 - 2026-08-23
 

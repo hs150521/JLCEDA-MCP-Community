@@ -113,7 +113,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    if (toolName !== 'api_invoke' && toolName !== 'eda_context') {
+    if (toolName !== 'api_invoke' && toolName !== 'eda_context' && toolName !== 'pcb_auto_layout' && toolName !== 'pcb_auto_routing') {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
@@ -121,8 +121,9 @@ export class ToolDispatcher {
     }
 
     const timeoutMs = Number(args.timeoutMs);
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
-      throw new RangeError('timeoutMs must be an integer between 1000 and 120000');
+    const minimum = toolName.startsWith('pcb_auto_') ? 10_000 : 1_000;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
+      throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
     }
     return timeoutMs;
   }
@@ -140,6 +141,10 @@ export class ToolDispatcher {
       'netlabel_place': '/bridge/jlceda/netlabel/place',
       'netlabel_modify': '/bridge/jlceda/netlabel/modify',
       'pcb_drc_check': '/bridge/jlceda/pcb/drc-check',
+      'pcb_auto_layout': '/bridge/jlceda/pcb/auto-layout',
+      'pcb_auto_routing': '/bridge/jlceda/pcb/auto-routing',
+      'pcb_net_query': '/bridge/jlceda/net/query-pcb',
+      'schematic_net_query': '/bridge/jlceda/net/query-schematic',
       'schematic_auto_layout': '/bridge/jlceda/auto/layout',
       'schematic_auto_routing': '/bridge/jlceda/auto/routing',
       'api_index': '/bridge/jlceda/api/index',

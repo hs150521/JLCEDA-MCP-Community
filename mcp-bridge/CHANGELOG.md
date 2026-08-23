@@ -18,6 +18,8 @@
 ### 2.1 development
 
 - Add the read-only `pcb_drc_check` tool with structured violation results and a non-UI default.
+- Add PCB auto-layout and auto-routing handlers with the `0.4.15` routing options and long-operation quarantine.
+- Add PCB and schematic network query handlers with filtering, limits, and serializable results.
 
 ### Fixes
 

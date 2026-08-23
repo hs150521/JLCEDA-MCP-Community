@@ -1,5 +1,12 @@
 # JLCEDA MCP Community
 
+## 2.1 development tools
+
+- `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
+- `pcb_auto_layout`: run the EDA PCB auto-layout operation.
+- `pcb_auto_routing`: run PCB auto-routing with network, layer, corner-style, and optimization options.
+- `pcb_net_query` and `schematic_net_query`: query active PCB or project schematic networks with filtering and limits.
+
 当前开发版会拒绝空的自动布局/自动布线 UUID 选择；EDA 操作超时后仍保持串行，
 直到底层 API 真正结束；网络标签修改同时支持普通标签和组件形式的电源/地标识。
 

@@ -572,5 +572,93 @@
       },
       "additionalProperties": false
     }
+  },
+  {
+    "name": "pcb_auto_layout",
+    "description": "Run the EDA PCB automatic-layout operation. This is a write operation that may move components; save the project and review the result before continuing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 120000,
+          "default": 120000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_auto_routing",
+    "description": "Run the EDA PCB automatic-routing operation. This is a write operation that may create or change tracks; save the project and review the result before continuing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "routingNets": {
+          "oneOf": [
+            { "type": "string", "enum": ["selected", "selectedComponents"] },
+            { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          ],
+          "description": "Optional networks to route, or selected/selectedComponents to use the EDA selection."
+        },
+        "ignoreNets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Networks excluded from automatic routing."
+        },
+        "cornerStyle": {
+          "type": "integer",
+          "enum": [0, 1],
+          "description": "Routing corner style: 0 for 45 degrees, 1 for 90 degrees."
+        },
+        "existingPrimitiveMode": {
+          "type": "string",
+          "enum": ["keep", "remove"],
+          "description": "Whether existing tracks and vias are kept or removed."
+        },
+        "optimization": {
+          "type": "integer",
+          "enum": [0, 1],
+          "description": "Routing priority: 0 for faster execution, 1 for completion rate."
+        },
+        "layers": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Optional copper layer IDs allowed for routing."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 120000,
+          "default": 120000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_net_query",
+    "description": "Read PCB network details from the active PCB document, optionally filtered by a network name or property.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "default": "" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "schematic_net_query",
+    "description": "Read project-level schematic network details from the active EDA document, optionally filtered by a network name or property.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "default": "" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
+      },
+      "additionalProperties": false
+    }
   }
 ]

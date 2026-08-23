@@ -7,8 +7,10 @@ require('ts-node/register/transpile-only');
 const { handleAutoLayoutTask } = require('../src/mcp/auto-layout-handler.ts');
 const { handleAutoRoutingTask } = require('../src/mcp/auto-routing-handler.ts');
 const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-auto-handler.ts');
+const { handlePcbNetQueryTask, handleSchematicNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
+const { handlePcbAutoLayoutTask, handlePcbAutoRoutingTask } = require('../src/mcp/pcb-auto-handler.ts');
 const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
@@ -42,6 +44,16 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 
 async function main() {
 	globalThis.eda = {
+		pcb_Document: {
+			context: {},
+			async autoLayout() { return { moved: 2 }; },
+			async autoRouting(props) {
+				assert.deepEqual(props, { RoutingNets: ['VCC'], ignoreNets: ['GND'], cornerStyle: 0 });
+				return { routed: 3 };
+			},
+		},
+		pcb_Net: { getAllNets: async () => [{ net: 'VCC', length: 10 }, { net: 'GND', length: 20 }] },
+		sch_Net: { getCurrentProjectAllNets: async () => [{ net: 'DATA', pins: 2 }] },
 		pcb_Drc: {
 			check: async (strict, showUi, verbose) => {
 				assert.equal(strict, true);
@@ -51,6 +63,10 @@ async function main() {
 			},
 		},
 	};
+	assert.equal((await handlePcbAutoLayoutTask({ uuids: ['U1'] })).result.moved, 2);
+	assert.equal((await handlePcbAutoRoutingTask({ routingNets: ['VCC'], ignoreNets: ['GND'], cornerStyle: 0 })).result.routed, 3);
+	assert.equal((await handlePcbNetQueryTask({ query: 'vcc' })).returned, 1);
+	assert.equal((await handleSchematicNetQueryTask({})).total, 1);
 	const detailedDrc = await handlePcbDrcCheckTask({});
 	assert.equal(detailedDrc.ok, false);
 	assert.equal(detailedDrc.resultType, 'detailed');

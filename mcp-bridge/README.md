@@ -1,5 +1,9 @@
 # MCP Bridge 社区版
 
+## 2.1 PCB tools
+
+The 2.1 development branch adds `pcb_drc_check`, `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query`. PCB routing options are passed to the EDA `pcb_Document.autoRouting` API; unsupported APIs return an explicit client-version error.
+
 当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
 直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。
 
