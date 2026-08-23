@@ -703,6 +703,13 @@
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "additionalProperties": false
+        },
         { "type": "object", "properties": { "action": { "const": "primitive_at_point" }, "x": { "type": "number" }, "y": { "type": "number" } }, "required": ["action", "x", "y"] },
         { "type": "object", "properties": { "action": { "const": "navigate_to_coordinates" }, "x": { "type": "number" }, "y": { "type": "number" } }, "required": ["action", "x", "y"] },
         { "type": "object", "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } }, "required": ["action", "left", "right", "top", "bottom"] },
@@ -736,7 +743,6 @@
           "type": "object",
           "properties": {
             "action": { "const": "import_changes" },
-            "uuid": { "type": "string", "minLength": 1 },
             "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
           },
           "required": ["action"],
