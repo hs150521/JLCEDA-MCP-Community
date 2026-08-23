@@ -1,6 +1,6 @@
 import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
-type PcbDocumentAction = 'status' | 'canvas_origin' | 'filter_configuration' | 'selection' | 'primitive_at_point' | 'primitives_in_region' | 'convert_canvas_to_data' | 'convert_data_to_canvas' | 'navigate_to_coordinates' | 'navigate_to_region' | 'zoom_to_board_outline' | 'save' | 'start_ratline' | 'stop_ratline' | 'clear_routing' | 'import_changes' | 'import_auto_route_json' | 'import_auto_route_ses' | 'import_auto_layout_json';
+type PcbDocumentAction = 'status' | 'canvas_origin' | 'filter_configuration' | 'selection' | 'mouse_position' | 'select_primitives' | 'clear_selection' | 'primitive_type_by_id' | 'primitive_by_id' | 'primitives_by_id' | 'primitives_bbox' | 'primitive_at_point' | 'primitives_in_region' | 'convert_canvas_to_data' | 'convert_data_to_canvas' | 'navigate_to_coordinates' | 'navigate_to_region' | 'zoom_to_board_outline' | 'save' | 'start_ratline' | 'stop_ratline' | 'clear_routing' | 'import_changes' | 'import_auto_route_json' | 'import_auto_route_ses' | 'import_auto_layout_json';
 
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 
@@ -29,6 +29,16 @@ interface PcbDocumentApi {
 interface PcbSelectControlApi {
 	getAllSelectedPrimitives_PrimitiveId?: () => Promise<unknown>;
 	getAllSelectedPrimitives?: () => Promise<unknown>;
+	getCurrentMousePosition?: () => Promise<unknown>;
+	doSelectPrimitives?: (primitiveIds: string | string[]) => Promise<unknown>;
+	clearSelected?: () => Promise<unknown>;
+}
+
+interface PcbPrimitiveApi {
+	getPrimitiveTypeByPrimitiveId?: (id: string) => Promise<unknown>;
+	getPrimitiveByPrimitiveId?: (id: string) => Promise<unknown>;
+	getPrimitivesByPrimitiveId?: (ids: string[]) => Promise<unknown>;
+	getPrimitivesBBox?: (ids: string[]) => Promise<unknown>;
 }
 
 const MAX_INSPECT_ITEMS = 500;
@@ -46,7 +56,7 @@ function getApi(): PcbDocumentApi {
 }
 
 function requiredAction(value: unknown): PcbDocumentAction {
-	if (value !== 'status' && value !== 'canvas_origin' && value !== 'filter_configuration' && value !== 'selection' && value !== 'primitive_at_point' && value !== 'primitives_in_region' && value !== 'convert_canvas_to_data' && value !== 'convert_data_to_canvas' && value !== 'navigate_to_coordinates' && value !== 'navigate_to_region' && value !== 'zoom_to_board_outline' && value !== 'save' && value !== 'start_ratline' && value !== 'stop_ratline' && value !== 'clear_routing' && value !== 'import_changes' && value !== 'import_auto_route_json' && value !== 'import_auto_route_ses' && value !== 'import_auto_layout_json')
+	if (value !== 'status' && value !== 'canvas_origin' && value !== 'filter_configuration' && value !== 'selection' && value !== 'mouse_position' && value !== 'select_primitives' && value !== 'clear_selection' && value !== 'primitive_type_by_id' && value !== 'primitive_by_id' && value !== 'primitives_by_id' && value !== 'primitives_bbox' && value !== 'primitive_at_point' && value !== 'primitives_in_region' && value !== 'convert_canvas_to_data' && value !== 'convert_data_to_canvas' && value !== 'navigate_to_coordinates' && value !== 'navigate_to_region' && value !== 'zoom_to_board_outline' && value !== 'save' && value !== 'start_ratline' && value !== 'stop_ratline' && value !== 'clear_routing' && value !== 'import_changes' && value !== 'import_auto_route_json' && value !== 'import_auto_route_ses' && value !== 'import_auto_layout_json')
 		throw new TypeError('action is not supported by pcb_document_action.');
 	return value;
 }
@@ -64,6 +74,13 @@ function optionalInspectLimit(input: Record<string, unknown>): number {
 	if (typeof input.limit !== 'number' || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_INSPECT_ITEMS)
 		throw new RangeError(`limit must be an integer between 1 and ${String(MAX_INSPECT_ITEMS)}.`);
 	return input.limit;
+}
+
+function requiredPrimitiveIds(input: Record<string, unknown>): string[] {
+	const value = input.ids;
+	if (!Array.isArray(value) || value.length === 0 || value.length > MAX_INSPECT_ITEMS || value.some(id => typeof id !== 'string' || id.trim().length === 0))
+		throw new TypeError(`ids must contain between 1 and ${String(MAX_INSPECT_ITEMS)} non-empty strings.`);
+	return value.map(id => (id as string).trim());
 }
 
 function optionalString(input: Record<string, unknown>, key: string): string | undefined {
@@ -147,6 +164,55 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 			result.objectsTruncated = objects.length > limit;
 		}
 		return result;
+	}
+	if (action === 'mouse_position') {
+		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const selectApi = eda?.pcb_SelectControl as PcbSelectControlApi | undefined;
+		if (!selectApi || typeof selectApi.getCurrentMousePosition !== 'function')
+			throw new TypeError('EDA pcb_SelectControl.getCurrentMousePosition API is unavailable in this client version.');
+		return { ok: true, action, position: await toSerializableAsync(await selectApi.getCurrentMousePosition()) };
+	}
+	if (action === 'select_primitives' || action === 'clear_selection') {
+		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const selectApi = eda?.pcb_SelectControl as PcbSelectControlApi | undefined;
+		if (!selectApi)
+			throw new TypeError('EDA pcb_SelectControl selection APIs are unavailable in this client version.');
+		if (action === 'select_primitives') {
+			if (typeof selectApi.doSelectPrimitives !== 'function')
+				throw new TypeError('EDA pcb_SelectControl.doSelectPrimitives API is unavailable in this client version.');
+			const ids = requiredPrimitiveIds(payload);
+			return { ok: true, action, primitiveIds: ids, selected: await selectApi.doSelectPrimitives(ids) };
+		}
+		if (typeof selectApi.clearSelected !== 'function')
+			throw new TypeError('EDA pcb_SelectControl.clearSelected API is unavailable in this client version.');
+		return { ok: true, action, cleared: await selectApi.clearSelected() };
+	}
+	if (action === 'primitive_type_by_id' || action === 'primitive_by_id' || action === 'primitives_by_id' || action === 'primitives_bbox') {
+		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const primitive = eda?.pcb_Primitive as PcbPrimitiveApi | undefined;
+		if (!primitive)
+			throw new TypeError('EDA pcb_Primitive API is unavailable in this client version.');
+		if (action === 'primitive_type_by_id' || action === 'primitive_by_id') {
+			const id = optionalString(payload, 'id');
+			if (!id)
+				throw new TypeError('id must be a non-empty string.');
+			const method = action === 'primitive_type_by_id' ? primitive.getPrimitiveTypeByPrimitiveId : primitive.getPrimitiveByPrimitiveId;
+			if (typeof method !== 'function')
+				throw new TypeError(`EDA pcb_Primitive.${action === 'primitive_type_by_id' ? 'getPrimitiveTypeByPrimitiveId' : 'getPrimitiveByPrimitiveId'} API is unavailable in this client version.`);
+			const value = await method.call(primitive, id);
+			return action === 'primitive_type_by_id' ? { ok: true, action, id, primitiveType: await toSerializableAsync(value) } : { ok: true, action, id, primitive: await toSerializableAsync(value) };
+		}
+		const ids = requiredPrimitiveIds(payload);
+		if (action === 'primitives_by_id') {
+			if (typeof primitive.getPrimitivesByPrimitiveId !== 'function')
+				throw new TypeError('EDA pcb_Primitive.getPrimitivesByPrimitiveId API is unavailable in this client version.');
+			const raw = await primitive.getPrimitivesByPrimitiveId(ids);
+			const values = Array.isArray(raw) ? raw : [];
+			return { ok: true, action, ids, primitives: await serializeBoundedArray(values.slice(0, MAX_INSPECT_ITEMS)), truncated: values.length > MAX_INSPECT_ITEMS };
+		}
+		if (typeof primitive.getPrimitivesBBox !== 'function')
+			throw new TypeError('EDA pcb_Primitive.getPrimitivesBBox API is unavailable in this client version.');
+		return { ok: true, action, ids, bounds: await toSerializableAsync(await primitive.getPrimitivesBBox(ids)) };
 	}
 	if (action === 'primitive_at_point') {
 		if (typeof api.getPrimitiveAtPoint !== 'function')

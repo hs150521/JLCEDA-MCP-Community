@@ -670,6 +670,40 @@
     }
   },
   {
+    "name": "schematic_document_action",
+    "description": "Inspect schematic coordinates, selection, filters, and primitives; navigate the active canvas; or perform explicitly requested selection/save/import actions.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["status", "filter_configuration", "selection", "mouse_position", "primitive_at_point", "primitives_in_region", "navigate_to_coordinates", "navigate_to_region", "save", "import_changes", "select_primitives", "clear_selection", "primitive_type_by_id", "primitive_by_id", "primitives_by_id", "primitives_bbox"], "default": "status" },
+        "x": { "type": "number", "description": "Required for point inspection and coordinate navigation." },
+        "y": { "type": "number", "description": "Required for point inspection and coordinate navigation." },
+        "left": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "right": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "top": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "bottom": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Primitive IDs for selection or primitive queries." },
+        "id": { "type": "string", "minLength": 1, "description": "One primitive ID for primitive_by_id or primitive_type_by_id." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120 },
+        "includeObjects": { "type": "boolean", "default": false },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "oneOf": [
+        { "type": "object", "properties": { "action": { "const": "primitive_at_point" }, "x": { "type": "number" }, "y": { "type": "number" } }, "required": ["action", "x", "y"] },
+        { "type": "object", "properties": { "action": { "const": "navigate_to_coordinates" }, "x": { "type": "number" }, "y": { "type": "number" } }, "required": ["action", "x", "y"] },
+        { "type": "object", "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } }, "required": ["action", "left", "right", "top", "bottom"] },
+        { "type": "object", "properties": { "action": { "const": "navigate_to_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } }, "required": ["action", "left", "right", "top", "bottom"] },
+        { "type": "object", "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
+        { "type": "object", "properties": { "action": { "const": "primitive_by_id" }, "id": { "type": "string", "minLength": 1 } }, "required": ["action", "id"] },
+        { "type": "object", "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 } }, "required": ["action", "id"] },
+        { "type": "object", "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
+        { "type": "object", "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
+        { "type": "object", "properties": { "action": { "enum": ["status", "filter_configuration", "selection", "mouse_position", "save", "import_changes", "clear_selection"] } } }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "pcb_constraints_query",
     "description": "Read PCB rules and constraint groups such as net classes, differential pairs, and length groups.",
     "inputSchema": {
@@ -762,7 +796,7 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["status", "canvas_origin", "filter_configuration", "selection", "primitive_at_point", "primitives_in_region", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates", "navigate_to_region", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
+        "action": { "type": "string", "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "select_primitives", "clear_selection", "primitive_type_by_id", "primitive_by_id", "primitives_by_id", "primitives_bbox", "primitive_at_point", "primitives_in_region", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates", "navigate_to_region", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
         "routingType": { "type": "string", "enum": ["all", "net", "connection"], "default": "all", "description": "Required for clear_routing semantics; all clears all tracks/vias, net or connection limits the scope." },
         "x": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
         "y": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
@@ -770,6 +804,8 @@
         "right": { "type": "number", "description": "Required region bound for region inspection/navigation." },
         "top": { "type": "number", "description": "Required region bound for region inspection/navigation." },
         "bottom": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Primitive IDs for selection or primitive queries." },
+        "id": { "type": "string", "minLength": 1, "description": "One primitive ID for primitive_by_id or primitive_type_by_id." },
         "leftToRight": { "type": "boolean", "default": true, "description": "Region selection direction passed to getPrimitivesInRegion." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "Maximum selected/region primitives returned." },
         "includeObjects": { "type": "boolean", "default": false, "description": "For selection, include serialized selected primitive objects in addition to IDs." },
@@ -779,6 +815,31 @@
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
       "oneOf": [
+        {
+          "type": "object",
+          "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
+          "required": ["action", "ids"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 } },
+          "required": ["action", "id"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitive_by_id" }, "id": { "type": "string", "minLength": 1 } },
+          "required": ["action", "id"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
+          "required": ["action", "ids"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
+          "required": ["action", "ids"]
+        },
         {
           "type": "object",
           "properties": { "action": { "const": "primitive_at_point" }, "x": { "type": "number" }, "y": { "type": "number" } },
@@ -812,7 +873,7 @@
         {
           "type": "object",
           "properties": {
-            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "selection", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"] }
+            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "clear_selection", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"] }
           }
         }
       ],

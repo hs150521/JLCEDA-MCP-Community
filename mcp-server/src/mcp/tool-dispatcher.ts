@@ -113,7 +113,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_document_action'].includes(toolName)) {
+    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_document_action', 'schematic_document_action'].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
@@ -121,7 +121,7 @@ export class ToolDispatcher {
     }
 
     const timeoutMs = Number(args.timeoutMs);
-    const extendedReadTool = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'manufacture_export', 'pcb_document_action'].includes(toolName);
+    const extendedReadTool = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'manufacture_export', 'pcb_document_action', 'schematic_document_action'].includes(toolName);
     const minimum = extendedReadTool ? 5_000 : 1_000;
     if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
       throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
@@ -149,6 +149,7 @@ export class ToolDispatcher {
       'pcb_layer_query': '/bridge/jlceda/pcb/layer-query',
       'pcb_realtime_drc': '/bridge/jlceda/pcb/realtime-drc',
       'pcb_document_action': '/bridge/jlceda/pcb/document',
+      'schematic_document_action': '/bridge/jlceda/schematic/document',
       'project_info': '/bridge/jlceda/project/info',
       'manufacture_export': '/bridge/jlceda/manufacture/export',
       'manufacture_templates_query': '/bridge/jlceda/manufacture/templates-query',

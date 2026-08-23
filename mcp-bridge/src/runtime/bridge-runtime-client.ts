@@ -36,6 +36,7 @@ import { handlePcbDrcCheckTask } from '../mcp/pcb-drc-handler.ts';
 import { handlePcbLayerQueryTask } from '../mcp/pcb-layer-handler.ts';
 import { handlePcbRealtimeDrcTask } from '../mcp/pcb-realtime-drc-handler.ts';
 import { handleProjectInfoTask } from '../mcp/project-info-handler.ts';
+import { handleSchematicDocumentTask } from '../mcp/schematic-document-handler.ts';
 import { handleSchematicDrcCheckTask } from '../mcp/schematic-drc-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
@@ -68,6 +69,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/pcb/drc-check': handlePcbDrcCheckTask,
 	'/bridge/jlceda/pcb/document': handlePcbDocumentTask,
 	'/bridge/jlceda/schematic/drc-check': handleSchematicDrcCheckTask,
+	'/bridge/jlceda/schematic/document': handleSchematicDocumentTask,
 	'/bridge/jlceda/pcb/constraints-query': handlePcbConstraintsQueryTask,
 	'/bridge/jlceda/netlist/compare': handleNetlistCompareTask,
 	'/bridge/jlceda/pcb/layer-query': handlePcbLayerQueryTask,

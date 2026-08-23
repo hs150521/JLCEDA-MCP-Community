@@ -2,6 +2,8 @@
 
 ## 2.1 development tools
 
+- `schematic_document_action`: inspect schematic coordinates, selected/region primitives, filters, and mouse position; navigate the view; select primitives; retrieve primitive properties/BBoxes; save or import schematic changes.
+
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
 - `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
@@ -9,6 +11,7 @@
 - `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
 - `pcb_document_action`: inspect PCB coordinates, selected/region primitives, filters, and canvas state; navigate the view; save the active board, import schematic changes, or import Base64 auto-layout/route files.
+- `pcb_document_action` also supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
 - `component_select`: supports exact device-property searches, including LCSC `supplierId`.
 - `library_search`: searches or retrieves 0.4.15 device, symbol, and footprint libraries; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.

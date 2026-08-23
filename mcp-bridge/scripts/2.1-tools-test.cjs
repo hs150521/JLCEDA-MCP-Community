@@ -17,6 +17,7 @@ const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { handlePcbLayerQueryTask } = require('../src/mcp/pcb-layer-handler.ts');
 const { handlePcbRealtimeDrcTask } = require('../src/mcp/pcb-realtime-drc-handler.ts');
 const { handleProjectInfoTask } = require('../src/mcp/project-info-handler.ts');
+const { handleSchematicDocumentTask } = require('../src/mcp/schematic-document-handler.ts');
 const { handleSchematicDrcCheckTask } = require('../src/mcp/schematic-drc-handler.ts');
 
 async function main() {
@@ -101,6 +102,30 @@ async function main() {
 		pcb_SelectControl: {
 			async getAllSelectedPrimitives_PrimitiveId() { return ['pad-1', 'track-1']; },
 			async getAllSelectedPrimitives() { return [{ uuid: 'pad-1', type: 'PAD' }, { uuid: 'track-1', type: 'TRACK' }]; },
+			async getCurrentMousePosition() { return { x: 25, y: 35 }; },
+			async doSelectPrimitives(ids) {
+				assert.deepEqual(ids, ['pad-1']);
+				return true;
+			},
+			async clearSelected() { return true; },
+		},
+		pcb_Primitive: {
+			async getPrimitiveTypeByPrimitiveId(id) {
+				assert.equal(id, 'pad-1');
+				return 'PAD';
+			},
+			async getPrimitiveByPrimitiveId(id) {
+				assert.equal(id, 'pad-1');
+				return { uuid: id, type: 'PAD' };
+			},
+			async getPrimitivesByPrimitiveId(ids) {
+				assert.deepEqual(ids, ['pad-1']);
+				return [{ uuid: ids[0], type: 'PAD' }];
+			},
+			async getPrimitivesBBox(ids) {
+				assert.deepEqual(ids, ['pad-1']);
+				return { minX: 1, minY: 2, maxX: 3, maxY: 4 };
+			},
 		},
 		dmt_SelectControl: { async getCurrentDocumentInfo() { return { documentType: 1, uuid: 'page-1' }; } },
 		lib_Device: {
@@ -182,6 +207,52 @@ async function main() {
 			async getPhysicalStackingConfiguration(name) { return { name, layerCount: 2 }; },
 		},
 		sch_Drc: { async check() { return []; } },
+		sch_Document: {
+			async getCurrentFilterConfiguration() { return { wires: true }; },
+			async navigateToCoordinates(x, y) {
+				assert.deepEqual([x, y], [25, 35]);
+				return true;
+			},
+			async navigateToRegion(left, right, top, bottom) {
+				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
+				return true;
+			},
+			getPrimitiveAtPoint(x, y) { return { uuid: 'sch-pin-1', x, y }; },
+			getPrimitivesInRegion(left, right, top, bottom) {
+				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
+				return [{ uuid: 'sch-pin-1', type: 'PIN' }];
+			},
+			async save() { return true; },
+			async importChanges() { return true; },
+		},
+		sch_SelectControl: {
+			async getAllSelectedPrimitives_PrimitiveId() { return ['sch-pin-1']; },
+			async getAllSelectedPrimitives() { return [{ uuid: 'sch-pin-1', type: 'PIN' }]; },
+			async getCurrentMousePosition() { return { x: 25, y: 35 }; },
+			async doSelectPrimitives(ids) {
+				assert.deepEqual(ids, ['sch-pin-1']);
+				return true;
+			},
+			clearSelected() { return true; },
+		},
+		sch_Primitive: {
+			async getPrimitiveTypeByPrimitiveId(id) {
+				assert.equal(id, 'sch-pin-1');
+				return 'PIN';
+			},
+			async getPrimitiveByPrimitiveId(id) {
+				assert.equal(id, 'sch-pin-1');
+				return { uuid: id, type: 'PIN' };
+			},
+			async getPrimitivesByPrimitiveId(ids) {
+				assert.deepEqual(ids, ['sch-pin-1']);
+				return [{ uuid: ids[0], type: 'PIN' }];
+			},
+			async getPrimitivesBBox(ids) {
+				assert.deepEqual(ids, ['sch-pin-1']);
+				return { minX: 1, minY: 2, maxX: 3, maxY: 4 };
+			},
+		},
 		sys_Tool: {
 			async netlistComparison(a, b) {
 				if (a === 'net-1') {
@@ -246,6 +317,13 @@ async function main() {
 	const selection = await handlePcbDocumentTask({ action: 'selection', includeObjects: true });
 	assert.equal(selection.selectedCount, 2);
 	assert.equal(selection.selectedPrimitives.length, 2);
+	assert.deepEqual((await handlePcbDocumentTask({ action: 'mouse_position' })).position, { x: 25, y: 35 });
+	assert.equal((await handlePcbDocumentTask({ action: 'select_primitives', ids: ['pad-1'] })).selected, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'clear_selection' })).cleared, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'primitive_type_by_id', id: 'pad-1' })).primitiveType, 'PAD');
+	assert.equal((await handlePcbDocumentTask({ action: 'primitive_by_id', id: 'pad-1' })).primitive.uuid, 'pad-1');
+	assert.equal((await handlePcbDocumentTask({ action: 'primitives_by_id', ids: ['pad-1'] })).primitives.length, 1);
+	assert.deepEqual((await handlePcbDocumentTask({ action: 'primitives_bbox', ids: ['pad-1'] })).bounds, { minX: 1, minY: 2, maxX: 3, maxY: 4 });
 	assert.equal((await handlePcbDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'pad-1');
 	const region = await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 });
 	assert.equal(region.total, 2);
@@ -268,6 +346,23 @@ async function main() {
 	assert.equal(pcbNetAnalysis.primitiveCount, 1);
 	const schDrc = await handleSchematicDrcCheckTask({});
 	assert.equal(schDrc.ok, true);
+	assert.deepEqual((await handleSchematicDocumentTask({ action: 'status' })).filterConfiguration, { wires: true });
+	const schSelection = await handleSchematicDocumentTask({ action: 'selection', includeObjects: true });
+	assert.equal(schSelection.selectedCount, 1);
+	assert.equal(schSelection.selectedPrimitives.length, 1);
+	assert.deepEqual((await handleSchematicDocumentTask({ action: 'mouse_position' })).position, { x: 25, y: 35 });
+	assert.equal((await handleSchematicDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'sch-pin-1');
+	assert.equal((await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 })).total, 1);
+	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
+	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).navigated, true);
+	assert.equal((await handleSchematicDocumentTask({ action: 'select_primitives', ids: ['sch-pin-1'] })).selected, true);
+	assert.equal((await handleSchematicDocumentTask({ action: 'clear_selection' })).cleared, true);
+	assert.equal((await handleSchematicDocumentTask({ action: 'primitive_type_by_id', id: 'sch-pin-1' })).primitiveType, 'PIN');
+	assert.equal((await handleSchematicDocumentTask({ action: 'primitive_by_id', id: 'sch-pin-1' })).primitive.uuid, 'sch-pin-1');
+	assert.equal((await handleSchematicDocumentTask({ action: 'primitives_by_id', ids: ['sch-pin-1'] })).primitives.length, 1);
+	assert.deepEqual((await handleSchematicDocumentTask({ action: 'primitives_bbox', ids: ['sch-pin-1'] })).bounds, { minX: 1, minY: 2, maxX: 3, maxY: 4 });
+	assert.equal((await handleSchematicDocumentTask({ action: 'save' })).saved, true);
+	assert.equal((await handleSchematicDocumentTask({ action: 'import_changes' })).imported, true);
 	const constraints = await handlePcbConstraintsQueryTask({ kind: 'differential_pairs' });
 	assert.equal(constraints.count, 1);
 	const netRules = await handlePcbConstraintsQueryTask({ kind: 'net_rules' });

@@ -6,6 +6,8 @@
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
 ## 2.1 development
 
+- Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
+- Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add `pcb_layer_query`, `pcb_realtime_drc`, exact `component_select.properties` search, and external route/layout import support.
 - Add `manufacture_templates_query` and `manufacture_export.template` for selecting official BOM templates.
 - Add `library_search` for official device, symbol, and footprint searches.
