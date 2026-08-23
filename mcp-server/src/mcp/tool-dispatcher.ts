@@ -30,7 +30,10 @@ export interface ToolDefinition {
 
 export interface ToolCallResult {
   [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
+  content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: string }
+  >;
   structuredContent?: Record<string, unknown>;
 }
 
@@ -180,6 +183,30 @@ export class ToolDispatcher {
    * 包装为MCP tools/call响应格式
    */
   private toToolContent(result: unknown): ToolCallResult {
+    if (this.isCanvasSnapshotResult(result)) {
+      const image = result.image;
+      const { dataBase64, ...imageMetadata } = image;
+      const metadata = {
+        ...result,
+        image: imageMetadata,
+      };
+
+      return {
+        content: [
+          {
+            type: 'image',
+            data: dataBase64,
+            mimeType: image.type,
+          },
+          {
+            type: 'text',
+            text: JSON.stringify(metadata, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+
     const response: ToolCallResult = {
       content: [{
         type: 'text',
@@ -190,6 +217,28 @@ export class ToolDispatcher {
       response.structuredContent = result;
     }
     return response;
+  }
+
+  private isCanvasSnapshotResult(
+    result: unknown,
+  ): result is Record<string, unknown> & {
+    ok: true;
+    image: Record<string, unknown> & {
+      type: string;
+      dataBase64: string;
+      encoding: 'base64';
+    };
+  } {
+    if (!isPlainObjectRecord(result) || result.ok !== true || !isPlainObjectRecord(result.image)) {
+      return false;
+    }
+
+    const image = result.image;
+    return typeof image.type === 'string'
+      && image.type.length > 0
+      && typeof image.dataBase64 === 'string'
+      && image.dataBase64.length > 0
+      && image.encoding === 'base64';
   }
 
   private async dispatchInteractiveComponentPlace(args: Record<string, unknown>): Promise<ToolCallResult> {

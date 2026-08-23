@@ -28,6 +28,19 @@ const fakeBridge = {
     if (path === '/bridge/jlceda/api/invoke') {
       return { ok: true };
     }
+    if (path === '/bridge/jlceda/canvas/snapshot') {
+      return {
+        ok: true,
+        image: {
+          type: 'image/png',
+          encoding: 'base64',
+          dataBase64: 'iVBORw0KGgoAAAANSUhEUg==',
+          width: 640,
+          height: 480,
+          byteLength: 16,
+        },
+      };
+    }
     throw new Error(`Unexpected path: ${path}`);
   },
 };
@@ -63,6 +76,39 @@ const invokeResult = await dispatcher.dispatch({
 assert.equal(invokeResult.structuredContent.ok, true);
 const invokeCall = calls.find(call => call.path === '/bridge/jlceda/api/invoke');
 assert.equal(invokeCall.timeoutMs, 44000);
+
+const snapshotResult = await dispatcher.dispatch({
+  name: 'eda_canvas_snapshot',
+  arguments: {},
+});
+assert.equal(snapshotResult.content.length, 2);
+assert.deepEqual(snapshotResult.content[0], {
+  type: 'image',
+  data: 'iVBORw0KGgoAAAANSUhEUg==',
+  mimeType: 'image/png',
+});
+assert.equal(snapshotResult.content[1].type, 'text');
+assert.deepEqual(JSON.parse(snapshotResult.content[1].text), {
+  ok: true,
+  image: {
+    type: 'image/png',
+    encoding: 'base64',
+    width: 640,
+    height: 480,
+    byteLength: 16,
+  },
+});
+assert.deepEqual(snapshotResult.structuredContent, {
+  ok: true,
+  image: {
+    type: 'image/png',
+    encoding: 'base64',
+    dataBase64: 'iVBORw0KGgoAAAANSUhEUg==',
+    width: 640,
+    height: 480,
+    byteLength: 16,
+  },
+});
 
 await assert.rejects(
   dispatcher.dispatch({
