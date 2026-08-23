@@ -26,7 +26,7 @@
 - `library_search`: searches or retrieves 0.4.15 device, symbol, footprint, 3D-model, reusable-module, and panel-library assets, and searches simulation models; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
 - `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
-- `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.
+- `manufacture_templates_query`: list PCB BOM templates, or schematic assembly variants, available for the active document.
 - `manufacture_export`: schematic BOM exports can select an assembly variant returned by `manufacture_templates_query`.
 
 当前开发版会拒绝空的自动布局/自动布线 UUID 选择；EDA 操作超时后仍保持串行，

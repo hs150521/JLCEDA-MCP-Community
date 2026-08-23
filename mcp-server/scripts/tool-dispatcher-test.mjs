@@ -27,7 +27,7 @@ const fakeBridge = {
     if (path === '/bridge/jlceda/component/place/close') {
       return { ok: true };
     }
-	if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query' || path === '/bridge/jlceda/design/source-export' || path === '/bridge/jlceda/pcb/constraints-manage' || path === '/bridge/jlceda/schematic/pages-manage') {
+	if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query' || path === '/bridge/jlceda/design/source-export' || path === '/bridge/jlceda/net/query-pcb' || path === '/bridge/jlceda/pcb/constraints-manage' || path === '/bridge/jlceda/schematic/pages-manage') {
 	  return { ok: true };
 	}
 	if (path === '/bridge/jlceda/library/preview') {
@@ -113,6 +113,14 @@ const sourceExportResult = await dispatcher.dispatch({
 assert.equal(sourceExportResult.structuredContent.ok, true);
 const sourceExportCall = calls.find(call => call.path === '/bridge/jlceda/design/source-export');
 assert.equal(sourceExportCall.timeoutMs, 44000);
+
+const pcbNetQueryResult = await dispatcher.dispatch({
+  name: 'pcb_net_query',
+  arguments: { query: 'USB_D+', mode: 'exact', timeoutMs: 42000 },
+});
+assert.equal(pcbNetQueryResult.structuredContent.ok, true);
+const pcbNetQueryCall = calls.find(call => call.path === '/bridge/jlceda/net/query-pcb');
+assert.equal(pcbNetQueryCall.timeoutMs, 44000);
 
 const constraintsManageResult = await dispatcher.dispatch({
 	name: 'pcb_constraints_manage',
@@ -235,6 +243,7 @@ for (const input of [
   { domain: 'pcb', kind: 'gerber', unit: 'inch' },
   { domain: 'pcb', kind: 'pick_and_place', unit: 'mil' },
   { domain: 'pcb', kind: 'open_database', unit: 'inch' },
+  { domain: 'pcb', kind: 'open_database', unit: 'mm' },
 ]) {
   assert.equal(manufactureExportSchema.safeParse(input).success, true, `manufacture_export should accept ${JSON.stringify(input)}`);
 }
@@ -242,7 +251,6 @@ for (const input of [
   { domain: 'pcb', kind: 'gerber', unit: 'mil' },
 	{ domain: 'pcb', kind: 'gerber', unit: 'in' },
   { domain: 'pcb', kind: 'pick_and_place', unit: 'inch' },
-  { domain: 'pcb', kind: 'open_database', unit: 'mm' },
 	{ domain: 'pcb', kind: 'ipc_2581c' },
 	{ domain: 'pcb', kind: 'jrouter_auto_route_json' },
   { domain: 'pcb', kind: 'bom', unit: 'mm' },
@@ -250,6 +258,22 @@ for (const input of [
 ]) {
   assert.equal(manufactureExportSchema.safeParse(input).success, false, `manufacture_export should reject ${JSON.stringify(input)}`);
 }
+assert.equal(manufactureExportSchema.safeParse({ domain: 'pcb', kind: 'pdf', template: 'ignored' }).success, false);
+assert.equal(manufactureExportSchema.safeParse({ domain: 'schematic', kind: 'document', assemblyVariantsConfig: { text: 'x', value: 'y' } }).success, false);
+
+const constraintsDefinition = definitions.find((definition) => definition.name === 'pcb_constraints_manage');
+assert.ok(constraintsDefinition);
+const constraintsSchema = z.fromJSONSchema(constraintsDefinition.inputSchema);
+assert.equal(constraintsSchema.safeParse({ kind: 'net_class', operation: 'create', name: 'USB', nets: ['D+'], color: { r: 0, g: 0, b: 0, alpha: 1 }, confirm: true }).success, true);
+assert.equal(constraintsSchema.safeParse({ kind: 'net_class', operation: 'create', name: 'USB', confirm: true }).success, false);
+assert.equal(constraintsSchema.safeParse({ kind: 'differential_pair', operation: 'set_positive_net', name: 'USB', positiveNet: 'D+', confirm: true, nets: ['D+'] }).success, false);
+assert.equal(constraintsSchema.safeParse({ kind: 'pad_pair_group', operation: 'add_members', name: 'USB', padPairs: [['J1.1', 'U1.1']], confirm: true }).success, true);
+
+const schematicDocumentDefinition = definitions.find((definition) => definition.name === 'schematic_document_action');
+assert.ok(schematicDocumentDefinition);
+const schematicDocumentSchema = z.fromJSONSchema(schematicDocumentDefinition.inputSchema);
+assert.equal(schematicDocumentSchema.safeParse({ action: 'primitive_at_point', x: 1, y: 2, ids: ['unexpected'] }).success, false);
+assert.equal(schematicDocumentSchema.safeParse({ action: 'primitives_by_id', ids: ['primitive-1'], limit: 1 }).success, false);
 
 await assert.rejects(
   dispatcher.dispatch({

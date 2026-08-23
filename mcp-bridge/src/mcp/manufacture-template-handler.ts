@@ -10,11 +10,16 @@ export async function handleManufactureTemplatesQueryTask(payload: unknown): Pro
 	const moduleName = domain === 'pcb' ? 'pcb_ManufactureData' : 'sch_ManufactureData';
 	const eda = getEdaRuntime();
 	const api = eda?.[moduleName];
-	if (!isPlainObjectRecord(api) || typeof api.getBomTemplates !== 'function')
-		throw new TypeError(`EDA ${moduleName}.getBomTemplates API is unavailable in this client version.`);
-	const templates = await toSerializableAsync(await (api.getBomTemplates as () => Promise<unknown>).call(api));
+	if (!isPlainObjectRecord(api))
+		throw new TypeError(`EDA ${moduleName} API is unavailable in this client version.`);
+	let templates: unknown | undefined;
+	if (domain === 'pcb') {
+		if (typeof api.getBomTemplates !== 'function')
+			throw new TypeError('EDA pcb_ManufactureData.getBomTemplates API is unavailable in this client version.');
+		templates = await toSerializableAsync(await (api.getBomTemplates as () => Promise<unknown>).call(api));
+	}
 	const assemblyVariants = typeof api.getAssemblyVariantsConfigs === 'function'
 		? await toSerializableAsync(await (api.getAssemblyVariantsConfigs as () => Promise<unknown>).call(api))
 		: undefined;
-	return { ok: true, domain, templates, ...(assemblyVariants !== undefined ? { assemblyVariants } : {}) };
+	return { ok: true, domain, ...(templates !== undefined ? { templates } : {}), ...(assemblyVariants !== undefined ? { assemblyVariants } : {}) };
 }

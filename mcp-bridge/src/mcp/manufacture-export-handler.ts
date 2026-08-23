@@ -30,10 +30,16 @@ const PCB_METHODS = new Set([
 const SCHEMATIC_METHODS = new Set(['bom', 'netlist', 'simulation_netlist', 'document']);
 const STANDARD_NETLIST_TYPES = ['Allegro', 'PADS', 'Protel2', 'JLCEDA'] as const;
 const SIMULATION_NETLIST_TYPES = ['Ngspice'] as const;
+const BOM_FILE_TYPES = ['xlsx', 'csv'] as const;
+const THREE_D_FILE_TYPES = ['step', 'obj'] as const;
+const THREE_D_SHELL_FILE_TYPES = ['stl', 'step', 'obj'] as const;
+const PICK_AND_PLACE_FILE_TYPES = ['xlsx', 'csv'] as const;
+const TEST_POINT_FILE_TYPES = ['xlsx', 'csv'] as const;
+const DOCUMENT_FILE_TYPES = ['PDF', 'PNG', 'SVG'] as const;
 const PCB_EXPORT_UNITS: Record<string, readonly string[]> = {
 	gerber: ['mm', 'inch'],
 	pick_and_place: ['mm', 'mil'],
-	open_database: ['inch'],
+	open_database: ['mm', 'inch'],
 };
 
 function encodeBase64(bytes: Uint8Array): string {
@@ -91,6 +97,39 @@ function optionalAssemblyVariant(input: Record<string, unknown>): { text: string
 	return { text: text.trim(), value: value.trim() };
 }
 
+function rejectUnexpectedFields(input: Record<string, unknown>, allowed: readonly string[]): void {
+	const allowedFields = new Set(['domain', 'kind', 'includeData', 'timeoutMs', ...allowed]);
+	for (const key of Object.keys(input)) {
+		if (!allowedFields.has(key))
+			throw new TypeError(`${key} is not supported for this manufacturing export.`);
+	}
+}
+
+function validateExportFields(domain: ExportDomain, kind: string, input: Record<string, unknown>): void {
+	if (domain === 'pcb') {
+		const allowedByKind: Record<string, readonly string[]> = {
+			'gerber': ['fileName', 'unit'],
+			'bom': ['fileName', 'fileType', 'template'],
+			'netlist': ['fileName', 'netlistType'],
+			'pick_and_place': ['fileName', 'fileType', 'unit'],
+			'3d': ['fileName', 'fileType'],
+			'3d_shell': ['fileName', 'fileType'],
+			'test_point': ['fileName', 'fileType'],
+			'open_database': ['fileName', 'unit'],
+			'manufacture_data': [],
+		};
+		rejectUnexpectedFields(input, allowedByKind[kind] ?? ['fileName']);
+		return;
+	}
+	const allowedByKind: Record<string, readonly string[]> = {
+		bom: ['fileName', 'fileType', 'template', 'assemblyVariantsConfig'],
+		netlist: ['fileName', 'netlistType'],
+		simulation_netlist: ['fileName', 'netlistType'],
+		document: ['fileName', 'fileType', 'documentScope'],
+	};
+	rejectUnexpectedFields(input, allowedByKind[kind] ?? []);
+}
+
 async function encodeBlob(blob: unknown, includeData: boolean): Promise<Record<string, unknown>> {
 	if (!(typeof Blob !== 'undefined' && blob instanceof Blob)) {
 		return { kind: 'value', value: blob };
@@ -119,7 +158,6 @@ async function encodeBlob(blob: unknown, includeData: boolean): Promise<Record<s
 
 function resolveCall(domain: ExportDomain, kind: string, input: Record<string, unknown>): { method: string; args: unknown[] } {
 	const fileName = optionalString(input, 'fileName');
-	const fileType = optionalString(input, 'fileType');
 	const template = optionalString(input, 'template');
 	const assemblyVariantsConfig = optionalAssemblyVariant(input);
 	const unit = optionalManufacturingUnit(domain, kind, input);
@@ -128,12 +166,12 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 			throw new TypeError(`Unsupported PCB export kind: ${kind}.`);
 		const calls: Record<string, { method: string; args: unknown[] }> = {
 			'gerber': { method: 'getGerberFile', args: [fileName, undefined, unit] },
-			'bom': { method: 'getBomFile', args: [fileName, fileType, template] },
+			'bom': { method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template] },
 			'netlist': { method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] },
-			'pick_and_place': { method: 'getPickAndPlaceFile', args: [fileName, fileType, unit] },
-			'3d': { method: 'get3DFile', args: [fileName, fileType] },
-			'3d_shell': { method: 'get3DShellFile', args: [fileName, fileType] },
-			'test_point': { method: 'getTestPointFile', args: [fileName, fileType] },
+			'pick_and_place': { method: 'getPickAndPlaceFile', args: [fileName, optionalEnum(input, 'fileType', PICK_AND_PLACE_FILE_TYPES), unit] },
+			'3d': { method: 'get3DFile', args: [fileName, optionalEnum(input, 'fileType', THREE_D_FILE_TYPES)] },
+			'3d_shell': { method: 'get3DShellFile', args: [fileName, optionalEnum(input, 'fileType', THREE_D_SHELL_FILE_TYPES)] },
+			'test_point': { method: 'getTestPointFile', args: [fileName, optionalEnum(input, 'fileType', TEST_POINT_FILE_TYPES)] },
 			'flying_probe_test': { method: 'getFlyingProbeTestFile', args: [fileName] },
 			'dxf': { method: 'getDxfFile', args: [fileName] },
 			'pdf': { method: 'getPdfFile', args: [fileName] },
@@ -154,10 +192,10 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 	if (!SCHEMATIC_METHODS.has(kind))
 		throw new TypeError(`Unsupported schematic export kind: ${kind}.`);
 	const calls: Record<string, { method: string; args: unknown[] }> = {
-		bom: { method: 'getBomFile', args: [fileName, fileType, template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] },
+		bom: { method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] },
 		netlist: { method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] },
 		simulation_netlist: { method: 'getSimulationNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', SIMULATION_NETLIST_TYPES)] },
-		document: { method: 'getExportDocumentFile', args: [fileName, fileType, undefined, optionalString(input, 'documentScope')] },
+		document: { method: 'getExportDocumentFile', args: [fileName, optionalEnum(input, 'fileType', DOCUMENT_FILE_TYPES), undefined, optionalString(input, 'documentScope')] },
 	};
 	return calls[kind];
 }
@@ -169,6 +207,7 @@ export async function handleManufactureExportTask(payload: unknown): Promise<unk
 	const kind = requiredString(payload, 'kind');
 	if (domain !== 'pcb' && domain !== 'schematic')
 		throw new TypeError('domain must be \'pcb\' or \'schematic\'.');
+	validateExportFields(domain, kind, payload);
 	const includeData = payload.includeData === undefined ? false : payload.includeData;
 	if (typeof includeData !== 'boolean')
 		throw new TypeError('includeData must be a boolean.');

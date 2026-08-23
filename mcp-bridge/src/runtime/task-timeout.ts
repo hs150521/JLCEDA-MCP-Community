@@ -21,6 +21,7 @@ const EXTENDED_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/library/classification-query',
 	'/bridge/jlceda/library/preview',
 	'/bridge/jlceda/workspace/query',
+	'/bridge/jlceda/net/query-pcb',
 ]);
 const STANDARD_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/canvas/snapshot',

@@ -33,7 +33,7 @@
 - `component_select`：可使用 `properties.supplierId` 等 0.4.15 精确字段查询器件。`keyword` 与 `properties` 二选一，结果仍必须等待用户确认后才能放置。
 - `project_info`：读取工程、板子、原理图、PCB 和图页身份，适合在跨页面任务开始时建立上下文。
 - `manufacture_export`：仅生成白名单制造数据，不直接写入本地文件系统。默认返回文件元数据和文本预览；只有用户明确需要下载数据时才设置 `includeData: true`，并注意 Base64 结果可能很大。
-- `manufacture_templates_query`：在 BOM 导出前读取当前 PCB 或原理图可用模板；将返回的模板名原样传给 `manufacture_export` 的 `template` 参数，不要猜测模板名称。
+- `manufacture_templates_query`：在 PCB BOM 导出前读取当前可用模板；将返回的模板名原样传给 `manufacture_export` 的 `template` 参数，不要猜测模板名称。原理图查询只返回官方装配变体。
 - `manufacture_templates_query` 还会返回原理图装配变体；如需指定变体，必须将返回的完整 `{text, value}` 传给 schematic `manufacture_export` 的 `assemblyVariantsConfig`。
 - `library_search`：搜索或按 UUID 读取官方 device、symbol、footprint 库资产；device 可使用 `supplierId` 等精确字段，也可用官方 `lcscIds` 将 LCSC C 编号映射到 EasyEDA 器件（支持批量查询），symbol/footprint 使用各自支持的 `keyword` 搜索。device 的 `keyword`、`properties`、`lcscIds` 与 `uuid` 必须按 schema 选择其一；symbol/footprint 可使用 `keyword` 或 `uuid`。
 - `pcb_constraints_query`：按需读取当前规则、命名规则配置、网络规则、网络间规则、区域规则或约束组；查询命名规则配置时必须提供 `configurationName`，查询焊盘对最短线长时使用 `pad_pair_min_wire_length` 和 `padPairGroupName`。

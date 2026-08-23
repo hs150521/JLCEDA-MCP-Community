@@ -106,6 +106,8 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		throw new TypeError('allowMultiMatch is only supported with lcscIds.');
 	const libraryUuid = optionalNonEmptyString(payload, 'libraryUuid');
 	const limit = parseBoundedIntegerValue(payload.limit, 20, 1, 50);
+	if (lcscIds !== undefined && payload.page !== undefined)
+		throw new TypeError('page is not supported for lcscIds lookups; provide the requested C-numbers directly.');
 	const page = parseBoundedIntegerValue(payload.page, 1, 1, 9999);
 	const api = getApi(kind);
 	let rawResults: unknown;
@@ -154,7 +156,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
 		...(simulationModelType ? { simulationModelType } : {}),
 		libraryUuid: libraryUuid ?? '',
-		page,
+		...(lcscIds ? {} : { page }),
 		total: allRawItems.length,
 		returned: Array.isArray(items) ? items.length : 0,
 		truncated: allRawItems.length > limit,

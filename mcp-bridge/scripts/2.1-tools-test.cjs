@@ -592,13 +592,17 @@ async function main() {
 			},
 			async getBomTemplates() { return ['jlcpcb', 'assembly']; },
 			async getFlyingProbeTestFile() { return new Blob(['probe,data\nP1,ok\n'], { type: 'text/csv' }); },
+			async getOpenDatabaseDoublePlusFile(fileName, unit) {
+				assert.equal(fileName, undefined);
+				assert.equal(unit, 'mm');
+				return new Blob(['odb'], { type: 'application/octet-stream' });
+			},
 			async getAutoLayoutJsonFile() { return new File(['{"components":[]}'], 'layout.json', { type: 'application/json' }); },
 		},
 		sch_ManufactureData: {
-			async getBomTemplates() { return ['schematic-default']; },
 			async getAssemblyVariantsConfigs() { return [{ text: 'Prototype', value: 'prototype' }]; },
 			async getBomFile(fileName, fileType, template, filterOptions, statistics, property, columns, assemblyVariantsConfig) {
-				assert.equal(template, 'schematic-default');
+				assert.equal(template, undefined);
 				assert.deepEqual(assemblyVariantsConfig, { text: 'Prototype', value: 'prototype' });
 				return new Blob(['ref,value\nR1,1k\n'], { type: 'text/csv' });
 			},
@@ -850,6 +854,8 @@ async function main() {
 	assert.equal(manyLcscSearch.total, 130);
 	assert.equal(manyLcscSearch.returned, 20);
 	assert.equal(manyLcscSearch.truncated, true);
+	assert.equal(manyLcscSearch.page, undefined);
+	await assert.rejects(() => handleLibrarySearchTask({ kind: 'device', lcscIds: ['C99999'], page: 2 }), /page is not supported for lcscIds/);
 	const comparison = await handleNetlistCompareTask({ sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', documentUuid: 'pcb-2' } });
 	assert.equal(comparison.differenceCount, 1);
 	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });
@@ -872,17 +878,20 @@ async function main() {
 	assert.equal(exportResult.file.type, 'text/csv');
 	assert.ok(typeof exportResult.file.dataBase64 === 'string');
 	const schematicTemplates = await handleManufactureTemplatesQueryTask({ domain: 'schematic' });
-	assert.deepEqual(schematicTemplates.templates, ['schematic-default']);
+	assert.equal(schematicTemplates.templates, undefined);
 	assert.deepEqual(schematicTemplates.assemblyVariants, [{ text: 'Prototype', value: 'prototype' }]);
-	const schematicBom = await handleManufactureExportTask({ domain: 'schematic', kind: 'bom', template: 'schematic-default', assemblyVariantsConfig: { text: 'Prototype', value: 'prototype' } });
+	const schematicBom = await handleManufactureExportTask({ domain: 'schematic', kind: 'bom', assemblyVariantsConfig: { text: 'Prototype', value: 'prototype' } });
 	assert.equal(schematicBom.ok, true);
 	const flyingProbeExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'flying_probe_test' });
 	assert.equal(flyingProbeExport.ok, true);
 	const autoLayoutExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'auto_layout_json' });
 	assert.equal(autoLayoutExport.file.preview, '{"components":[]}');
+	const odbExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mm' });
+	assert.equal(odbExport.ok, true);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'gerber', unit: 'mil' }), /unit must be one of: mm, inch/);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'pick_and_place', unit: 'in' }), /unit must be one of: mm, mil/);
-	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mm' }), /unit must be one of: inch/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mil' }), /unit must be one of: mm, inch/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'pdf', template: 'ignored' }), /template is not supported/);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'bom', unit: 'mm' }), /unit is not supported/);
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');
