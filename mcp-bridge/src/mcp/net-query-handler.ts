@@ -8,7 +8,26 @@ interface PcbNetAnalysis {
 	primitiveTypes?: string[];
 }
 
-const PCB_PRIMITIVE_TYPES = new Set(['ARC', 'COMPONENT', 'PAD', 'COMPONENT_PAD', 'POLYLINE', 'POUR', 'FILL', 'REGION', 'LINE', 'VIA', 'DIMENSION', 'IMAGE', 'OBJECT', 'POURED', 'STRING', 'ATTRIBUTE']);
+const PCB_PRIMITIVE_TYPE_VALUES: Record<string, string> = {
+	ARC: 'Arc',
+	COMPONENT: 'Component',
+	PAD: 'Pad',
+	COMPONENT_PAD: 'ComponentPad',
+	POLYLINE: 'Polyline',
+	POUR: 'Pour',
+	FILL: 'Fill',
+	REGION: 'Region',
+	LINE: 'Line',
+	VIA: 'Via',
+	DIMENSION: 'Dimension',
+	IMAGE: 'Image',
+	OBJECT: 'Object',
+	POURED: 'Poured',
+	STRING: 'String',
+	ATTRIBUTE: 'Attribute',
+};
+
+const PCB_PRIMITIVE_TYPES = new Set(Object.keys(PCB_PRIMITIVE_TYPE_VALUES));
 
 async function serializeBoundedNetArray(values: unknown[]): Promise<unknown[]> {
 	return preserveBoundedArray(await Promise.all(values.map(value => toSerializableAsync(value))));
@@ -29,7 +48,7 @@ function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryM
 		}
 	}
 	if (analysis.primitiveTypes !== undefined) {
-		if (!Array.isArray(analysis.primitiveTypes) || analysis.primitiveTypes.some(value => typeof value !== 'string' || !PCB_PRIMITIVE_TYPES.has(value.trim().toUpperCase())))
+		if (!Array.isArray(analysis.primitiveTypes) || analysis.primitiveTypes.length === 0 || analysis.primitiveTypes.some(value => typeof value !== 'string' || !PCB_PRIMITIVE_TYPES.has(value.trim().toUpperCase())))
 			throw new TypeError(`analysis.primitiveTypes must contain only supported PCB primitive types: ${Array.from(PCB_PRIMITIVE_TYPES).join(', ')}.`);
 		output.primitiveTypes = analysis.primitiveTypes.map(value => value.trim().toUpperCase());
 		output.primitives = true;
@@ -37,6 +56,10 @@ function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryM
 	if (Object.keys(output).length === 0)
 		throw new TypeError('analysis must request length, color, primitives, or primitiveTypes.');
 	return output;
+}
+
+function toEdaPrimitiveTypes(primitiveTypes: string[] | undefined): string[] | undefined {
+	return primitiveTypes?.map(type => PCB_PRIMITIVE_TYPE_VALUES[type]);
 }
 
 export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> {
@@ -93,7 +116,7 @@ export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> 
 			if (analysis.primitives) {
 				if (typeof rawApi.getAllPrimitivesByNet !== 'function')
 					throw new TypeError('EDA pcb_Net.getAllPrimitivesByNet API is unavailable in this client version.');
-				const rawPrimitives = await (rawApi.getAllPrimitivesByNet as (name: string, types?: string[]) => Promise<unknown>).call(api, queryText, analysis.primitiveTypes);
+				const rawPrimitives = await (rawApi.getAllPrimitivesByNet as (name: string, types?: string[]) => Promise<unknown>).call(api, queryText, toEdaPrimitiveTypes(analysis.primitiveTypes));
 				const primitives = Array.isArray(rawPrimitives) ? rawPrimitives : [];
 				result.primitiveCount = primitives.length;
 				result.primitives = await toSerializableAsync(primitives);

@@ -130,7 +130,7 @@ async function main() {
 			},
 			async getAllPrimitivesByNet(name, primitiveTypes) {
 				assert.equal(name, 'USB_D+');
-				assert.deepEqual(primitiveTypes, ['POLYLINE', 'VIA']);
+				assert.deepEqual(primitiveTypes, ['Polyline', 'Via']);
 				return [{ uuid: 'track-1', type: 'TRACK' }];
 			},
 		},
@@ -748,6 +748,7 @@ async function main() {
 	assert.equal(pcbNetAnalysis.length, 42.5);
 	assert.equal(pcbNetAnalysis.color, '#00ff00');
 	assert.equal(pcbNetAnalysis.primitiveCount, 1);
+	await assert.rejects(() => handlePcbNetQueryTask({ mode: 'exact', query: 'USB_D+', analysis: { primitiveTypes: [] } }), /analysis\.primitiveTypes/);
 	const filteredPcbNets = await handlePcbNetQueryTask({ query: 'USB' });
 	assert.equal(filteredPcbNets.total, 1);
 	assert.equal(filteredPcbNets.returned, 1);
