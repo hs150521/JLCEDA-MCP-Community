@@ -17,6 +17,8 @@
 - Add `pcb_net_query` tool definitions and synchronized routes.
 - Keep PCB auto-routing controls out of the public tool list because the pinned client does not expose the methods; external route files remain supported.
 - Expose official LCSC C-number mapping through `library_search`; simulation-model search is deferred because the pinned client does not expose `lib_SimulationModel`.
+- Extend `pcb_document_action` with bounded primitive/selection inspection, coordinate conversion, and canvas navigation.
+- Add exact UUID retrieval for device, symbol, and footprint library assets, plus bounded JSON export previews.
 
 ## 2.2.0 - 2026-08-23
 

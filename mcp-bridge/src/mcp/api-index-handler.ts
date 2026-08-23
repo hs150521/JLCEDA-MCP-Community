@@ -143,6 +143,34 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 
 	// ── sch_Utils：工具 ────────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Utils.splitLines', summary: '拆分多段线' },
+
+	// PCB document inspection and analysis APIs exposed by the pinned 0.4.15 catalog.
+	{ fullName: 'eda.pcb_Document.getCanvasOrigin', summary: '获取 PCB 画布原点' },
+	{ fullName: 'eda.pcb_Document.convertCanvasOriginToDataOrigin', summary: '将画布坐标转换为数据坐标' },
+	{ fullName: 'eda.pcb_Document.convertDataOriginToCanvasOrigin', summary: '将数据坐标转换为画布坐标' },
+	{ fullName: 'eda.pcb_Document.getPrimitiveAtPoint', summary: '获取坐标点的 PCB 图元' },
+	{ fullName: 'eda.pcb_Document.getPrimitivesInRegion', summary: '获取 PCB 区域内的图元' },
+	{ fullName: 'eda.pcb_Document.navigateToCoordinates', summary: '定位 PCB 画布坐标' },
+	{ fullName: 'eda.pcb_Document.navigateToRegion', summary: '定位 PCB 画布区域' },
+	{ fullName: 'eda.pcb_Document.zoomToBoardOutline', summary: '缩放至 PCB 板框' },
+	{ fullName: 'eda.pcb_Document.getCurrentFilterConfiguration', summary: '获取 PCB 当前过滤器配置' },
+	{ fullName: 'eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId', summary: '获取 PCB 已选图元 ID' },
+	{ fullName: 'eda.pcb_SelectControl.getAllSelectedPrimitives', summary: '获取 PCB 已选图元对象' },
+	{ fullName: 'eda.pcb_Net.getNet', summary: '按名称获取 PCB 网络' },
+	{ fullName: 'eda.pcb_Net.getNetLength', summary: '获取 PCB 网络长度' },
+	{ fullName: 'eda.pcb_Net.getNetColor', summary: '获取 PCB 网络颜色' },
+	{ fullName: 'eda.pcb_Net.getAllPrimitivesByNet', summary: '获取 PCB 网络关联图元' },
+	{ fullName: 'eda.pcb_Drc.getCurrentRuleConfiguration', summary: '获取当前 PCB 规则配置' },
+	{ fullName: 'eda.pcb_Drc.getAllNetClasses', summary: '获取 PCB 网络类' },
+	{ fullName: 'eda.pcb_Drc.getAllDifferentialPairs', summary: '获取 PCB 差分对' },
+	{ fullName: 'eda.pcb_Drc.getAllEqualLengthNetGroups', summary: '获取 PCB 等长网络组' },
+	{ fullName: 'eda.pcb_Drc.getAllPadPairGroups', summary: '获取 PCB 焊盘对组' },
+	{ fullName: 'eda.pcb_Layer.getAllLayers', summary: '获取 PCB 图层' },
+	{ fullName: 'eda.pcb_Layer.getCurrentPhysicalStackingConfiguration', summary: '获取 PCB 当前物理叠层配置' },
+	{ fullName: 'eda.pcb_ManufactureData.getFlyingProbeTestFile', summary: '导出 PCB 飞针测试文件' },
+	{ fullName: 'eda.lib_Device.get', summary: '按 UUID 获取器件库资产' },
+	{ fullName: 'eda.lib_Symbol.get', summary: '按 UUID 获取符号库资产' },
+	{ fullName: 'eda.lib_Footprint.get', summary: '按 UUID 获取封装库资产' },
 ];
 
 /**

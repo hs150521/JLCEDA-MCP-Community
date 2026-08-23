@@ -71,7 +71,8 @@ async function encodeBlob(blob: unknown, includeData: boolean): Promise<Record<s
 	}
 	const file = blob as Blob & { name?: string };
 	const output: Record<string, unknown> = { kind: 'file', name: file.name ?? '', type: file.type, size: file.size };
-	const isText = file.type.startsWith('text/') || file.type.includes('csv') || file.name?.endsWith('.net') === true;
+	const lowerName = (file.name ?? '').toLowerCase();
+	const isText = file.type.startsWith('text/') || file.type.includes('csv') || file.type.includes('json') || lowerName.endsWith('.net') || lowerName.endsWith('.json') || lowerName.endsWith('.ses');
 	if (isText) {
 		const previewText = await file.slice(0, MAX_TEXT_PREVIEW).text();
 		output.preview = previewText;

@@ -709,12 +709,21 @@
   },
   {
     "name": "pcb_document_action",
-    "description": "Read PCB document calculation state, save the active PCB, import schematic changes, or import external auto-layout/route files.",
+    "description": "Inspect PCB coordinates, selection, filters, and primitives; navigate the active canvas; read calculation state; or perform explicitly requested PCB document actions/imports.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["status", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
+        "action": { "type": "string", "enum": ["status", "canvas_origin", "filter_configuration", "selection", "primitive_at_point", "primitives_in_region", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates", "navigate_to_region", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
         "routingType": { "type": "string", "enum": ["all", "net", "connection"], "default": "all", "description": "Required for clear_routing semantics; all clears all tracks/vias, net or connection limits the scope." },
+        "x": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
+        "y": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
+        "left": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "right": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "top": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "bottom": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "leftToRight": { "type": "boolean", "default": true, "description": "Region selection direction passed to getPrimitivesInRegion." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "Maximum selected/region primitives returned." },
+        "includeObjects": { "type": "boolean", "default": false, "description": "For selection, include serialized selected primitive objects in addition to IDs." },
         "uuid": { "type": "string", "minLength": 1, "description": "Optional schematic UUID for import_changes." },
         "fileName": { "type": "string", "minLength": 1 },
         "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
@@ -802,6 +811,20 @@
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
       "required": ["domain", "kind"],
+      "oneOf": [
+        {
+          "properties": {
+            "domain": { "const": "pcb" },
+            "kind": { "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "schematic" },
+            "kind": { "enum": ["bom", "netlist", "simulation_netlist", "document"] }
+          }
+        }
+      ],
       "additionalProperties": false
     }
   },
@@ -819,10 +842,11 @@
   },
   {
     "name": "library_search",
-    "description": "Search official EasyEDA device, symbol, or footprint libraries. Device searches also support exact properties and official LCSC C-number mapping.",
+    "description": "Search or retrieve official EasyEDA device, symbol, or footprint library assets. Device searches also support exact properties and official LCSC C-number mapping.",
     "inputSchema": {
       "$defs": {
         "keyword": { "type": "string", "minLength": 1 },
+        "uuid": { "type": "string", "minLength": 1, "description": "Exact library asset UUID for retrieval." },
         "lcscIds": { "type": "array", "items": { "type": "string", "pattern": "^[Cc][0-9]+$" }, "minItems": 1, "maxItems": 50, "uniqueItems": true },
         "allowMultiMatch": { "type": "boolean", "default": false, "description": "Only for lcscIds device lookup; return all matches for duplicate catalog IDs." },
         "deviceProperties": {
@@ -845,6 +869,16 @@
         "page": { "type": "integer", "minimum": 1, "maximum": 9999, "default": 1 }
       },
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
         {
           "type": "object",
           "properties": {
@@ -886,12 +920,32 @@
           "type": "object",
           "properties": {
             "kind": { "const": "symbol" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "symbol" },
             "keyword": { "$ref": "#/$defs/keyword" },
             "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
             "limit": { "$ref": "#/$defs/limit" },
             "page": { "$ref": "#/$defs/page" }
           },
           "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "footprint" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
           "additionalProperties": false
         },
         {

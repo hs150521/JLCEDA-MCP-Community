@@ -8,9 +8,9 @@
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
-- `pcb_document_action`: inspect PCB calculation state, save the active board, import schematic changes, or import Base64 auto-layout/route files.
+- `pcb_document_action`: inspect PCB coordinates, selected/region primitives, filters, and canvas state; navigate the view; save the active board, import schematic changes, or import Base64 auto-layout/route files.
 - `component_select`: supports exact device-property searches, including LCSC `supplierId`.
-- `library_search`: searches 0.4.15 device, symbol, and footprint libraries by keyword; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
+- `library_search`: searches or retrieves 0.4.15 device, symbol, and footprint libraries; device searches also support exact properties and the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
 - `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 - `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.

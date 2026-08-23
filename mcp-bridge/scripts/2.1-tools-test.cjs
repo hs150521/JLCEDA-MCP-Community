@@ -58,6 +58,25 @@ async function main() {
 			},
 			async getCanvasUpdateCalculationStatus() { return 'idle'; },
 			async getCurrentFilterConfiguration() { return { tracks: true }; },
+			async getCanvasOrigin() { return { offsetX: 10, offsetY: 20 }; },
+			async convertCanvasOriginToDataOrigin(x, y) { return { x: x - 10, y: y - 20 }; },
+			async convertDataOriginToCanvasOrigin(x, y) { return { x: x + 10, y: y + 20 }; },
+			async getPrimitiveAtPoint(x, y) {
+				return { uuid: 'pad-1', x, y };
+			},
+			async getPrimitivesInRegion(left, right, top, bottom, leftToRight) {
+				assert.deepEqual([left, right, top, bottom, leftToRight], [0, 100, 0, 100, true]);
+				return [{ uuid: 'pad-1', type: 'PAD' }, { uuid: 'track-1', type: 'TRACK' }];
+			},
+			async navigateToCoordinates(x, y) {
+				assert.deepEqual([x, y], [25, 35]);
+				return true;
+			},
+			async navigateToRegion(left, right, top, bottom) {
+				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
+				return true;
+			},
+			async zoomToBoardOutline() { return true; },
 			async save() { return true; },
 			async importChanges(uuid) {
 				assert.equal(uuid, 'sch-1');
@@ -79,8 +98,17 @@ async function main() {
 				return true;
 			},
 		},
+		pcb_SelectControl: {
+			async getAllSelectedPrimitives_PrimitiveId() { return ['pad-1', 'track-1']; },
+			async getAllSelectedPrimitives() { return [{ uuid: 'pad-1', type: 'PAD' }, { uuid: 'track-1', type: 'TRACK' }]; },
+		},
 		dmt_SelectControl: { async getCurrentDocumentInfo() { return { documentType: 1, uuid: 'page-1' }; } },
 		lib_Device: {
+			async get(uuid, libraryUuid) {
+				assert.equal(uuid, 'device-1');
+				assert.equal(libraryUuid, 'system-library-1');
+				return { uuid, libraryUuid, name: 'R0402' };
+			},
 			async search() { return []; },
 			async searchByProperties(properties) {
 				assert.equal(properties.supplierId, 'C1523');
@@ -97,12 +125,22 @@ async function main() {
 		},
 		lib_LibrariesList: { async getSystemLibraryUuid() { return 'system-library-1'; } },
 		lib_Symbol: {
+			async get(uuid, libraryUuid) {
+				assert.equal(uuid, 'symbol-1');
+				assert.equal(libraryUuid, 'system-library-1');
+				return { uuid, libraryUuid, name: 'LM358' };
+			},
 			async search(keyword) {
 				assert.equal(keyword, 'LM358');
 				return [{ uuid: 'symbol-1', libraryUuid: 'system-library-1', name: 'LM358' }];
 			},
 		},
 		lib_Footprint: {
+			async get(uuid, libraryUuid) {
+				assert.equal(uuid, 'footprint-1');
+				assert.equal(libraryUuid, 'system-library-1');
+				return { uuid, libraryUuid, name: 'SOIC-8' };
+			},
 			async search(keyword) {
 				assert.equal(keyword, 'SOIC-8');
 				return [{ uuid: 'footprint-1', libraryUuid: 'system-library-1', name: 'SOIC-8' }];
@@ -172,6 +210,7 @@ async function main() {
 			},
 			async getBomTemplates() { return ['jlcpcb', 'assembly']; },
 			async getFlyingProbeTestFile() { return new Blob(['probe,data\nP1,ok\n'], { type: 'text/csv' }); },
+			async getAutoLayoutJsonFile() { return new File(['{"components":[]}'], 'layout.json', { type: 'application/json' }); },
 		},
 		sch_ManufactureData: {
 			async getBomTemplates() { return ['schematic-default']; },
@@ -199,6 +238,19 @@ async function main() {
 	assert.equal(realtimeDrcStart.changed, true);
 	const pcbDocumentStatus = await handlePcbDocumentTask({ action: 'status' });
 	assert.equal(pcbDocumentStatus.canvasUpdate, 'idle');
+	assert.deepEqual((await handlePcbDocumentTask({ action: 'canvas_origin' })).origin, { offsetX: 10, offsetY: 20 });
+	assert.deepEqual((await handlePcbDocumentTask({ action: 'filter_configuration' })).filterConfiguration, { tracks: true });
+	const selection = await handlePcbDocumentTask({ action: 'selection', includeObjects: true });
+	assert.equal(selection.selectedCount, 2);
+	assert.equal(selection.selectedPrimitives.length, 2);
+	assert.equal((await handlePcbDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'pad-1');
+	const region = await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 });
+	assert.equal(region.total, 2);
+	assert.deepEqual((await handlePcbDocumentTask({ action: 'convert_canvas_to_data', x: 25, y: 35 })).point, { x: 15, y: 15 });
+	assert.deepEqual((await handlePcbDocumentTask({ action: 'convert_data_to_canvas', x: 15, y: 15 })).point, { x: 25, y: 35 });
+	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).navigated, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'zoom_to_board_outline' })).zoomed, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'save' })).saved, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'start_ratline' })).changed, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'stop_ratline' })).changed, true);
@@ -228,6 +280,12 @@ async function main() {
 	assert.equal(exactComponent.selection.candidates[0].libraryUuid, 'system-library-1');
 	const symbolSearch = await handleLibrarySearchTask({ kind: 'symbol', keyword: 'LM358' });
 	assert.equal(symbolSearch.items[0].uuid, 'symbol-1');
+	const deviceGet = await handleLibrarySearchTask({ kind: 'device', uuid: 'device-1', libraryUuid: 'system-library-1' });
+	assert.equal(deviceGet.item.name, 'R0402');
+	const symbolGet = await handleLibrarySearchTask({ kind: 'symbol', uuid: 'symbol-1', libraryUuid: 'system-library-1' });
+	assert.equal(symbolGet.item.name, 'LM358');
+	const footprintGet = await handleLibrarySearchTask({ kind: 'footprint', uuid: 'footprint-1', libraryUuid: 'system-library-1' });
+	assert.equal(footprintGet.item.name, 'SOIC-8');
 	const footprintSearch = await handleLibrarySearchTask({ kind: 'footprint', keyword: 'SOIC-8' });
 	assert.equal(footprintSearch.items[0].name, 'SOIC-8');
 	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
@@ -256,6 +314,8 @@ async function main() {
 	assert.equal(schematicBom.ok, true);
 	const flyingProbeExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'flying_probe_test' });
 	assert.equal(flyingProbeExport.ok, true);
+	const autoLayoutExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'auto_layout_json' });
+	assert.equal(autoLayoutExport.file.preview, '{"components":[]}');
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');
 }

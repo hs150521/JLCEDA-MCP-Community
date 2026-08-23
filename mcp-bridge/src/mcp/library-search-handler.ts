@@ -74,8 +74,9 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	const keyword = optionalNonEmptyString(payload, 'keyword');
 	const properties = normalizeProperties(kind, payload.properties);
 	const lcscIds = normalizeLcscIds(payload.lcscIds);
-	if ([keyword !== undefined, properties !== undefined, lcscIds !== undefined].filter(Boolean).length !== 1)
-		throw new TypeError('Provide exactly one of keyword, properties, or lcscIds.');
+	const uuid = optionalNonEmptyString(payload, 'uuid');
+	if ([keyword !== undefined, properties !== undefined, lcscIds !== undefined, uuid !== undefined].filter(Boolean).length !== 1)
+		throw new TypeError('Provide exactly one of keyword, properties, lcscIds, or uuid.');
 	if (lcscIds !== undefined && kind !== 'device')
 		throw new TypeError('lcscIds is only supported for device searches.');
 	if (payload.simulationModelType !== undefined)
@@ -90,6 +91,19 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	const page = parseBoundedIntegerValue(payload.page, 1, 1, 9999);
 	const api = getApi(kind);
 	let rawResults: unknown;
+	if (uuid) {
+		if (typeof api.get !== 'function')
+			throw new TypeError(`EDA lib_${kind}.get API is unavailable in this client version.`);
+		const item = await (api.get as (uuid: string, libraryUuid?: string) => Promise<unknown>).call(api, uuid, libraryUuid);
+		return {
+			ok: true,
+			kind,
+			searchMode: 'uuid',
+			uuid,
+			libraryUuid: libraryUuid ?? '',
+			item: await toSerializableAsync(item),
+		};
+	}
 	if (lcscIds) {
 		if (typeof api.getByLcscIds !== 'function')
 			throw new TypeError('EDA lib_Device.getByLcscIds API is unavailable in this client version.');
