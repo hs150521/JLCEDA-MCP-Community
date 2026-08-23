@@ -10,6 +10,10 @@
 - Add `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query` tool definitions and synchronized routes.
 - Expose supported PCB auto-routing controls from `@jlceda/pro-api-types@0.4.15`.
 
+## 2.2.0 - 2026-08-23
+
+- Add schematic DRC, PCB constraints, project info, netlist comparison, and manufacturing export tools.
+
 ## 2.1.5 - 2026-08-23
 
 - Keep the Bridge client quarantined after an uncancellable EDA mutation times out, so later tasks cannot overlap the pending API call.

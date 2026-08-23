@@ -6,6 +6,8 @@
 - `pcb_auto_layout`: run the EDA PCB auto-layout operation.
 - `pcb_auto_routing`: run PCB auto-routing with network, layer, corner-style, and optimization options.
 - `pcb_net_query` and `schematic_net_query`: query active PCB or project schematic networks with filtering and limits.
+- `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
+- `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 
 当前开发版会拒绝空的自动布局/自动布线 UUID 选择；EDA 操作超时后仍保持串行，
 直到底层 API 真正结束；网络标签修改同时支持普通标签和组件形式的电源/地标识。
@@ -24,10 +26,10 @@
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.1.5
+       JLCEDA MCP Server 2.2.0
                   | localhost WebSocket
                   v
-       MCP Bridge 社区版 2.0.9
+       MCP Bridge 社区版 2.1.0
                   | JLCEDA Extension API
                   v
            嘉立创 EDA 专业版
@@ -36,17 +38,17 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub
 Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.0.9
+## 安装 2.1.0
 
 需要 Node.js 20 或更高版本。
 
 1. 从 [Releases](https://github.com/hs150521/JLCEDA-MCP-Community/releases)
    下载并在嘉立创 EDA 扩展管理器安装
-   `mcp-bridge-community-2.0.9.eext`。
+   `mcp-bridge-community-2.1.0.eext`。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.1.5.tgz
+   npm install --global .\jlceda-mcp-server-2.2.0.tgz
    Get-Command jlceda-mcp
    ```
 

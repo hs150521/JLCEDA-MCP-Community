@@ -1,6 +1,6 @@
 {
 	"name": "mcp-bridge-community",
-	"version": "2.0.9",
+	"version": "2.1.0",
 	"description": "嘉立创EDA & EasyEDA 专业版扩展 API 开发工具",
 	"author": "JLCEDA MCP Community <hs150521@proton.me>",
 	"license": "Apache-2.0",
@@ -12,9 +12,10 @@
 		"compile": "rimraf ./dist/ && ts-node ./config/esbuild.prod.ts",
 		"lint": "eslint",
 		"fix": "eslint --fix",
-		"build": "npm run test:netlabel && npm run compile && npm run verify:runtime && ts-node ./build/packaged.ts",
+		"build": "npm run test:netlabel && npm run test:2.1 && npm run compile && npm run verify:runtime && ts-node ./build/packaged.ts",
 		"verify:runtime": "node scripts/verify-runtime-entry.mjs",
-		"test:netlabel": "node scripts/netlabel-kind-test.cjs"
+		"test:netlabel": "node scripts/netlabel-kind-test.cjs",
+		"test:2.1": "node scripts/2.1-tools-test.cjs"
 	},
 	"devDependencies": {
 		"@antfu/eslint-config": "^5.4.1",

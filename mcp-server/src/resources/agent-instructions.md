@@ -27,6 +27,11 @@
 - `pcb_auto_layout`：写操作，可能移动整张 PCB 的器件。执行前保存工程，执行后重新读取或由用户检查结果。
 - `pcb_auto_routing`：写操作，可能新增或修改导线/过孔。执行前保存工程；只传入已确认的网络、层和策略参数，完成后运行 `pcb_drc_check`。
 - 自动布局/布线可能运行较久。超时后 Bridge 会隔离当前客户端，直到底层 EDA Promise 结束；在此期间不得通过 `api_invoke` 重试写操作。
+- `schematic_drc_check`：只读检查当前原理图页；默认不打开 UI，返回结构化违规列表。
+- `pcb_constraints_query`：只读读取当前 PCB 的规则、网络类、差分对、等长组或焊盘对组。需要 PCB 页面。
+- `netlist_compare`：对比两个已知的原理图或 PCB 文档 UUID；必须先通过 `project_info` 或 `eda_context` 确认 UUID，不得猜测。
+- `project_info`：读取工程、板子、原理图、PCB 和图页身份，适合在跨页面任务开始时建立上下文。
+- `manufacture_export`：仅生成白名单制造数据，不直接写入本地文件系统。默认返回文件元数据和文本预览；只有用户明确需要下载数据时才设置 `includeData: true`，并注意 Base64 结果可能很大。
 
 ## 透传 API 工具约束
 

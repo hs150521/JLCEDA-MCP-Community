@@ -660,5 +660,91 @@
       },
       "additionalProperties": false
     }
+  },
+  {
+    "name": "schematic_drc_check",
+    "description": "Run a read-only schematic design-rule check and return structured violations.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strict": { "type": "boolean", "default": true },
+        "showUi": { "type": "boolean", "default": false },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_constraints_query",
+    "description": "Read PCB rules and constraint groups such as net classes, differential pairs, and length groups.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["current_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"],
+          "default": "current_rules"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "netlist_compare",
+    "description": "Compare two schematic or PCB netlist sources and return component/network differences.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sourceA": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }
+          ]
+        },
+        "sourceB": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }
+          ]
+        },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["sourceA", "sourceB"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "project_info",
+    "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and schematic pages.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "includePages": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "manufacture_export",
+    "description": "Generate a whitelisted PCB or schematic manufacturing artifact and return metadata, text preview, or optional Base64 data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string", "enum": ["pcb", "schematic"] },
+        "kind": {
+          "type": "string",
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "dxf", "pdf", "ipc_d356a", "ipc_2581c", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+        },
+        "fileName": { "type": "string", "minLength": 1 },
+        "fileType": { "type": "string" },
+        "netlistType": { "type": "string", "enum": ["Allegro", "PADS", "Protel2", "JLCEDA", "Ngspice"] },
+        "unit": { "type": "string", "enum": ["mm", "in", "mil"] },
+        "documentScope": { "type": "string", "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] },
+        "includeData": { "type": "boolean", "default": false },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["domain", "kind"],
+      "additionalProperties": false
+    }
   }
 ]

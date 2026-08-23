@@ -2,7 +2,7 @@
 
 ## 2.1 PCB tools
 
-The 2.1 development branch adds `pcb_drc_check`, `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query`. PCB routing options are passed to the EDA `pcb_Document.autoRouting` API; unsupported APIs return an explicit client-version error.
+The 2.1 release adds `pcb_drc_check`, `schematic_drc_check`, `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, `schematic_net_query`, `pcb_constraints_query`, `project_info`, `netlist_compare`, and `manufacture_export`. PCB routing options are passed to the EDA `pcb_Document.autoRouting` API; unsupported APIs return an explicit client-version error.
 
 当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
 直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。
@@ -60,10 +60,10 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 2. 原生 MCP Server
 
-从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.5.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.2.0.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.5.tgz
+npm install --global .\jlceda-mcp-server-2.2.0.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。

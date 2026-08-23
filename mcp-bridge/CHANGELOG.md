@@ -1,4 +1,21 @@
-## 未发布
+## [2.1.0] - 2026-08-23
+
+### Added
+
+- Add structured PCB and schematic DRC tools with non-UI defaults.
+- Add PCB auto-layout and auto-routing tools, including supported `0.4.15` routing options.
+- Add PCB/schematic network queries, PCB constraints, project information, netlist comparison, and whitelisted manufacturing exports.
+
+### Fixes
+
+- Keep long-running EDA mutations quarantined after timeout until their uncancellable Promise settles.
+- Propagate net-label handler timeouts to the runtime quarantine mechanism.
+
+### Changes
+
+- Upgrade `@jlceda/pro-api-types` from `0.2.15` to `0.4.15` for current EDA Pro API declarations. This is a compile-time type update and does not change the EDA client's runtime implementation.
+
+---
 
 ## [2.0.9] - 2026-08-23
 
@@ -15,17 +32,6 @@
 
 ## Unreleased
 
-### 2.1 development
-
-- Add the read-only `pcb_drc_check` tool with structured violation results and a non-UI default.
-- Add PCB auto-layout and auto-routing handlers with the `0.4.15` routing options and long-operation quarantine.
-- Add PCB and schematic network query handlers with filtering, limits, and serializable results.
-
-### Fixes
-
-- Release the Bridge task queue after an EDA write API times out, so a permanently pending API call cannot block later read or write tasks.
-
----
 
 ## [2.0.8] - 2026-08-23
 

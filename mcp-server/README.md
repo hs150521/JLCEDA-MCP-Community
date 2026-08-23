@@ -21,10 +21,10 @@ WebSocket 与嘉立创 EDA 专业版扩展通信。
 
 ## 安装
 
-从 GitHub Release 下载 `jlceda-mcp-server-2.1.5.tgz`：
+从 GitHub Release 下载 `jlceda-mcp-server-2.2.0.tgz`：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.5.tgz
+npm install --global .\jlceda-mcp-server-2.2.0.tgz
 Get-Command jlceda-mcp
 ```
 
