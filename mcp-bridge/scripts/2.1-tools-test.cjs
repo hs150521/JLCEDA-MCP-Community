@@ -20,6 +20,7 @@ const { handlePcbRealtimeDrcTask } = require('../src/mcp/pcb-realtime-drc-handle
 const { handleProjectInfoTask } = require('../src/mcp/project-info-handler.ts');
 const { handleSchematicDocumentTask } = require('../src/mcp/schematic-document-handler.ts');
 const { handleSchematicDrcCheckTask } = require('../src/mcp/schematic-drc-handler.ts');
+const { toSerializableAsync } = require('../src/utils.ts');
 
 async function main() {
 	const routingCalls = 0;
@@ -67,6 +68,9 @@ async function main() {
 				return { uuid: 'pad-1', x, y };
 			},
 			async getPrimitivesInRegion(left, right, top, bottom, leftToRight) {
+				if (right === 500) {
+					return Array.from({ length: 130 }, (_value, index) => ({ uuid: `pcb-${index}` }));
+				}
 				assert.deepEqual([left, right, top, bottom, leftToRight], [0, 100, 0, 100, true]);
 				return [{ uuid: 'pad-1', type: 'PAD' }, { uuid: 'track-1', type: 'TRACK' }];
 			},
@@ -220,6 +224,9 @@ async function main() {
 			},
 			getPrimitiveAtPoint(x, y) { return { uuid: 'sch-pin-1', x, y }; },
 			getPrimitivesInRegion(left, right, top, bottom) {
+				if (right === 500) {
+					return Array.from({ length: 130 }, (_value, index) => ({ uuid: `sch-${index}` }));
+				}
 				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
 				return [{ uuid: 'sch-pin-1', type: 'PIN' }];
 			},
@@ -340,6 +347,9 @@ async function main() {
 	assert.equal((await handlePcbDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'pad-1');
 	const region = await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 });
 	assert.equal(region.total, 2);
+	const largePcbRegion = await toSerializableAsync(await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 500, top: 0, bottom: 100, limit: 130 }));
+	assert.equal(largePcbRegion.returned, 130);
+	assert.equal(largePcbRegion.primitives.length, 130);
 	assert.deepEqual((await handlePcbDocumentTask({ action: 'convert_canvas_to_data', x: 25, y: 35 })).point, { x: 15, y: 15 });
 	assert.deepEqual((await handlePcbDocumentTask({ action: 'convert_data_to_canvas', x: 15, y: 15 })).point, { x: 25, y: 35 });
 	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
@@ -366,6 +376,9 @@ async function main() {
 	assert.deepEqual((await handleSchematicDocumentTask({ action: 'mouse_position' })).position, { x: 25, y: 35 });
 	assert.equal((await handleSchematicDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'sch-pin-1');
 	assert.equal((await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 })).total, 1);
+	const largeSchematicRegion = await toSerializableAsync(await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 500, top: 0, bottom: 100, limit: 130 }));
+	assert.equal(largeSchematicRegion.returned, 130);
+	assert.equal(largeSchematicRegion.primitives.length, 130);
 	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
 	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).navigated, true);
 	assert.equal((await handleSchematicDocumentTask({ action: 'select_primitives', ids: ['sch-pin-1'] })).selected, true);

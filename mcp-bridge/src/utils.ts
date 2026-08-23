@@ -18,6 +18,18 @@ export function isPlainObjectRecord(value: unknown): value is Record<string, unk
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const PRESERVE_BOUNDED_ARRAY = Symbol('preserveBoundedArray');
+
+/** Mark a handler-owned, already bounded array so final bridge serialization keeps its declared limit. */
+export function preserveBoundedArray<T>(values: T[]): T[] {
+	Object.defineProperty(values, PRESERVE_BOUNDED_ARRAY, { value: true });
+	return values;
+}
+
+function shouldPreserveBoundedArray(value: unknown[]): boolean {
+	return (value as unknown as Record<symbol, unknown>)[PRESERVE_BOUNDED_ARRAY] === true;
+}
+
 /** Read primitive state through a public synchronous SDK getter. */
 export function getSyncState<T>(obj: unknown, method: string, fallback: T): T {
 	try {
@@ -125,7 +137,8 @@ export function toSerializable(value: unknown, depth = 0, seen?: WeakSet<object>
 	}
 
 	if (Array.isArray(value)) {
-		return value.slice(0, 120).map(item => toSerializable(item, depth + 1, tracked));
+		const items = shouldPreserveBoundedArray(value) ? value : value.slice(0, 120);
+		return items.map(item => toSerializable(item, depth + 1, tracked));
 	}
 
 	if (value instanceof Date) {
@@ -211,7 +224,8 @@ export async function toSerializableAsync(value: unknown, depth = 0, seen?: Weak
 	}
 
 	if (Array.isArray(value)) {
-		return await Promise.all(value.slice(0, 120).map(item => toSerializableAsync(item, depth + 1, tracked)));
+		const items = shouldPreserveBoundedArray(value) ? value : value.slice(0, 120);
+		return await Promise.all(items.map(item => toSerializableAsync(item, depth + 1, tracked)));
 	}
 
 	if (value instanceof Date) {

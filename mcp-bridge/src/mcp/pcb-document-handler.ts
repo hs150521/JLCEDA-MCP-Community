@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type PcbDocumentAction = 'status' | 'canvas_origin' | 'filter_configuration' | 'selection' | 'mouse_position' | 'select_primitives' | 'clear_selection' | 'primitive_type_by_id' | 'primitive_by_id' | 'primitives_by_id' | 'primitives_bbox' | 'primitive_at_point' | 'primitives_in_region' | 'convert_canvas_to_data' | 'convert_data_to_canvas' | 'navigate_to_coordinates' | 'navigate_to_region' | 'zoom_to_board_outline' | 'save' | 'start_ratline' | 'stop_ratline' | 'clear_routing' | 'import_changes' | 'import_auto_route_json' | 'import_auto_route_ses' | 'import_auto_layout_json';
 
@@ -44,7 +44,7 @@ interface PcbPrimitiveApi {
 const MAX_INSPECT_ITEMS = 500;
 
 async function serializeBoundedArray(values: unknown[]): Promise<unknown[]> {
-	return await Promise.all(values.map(value => toSerializableAsync(value)));
+	return preserveBoundedArray(await Promise.all(values.map(value => toSerializableAsync(value))));
 }
 
 function getApi(): PcbDocumentApi {

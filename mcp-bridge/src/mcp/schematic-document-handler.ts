@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type SchematicDocumentAction = 'status' | 'filter_configuration' | 'selection' | 'mouse_position' | 'primitive_at_point' | 'primitives_in_region' | 'navigate_to_coordinates' | 'navigate_to_region' | 'save' | 'import_changes' | 'select_primitives' | 'clear_selection' | 'primitive_type_by_id' | 'primitive_by_id' | 'primitives_by_id' | 'primitives_bbox';
 
@@ -80,7 +80,7 @@ function inspectLimit(input: Record<string, unknown>): number {
 }
 
 async function serializeArray(values: unknown[], limit: number): Promise<unknown[]> {
-	return await Promise.all(values.slice(0, limit).map(value => toSerializableAsync(value)));
+	return preserveBoundedArray(await Promise.all(values.slice(0, limit).map(value => toSerializableAsync(value))));
 }
 
 export async function handleSchematicDocumentTask(payload: unknown): Promise<unknown> {
