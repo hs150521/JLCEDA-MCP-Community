@@ -768,6 +768,14 @@ async function main() {
 	assert.deepEqual(netClassWithMember.readback.item.nets, ['USB_D+', 'USB_D-', 'USB_VBUS']);
 	const netClassWithoutMember = await handlePcbConstraintsManageTask({ kind: 'net_class', operation: 'remove_members', name: 'USB', nets: ['USB_VBUS'], confirm: true });
 	assert.deepEqual(netClassWithoutMember.readback.item.nets, ['USB_D+', 'USB_D-']);
+	netClasses.push(...Array.from({ length: 130 }, (_value, index) => ({ name: `BULK_${String(index)}`, nets: [], color: undefined })));
+	const largeNetClasses = await handlePcbConstraintsQueryTask({ kind: 'net_classes' });
+	assert.equal(largeNetClasses.count, 131);
+	assert.equal(largeNetClasses.returned, 120);
+	assert.equal(largeNetClasses.truncated, true);
+	const largeRename = await handlePcbConstraintsManageTask({ kind: 'net_class', operation: 'rename', name: 'BULK_129', newName: 'BULK_RENAMED', confirm: true });
+	assert.equal(largeRename.readback.total, 131);
+	assert.equal(largeRename.readback.item.name, 'BULK_RENAMED');
 	const differentialPair = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'create', name: 'USB_PAIR', positiveNet: 'USB_D+', negativeNet: 'USB_D-', confirm: true });
 	assert.equal(differentialPair.readback.item.positiveNet, 'USB_D+');
 	const updatedDifferentialPair = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'set_positive_net', name: 'USB_PAIR', positiveNet: 'USB_DP', confirm: true });

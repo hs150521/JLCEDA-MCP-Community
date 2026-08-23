@@ -195,7 +195,7 @@ export async function handlePcbConstraintsManageTask(payload: unknown): Promise<
 	const changed = await (api[methodName] as (...values: unknown[]) => Promise<unknown>).apply(api, args);
 	if (typeof api[config.list] !== 'function')
 		throw new TypeError(`EDA pcb_Drc.${config.list} API is unavailable for read-back verification.`);
-	const items = await toSerializableAsync(await (api[config.list] as () => Promise<unknown>).call(api));
+	const items = await (api[config.list] as () => Promise<unknown>).call(api);
 	const targetName = operation === 'rename' ? args[1] : name;
 	const readback = findReadbackItem(items, targetName);
 	return {
@@ -207,7 +207,7 @@ export async function handlePcbConstraintsManageTask(payload: unknown): Promise<
 		changed,
 		readback: {
 			total: readback.total,
-			item: readback.item,
+			item: readback.item === undefined ? undefined : await toSerializableAsync(readback.item),
 		},
 	};
 }

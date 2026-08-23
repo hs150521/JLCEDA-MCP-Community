@@ -50,11 +50,18 @@ export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<u
 			: kind === 'rule_configurations'
 				? [input.includeSystem === undefined ? false : input.includeSystem]
 				: [];
-	const result = await toSerializableAsync(await (api[methodName] as (...args: unknown[]) => Promise<unknown>).call(api, ...args));
-	const items = Array.isArray(result) ? result : undefined;
+	const rawResult = await (api[methodName] as (...args: unknown[]) => Promise<unknown>).call(api, ...args);
+	const items = Array.isArray(rawResult) ? rawResult : undefined;
 	return {
 		ok: true,
 		kind,
-		...(items ? { count: items.length, items } : { result }),
+		...(items
+			? {
+					count: items.length,
+					returned: Math.min(items.length, 120),
+					truncated: items.length > 120,
+					items: await toSerializableAsync(items.slice(0, 120)),
+				}
+			: { result: await toSerializableAsync(rawResult) }),
 	};
 }
