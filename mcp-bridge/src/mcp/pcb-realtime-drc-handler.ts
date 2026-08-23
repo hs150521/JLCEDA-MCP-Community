@@ -16,5 +16,5 @@ export async function handlePcbRealtimeDrcTask(payload: unknown): Promise<unknow
 	if (typeof method !== 'function')
 		throw new TypeError(`EDA pcb_Drc.${methodName} API is unavailable in this client version (requires EDA v4.2).`);
 	const result = await toSerializableAsync(await (method as () => Promise<unknown>).call(api));
-	return { ok: true, action, ...(action === 'status' ? { enabled: result } : { changed: result }) };
+	return { ok: action === 'status' || result === true, action, ...(action === 'status' ? { enabled: result } : { changed: result }) };
 }

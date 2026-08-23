@@ -162,7 +162,8 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 				throw new TypeError('EDA sch_Document.navigateToCoordinates API is unavailable in this client version.');
 			const x = requiredFiniteNumber(payload, 'x');
 			const y = requiredFiniteNumber(payload, 'y');
-			return { ok: true, action, x, y, navigated: await document.navigateToCoordinates(x, y) };
+			const navigated = await document.navigateToCoordinates(x, y);
+			return { ok: navigated === true, action, x, y, navigated };
 		}
 		if (typeof document.navigateToRegion !== 'function')
 			throw new TypeError('EDA sch_Document.navigateToRegion API is unavailable in this client version.');
@@ -172,18 +173,21 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 		const bottom = requiredFiniteNumber(payload, 'bottom');
 		if (left > right || top > bottom)
 			throw new RangeError('region bounds must satisfy left <= right and top <= bottom.');
-		return { ok: true, action, bounds: { left, right, top, bottom }, navigated: await document.navigateToRegion(left, right, top, bottom) };
+		const navigated = await document.navigateToRegion(left, right, top, bottom);
+		return { ok: navigated === true, action, bounds: { left, right, top, bottom }, navigated };
 	}
 
 	if (action === 'save') {
 		if (typeof document.save !== 'function')
 			throw new TypeError('EDA sch_Document.save API is unavailable in this client version.');
-		return { ok: true, action, saved: await document.save() };
+		const saved = await document.save();
+		return { ok: saved === true, action, saved };
 	}
 	if (action === 'import_changes') {
 		if (typeof document.importChanges !== 'function')
 			throw new TypeError('EDA sch_Document.importChanges API is unavailable in this client version.');
-		return { ok: true, action, imported: await document.importChanges() };
+		const imported = await document.importChanges();
+		return { ok: imported === true, action, imported };
 	}
 
 	const select = getApi<SchematicSelectControlApi>(eda, 'sch_SelectControl');
@@ -191,12 +195,14 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 		if (typeof select.doSelectPrimitives !== 'function')
 			throw new TypeError('EDA sch_SelectControl.doSelectPrimitives API is unavailable in this client version.');
 		const ids = requiredIds(payload);
-		return { ok: true, action, primitiveIds: ids, selected: await select.doSelectPrimitives(ids) };
+		const selected = await select.doSelectPrimitives(ids);
+		return { ok: selected === true, action, primitiveIds: ids, selected };
 	}
 	if (action === 'clear_selection') {
 		if (typeof select.clearSelected !== 'function')
 			throw new TypeError('EDA sch_SelectControl.clearSelected API is unavailable in this client version.');
-		return { ok: true, action, cleared: await select.clearSelected() };
+		const cleared = await select.clearSelected();
+		return { ok: cleared === true, action, cleared };
 	}
 
 	const primitive = getApi<SchematicPrimitiveApi>(eda, 'sch_Primitive');

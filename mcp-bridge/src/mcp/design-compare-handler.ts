@@ -52,5 +52,6 @@ export async function handleDesignCompareTask(payload: unknown): Promise<unknown
 		};
 	}
 	const serialized = await toSerializableAsync(result);
-	return { ok: true, domain, sourceA, sourceB, result: serialized };
+	const ok = domain !== 'pcb' || (isPlainObjectRecord(result) && result.success === true);
+	return { ok, domain, sourceA, sourceB, result: serialized };
 }

@@ -196,11 +196,13 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 			if (typeof selectApi.doSelectPrimitives !== 'function')
 				throw new TypeError('EDA pcb_SelectControl.doSelectPrimitives API is unavailable in this client version.');
 			const ids = requiredPrimitiveIds(payload);
-			return { ok: true, action, primitiveIds: ids, selected: await selectApi.doSelectPrimitives(ids) };
+			const selected = await selectApi.doSelectPrimitives(ids);
+			return { ok: selected === true, action, primitiveIds: ids, selected };
 		}
 		if (typeof selectApi.clearSelected !== 'function')
 			throw new TypeError('EDA pcb_SelectControl.clearSelected API is unavailable in this client version.');
-		return { ok: true, action, cleared: await selectApi.clearSelected() };
+		const cleared = await selectApi.clearSelected();
+		return { ok: cleared === true, action, cleared };
 	}
 	if (action === 'primitive_type_by_id' || action === 'primitive_by_id' || action === 'primitives_by_id' || action === 'primitives_bbox') {
 		const eda = getEdaRuntime();
@@ -267,7 +269,8 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 			throw new TypeError('EDA pcb_Document.navigateToCoordinates API is unavailable in this client version.');
 		const x = requiredFiniteNumber(payload, 'x');
 		const y = requiredFiniteNumber(payload, 'y');
-		return { ok: true, action, x, y, navigated: await toSerializableAsync(await api.navigateToCoordinates(x, y)) };
+		const navigated = await api.navigateToCoordinates(x, y);
+		return { ok: navigated === true, action, x, y, navigated: await toSerializableAsync(navigated) };
 	}
 	if (action === 'navigate_to_region') {
 		if (typeof api.navigateToRegion !== 'function')
@@ -278,12 +281,14 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		const bottom = requiredFiniteNumber(payload, 'bottom');
 		if (left > right || top > bottom)
 			throw new RangeError('region bounds must satisfy left <= right and top <= bottom.');
-		return { ok: true, action, bounds: { left, right, top, bottom }, navigated: await toSerializableAsync(await api.navigateToRegion(left, right, top, bottom)) };
+		const navigated = await api.navigateToRegion(left, right, top, bottom);
+		return { ok: navigated === true, action, bounds: { left, right, top, bottom }, navigated: await toSerializableAsync(navigated) };
 	}
 	if (action === 'zoom_to_board_outline') {
 		if (typeof api.zoomToBoardOutline !== 'function')
 			throw new TypeError('EDA pcb_Document.zoomToBoardOutline API is unavailable in this client version.');
-		return { ok: true, action, zoomed: await toSerializableAsync(await api.zoomToBoardOutline()) };
+		const zoomed = await api.zoomToBoardOutline();
+		return { ok: zoomed === true, action, zoomed: await toSerializableAsync(zoomed) };
 	}
 	if (action === 'status') {
 		const status: Record<string, unknown> = { ok: true, action };
@@ -299,14 +304,16 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		if (typeof api.save !== 'function')
 			throw new TypeError('EDA pcb_Document.save API is unavailable in this client version.');
 		const uuid = await resolvePcbDocumentUuid(payload);
-		return { ok: true, action, uuid, saved: await toSerializableAsync(await api.save(uuid)) };
+		const saved = await api.save(uuid);
+		return { ok: saved === true, action, uuid, saved: await toSerializableAsync(saved) };
 	}
 	if (action === 'start_ratline' || action === 'stop_ratline') {
 		const methodName = action === 'start_ratline' ? 'startCalculatingRatline' : 'stopCalculatingRatline';
 		const method = api[methodName];
 		if (typeof method !== 'function')
 			throw new TypeError(`EDA pcb_Document.${methodName} API is unavailable in this client version.`);
-		return { ok: true, action, changed: await toSerializableAsync(await method.call(api)) };
+		const changed = await method.call(api);
+		return { ok: changed === true, action, changed: await toSerializableAsync(changed) };
 	}
 	if (action === 'clear_routing') {
 		if (typeof api.clearRouting !== 'function')
@@ -318,18 +325,21 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		const routingType = payload.routingType;
 		if (routingType !== 'all' && routingType !== 'net' && routingType !== 'connection')
 			throw new TypeError('routingType must be all, net, or connection.');
-		return { ok: true, action, routingType, cleared: await toSerializableAsync(await api.clearRouting(routingType)) };
+		const cleared = await api.clearRouting(routingType);
+		return { ok: cleared === true, action, routingType, cleared: await toSerializableAsync(cleared) };
 	}
 	if (action === 'import_changes') {
 		if (typeof api.importChanges !== 'function')
 			throw new TypeError('EDA pcb_Document.importChanges API is unavailable in this client version.');
 		const uuid = optionalString(payload, 'uuid');
-		return { ok: true, action, imported: await toSerializableAsync(await api.importChanges(uuid)) };
+		const imported = await api.importChanges(uuid);
+		return { ok: imported === true, action, imported: await toSerializableAsync(imported) };
 	}
 	const methodName = action === 'import_auto_route_json' ? 'importAutoRouteJsonFile' : action === 'import_auto_route_ses' ? 'importAutoRouteSesFile' : 'importAutoLayoutJsonFile';
 	const method = api[methodName];
 	if (typeof method !== 'function')
 		throw new TypeError(`EDA pcb_Document.${methodName} API is unavailable in this client version.`);
 	const file = buildImportFile(payload, action);
-	return { ok: true, action, fileName: file.name, bytes: file.size, imported: await toSerializableAsync(await method.call(api, file)) };
+	const imported = await method.call(api, file);
+	return { ok: imported === true, action, fileName: file.name, bytes: file.size, imported: await toSerializableAsync(imported) };
 }
