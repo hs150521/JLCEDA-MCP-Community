@@ -19,7 +19,7 @@ interface PcbDocumentApi {
 	getPrimitiveAtPoint?: (x: number, y: number) => Promise<unknown>;
 	getPrimitivesInRegion?: (left: number, right: number, top: number, bottom: number, leftToRight?: boolean) => Promise<unknown>;
 	zoomToBoardOutline?: () => Promise<unknown>;
-	save?: (uuid: string) => Promise<unknown>;
+	save?: () => Promise<unknown>;
 	importChanges?: (uuid?: string) => Promise<unknown>;
 	importAutoRouteJsonFile?: (file: File) => Promise<unknown>;
 	importAutoRouteSesFile?: (file: File) => Promise<unknown>;
@@ -53,21 +53,6 @@ function getApi(): PcbDocumentApi {
 	if (!isPlainObjectRecord(api))
 		throw new TypeError('EDA pcb_Document API is unavailable. Open a PCB document first.');
 	return api as PcbDocumentApi;
-}
-
-async function resolvePcbDocumentUuid(input: Record<string, unknown>): Promise<string> {
-	const explicitUuid = optionalString(input, 'uuid');
-	if (explicitUuid)
-		return explicitUuid;
-	const eda = getEdaRuntime();
-	const dmtPcb = eda?.dmt_Pcb;
-	if (!isPlainObjectRecord(dmtPcb) || typeof dmtPcb.getCurrentPcbInfo !== 'function')
-		throw new TypeError('PCB document uuid is required and dmt_Pcb.getCurrentPcbInfo is unavailable.');
-	const current = await dmtPcb.getCurrentPcbInfo();
-	const uuid = isPlainObjectRecord(current) && typeof current.uuid === 'string' ? current.uuid.trim() : '';
-	if (!uuid)
-		throw new TypeError('Unable to resolve the current PCB document uuid.');
-	return uuid;
 }
 
 function requiredAction(value: unknown): PcbDocumentAction {
@@ -245,8 +230,8 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		const right = requiredFiniteNumber(payload, 'right');
 		const top = requiredFiniteNumber(payload, 'top');
 		const bottom = requiredFiniteNumber(payload, 'bottom');
-		if (left > right || top > bottom)
-			throw new RangeError('region bounds must satisfy left <= right and top <= bottom.');
+		if (left > right || top < bottom)
+			throw new RangeError('region bounds must satisfy left <= right and top >= bottom.');
 		const leftToRight = payload.leftToRight === undefined ? true : payload.leftToRight;
 		if (typeof leftToRight !== 'boolean')
 			throw new TypeError('leftToRight must be a boolean.');
@@ -279,8 +264,8 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		const right = requiredFiniteNumber(payload, 'right');
 		const top = requiredFiniteNumber(payload, 'top');
 		const bottom = requiredFiniteNumber(payload, 'bottom');
-		if (left > right || top > bottom)
-			throw new RangeError('region bounds must satisfy left <= right and top <= bottom.');
+		if (left > right || top < bottom)
+			throw new RangeError('region bounds must satisfy left <= right and top >= bottom.');
 		const navigated = await api.navigateToRegion(left, right, top, bottom);
 		return { ok: navigated === true, action, bounds: { left, right, top, bottom }, navigated: await toSerializableAsync(navigated) };
 	}
@@ -303,9 +288,10 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 	if (action === 'save') {
 		if (typeof api.save !== 'function')
 			throw new TypeError('EDA pcb_Document.save API is unavailable in this client version.');
-		const uuid = await resolvePcbDocumentUuid(payload);
-		const saved = await api.save(uuid);
-		return { ok: saved === true, action, uuid, saved: await toSerializableAsync(saved) };
+		if (payload.uuid !== undefined)
+			throw new TypeError('uuid is not supported for save; EDA saves only the current PCB document.');
+		const saved = await api.save();
+		return { ok: saved === true, action, saved: await toSerializableAsync(saved) };
 	}
 	if (action === 'start_ratline' || action === 'stop_ratline') {
 		const methodName = action === 'start_ratline' ? 'startCalculatingRatline' : 'stopCalculatingRatline';

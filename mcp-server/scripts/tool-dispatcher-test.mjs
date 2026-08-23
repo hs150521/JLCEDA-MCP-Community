@@ -350,6 +350,12 @@ const schematicDocumentSchema = z.fromJSONSchema(schematicDocumentDefinition.inp
 assert.equal(schematicDocumentSchema.safeParse({ action: 'primitive_at_point', x: 1, y: 2, ids: ['unexpected'] }).success, false);
 assert.equal(schematicDocumentSchema.safeParse({ action: 'primitives_by_id', ids: ['primitive-1'], limit: 1 }).success, false);
 
+const pcbDocumentDefinition = definitions.find((definition) => definition.name === 'pcb_document_action');
+assert.ok(pcbDocumentDefinition);
+const pcbDocumentSchema = z.fromJSONSchema(pcbDocumentDefinition.inputSchema);
+assert.equal(pcbDocumentSchema.safeParse({ action: 'save' }).success, true);
+assert.equal(pcbDocumentSchema.safeParse({ action: 'save', uuid: 'pcb-other' }).success, false);
+
 await assert.rejects(
   dispatcher.dispatch({
     name: 'api_invoke',

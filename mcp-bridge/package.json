@@ -11,9 +11,10 @@
 	"scripts": {
 		"compile": "rimraf ./dist/ && ts-node --project tsconfig.build.json ./config/esbuild.prod.ts",
 		"typecheck": "tsc --noEmit",
+		"verify:api-doc": "py -3 ../tool/generate_jlceda_api_doc.py --input node_modules/@jlceda/pro-api-types/index.d.ts --output resources/jlceda-pro-api-doc.json --typescript-module node_modules/typescript/lib/typescript.js --check",
 		"lint": "eslint",
 		"fix": "eslint --fix",
-		"build": "npm run test:netlabel && npm run test:2.1 && npm run typecheck && npm run compile && npm run verify:runtime && ts-node --project tsconfig.build.json ./build/packaged.ts",
+		"build": "npm run test:netlabel && npm run test:2.1 && npm run typecheck && npm run verify:api-doc && npm run compile && npm run verify:runtime && ts-node --project tsconfig.build.json ./build/packaged.ts",
 		"verify:runtime": "node scripts/verify-runtime-entry.mjs",
 		"test:netlabel": "node scripts/netlabel-kind-test.cjs",
 		"test:2.1": "node scripts/2.1-tools-test.cjs"

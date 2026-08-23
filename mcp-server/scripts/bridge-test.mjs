@@ -448,8 +448,8 @@ try {
     }
     queuedDisconnectSecondReceived = true;
   });
-  const queuedDisconnectFirst = queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 200);
-  const queuedDisconnectSecond = queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 200);
+  const queuedDisconnectFirst = queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 600);
+  const queuedDisconnectSecond = queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 600);
   await waitUntil(() => queuedDisconnectFirstStarted && queuedDisconnectSecondReceived);
   queuedDisconnectOld.socket.close();
   await assert.rejects(queuedDisconnectFirst, /disconnected/);
@@ -470,10 +470,10 @@ try {
     queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
     /quarantined after reconnect/,
   );
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  await assert.rejects(
-    queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
-    /quarantined after reconnect/,
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  assert.deepEqual(
+    await queuedDisconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    { source: 'queued-disconnect-reconnected', path: '/bridge/jlceda/api/invoke' },
   );
   queuedDisconnectOld = undefined;
   queuedDisconnectNew.socket.close();

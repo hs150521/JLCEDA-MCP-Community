@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', modu
 require('ts-node/register/transpile-only');
 
 const { handleApiIndexTask } = require('../src/mcp/api-index-handler.ts');
+const { handleApiSearchTask } = require('../src/mcp/api-search-handler.ts');
 const { handleAutoLayoutTask } = require('../src/mcp/auto-layout-handler.ts');
 const { handleAutoRoutingTask } = require('../src/mcp/auto-routing-handler.ts');
 const { handleCanvasSnapshotTask } = require('../src/mcp/canvas-snapshot-handler.ts');
@@ -47,6 +48,16 @@ async function main() {
 		{ uuid: 'page-3', name: 'Other', parentSchematicUuid: 'sch-2', trusted: true },
 	];
 	globalThis.eda = {
+		sys_FileSystem: {
+			async getExtensionFile(uri) {
+				assert.equal(uri, '/resources/jlceda-pro-api-doc.json');
+				return {
+					async text() {
+						return JSON.stringify(require('../resources/jlceda-pro-api-doc.json'));
+					},
+				};
+			},
+		},
 		dmt_Project: {
 			async getCurrentProjectInfo() { return { uuid: 'project-1', name: '2026' }; },
 			async getAllProjectsUuid(teamUuid, folderUuid, workspaceUuid) {
@@ -157,7 +168,7 @@ async function main() {
 				if (right === 500) {
 					return Array.from({ length: 130 }, (_value, index) => ({ uuid: `pcb-${index}` }));
 				}
-				assert.deepEqual([left, right, top, bottom, leftToRight], [0, 100, 0, 100, true]);
+				assert.deepEqual([left, right, top, bottom, leftToRight], [0, 100, 100, 0, true]);
 				return [{ uuid: 'pad-1', type: 'PAD' }, { uuid: 'track-1', type: 'TRACK' }];
 			},
 			async navigateToCoordinates(x, y) {
@@ -165,12 +176,12 @@ async function main() {
 				return true;
 			},
 			async navigateToRegion(left, right, top, bottom) {
-				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
+				assert.deepEqual([left, right, top, bottom], [0, 100, 100, 0]);
 				return true;
 			},
 			async zoomToBoardOutline() { return true; },
-			async save(uuid) {
-				assert.equal(uuid, 'pcb-1');
+			async save(...args) {
+				assert.deepEqual(args, []);
 				return true;
 			},
 			async importChanges(uuid) {
@@ -228,7 +239,12 @@ async function main() {
 				assert.equal(libraryUuid, 'system-library-1');
 				return { uuid, libraryUuid, name: 'R0402' };
 			},
-			async search() { return []; },
+			async search(keyword, libraryUuid, classification, symbolType, limit, page) {
+				if (keyword !== 'paged')
+					return [];
+				assert.deepEqual([libraryUuid, classification, symbolType, limit, page], [undefined, undefined, undefined, 20, 2]);
+				return Array.from({ length: 20 }, (_value, index) => ({ uuid: `paged-${index}`, name: `Paged ${index}` }));
+			},
 			async searchByProperties(properties) {
 				assert.equal(properties.supplierId, 'C1523');
 				return [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }];
@@ -489,7 +505,7 @@ async function main() {
 				return true;
 			},
 			async navigateToRegion(left, right, top, bottom) {
-				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
+				assert.deepEqual([left, right, top, bottom], [0, 100, 100, 0]);
 				return true;
 			},
 			getPrimitiveAtPoint(x, y) { return { uuid: 'sch-pin-1', x, y }; },
@@ -497,7 +513,7 @@ async function main() {
 				if (right === 500) {
 					return Array.from({ length: 130 }, (_value, index) => ({ uuid: `sch-${index}` }));
 				}
-				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
+				assert.deepEqual([left, right, top, bottom], [0, 100, 100, 0]);
 				return [{ uuid: 'sch-pin-1', type: 'PIN' }];
 			},
 			async save() {
@@ -728,19 +744,22 @@ async function main() {
 	assert.equal((await handlePcbDocumentTask({ action: 'primitives_by_id', ids: ['pad-1'] })).primitives.length, 1);
 	assert.deepEqual((await handlePcbDocumentTask({ action: 'primitives_bbox', ids: ['pad-1'] })).bounds, { minX: 1, minY: 2, maxX: 3, maxY: 4 });
 	assert.equal((await handlePcbDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'pad-1');
-	const region = await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 });
+	const region = await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 100, bottom: 0 });
 	assert.equal(region.total, 2);
-	const largePcbRegion = await toSerializableAsync(await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 500, top: 0, bottom: 100, limit: 130 }));
+	const largePcbRegion = await toSerializableAsync(await handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 500, top: 100, bottom: 0, limit: 130 }));
 	assert.equal(largePcbRegion.returned, 130);
 	assert.equal(largePcbRegion.primitives.length, 130);
 	assert.deepEqual((await handlePcbDocumentTask({ action: 'convert_canvas_to_data', x: 25, y: 35 })).point, { x: 15, y: 15 });
 	assert.deepEqual((await handlePcbDocumentTask({ action: 'convert_data_to_canvas', x: 15, y: 15 })).point, { x: 25, y: 35 });
 	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
-	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).navigated, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 100, bottom: 0 })).navigated, true);
+	await assert.rejects(() => handlePcbDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 }), /top >= bottom/);
+	await assert.rejects(() => handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 }), /top >= bottom/);
 	assert.equal((await handlePcbDocumentTask({ action: 'zoom_to_board_outline' })).zoomed, true);
 	const savedPcb = await handlePcbDocumentTask({ action: 'save' });
 	assert.equal(savedPcb.saved, true);
-	assert.equal(savedPcb.uuid, 'pcb-1');
+	assert.equal(savedPcb.uuid, undefined);
+	await assert.rejects(() => handlePcbDocumentTask({ action: 'save', uuid: 'pcb-other' }), /uuid is not supported for save/);
 	assert.equal((await handlePcbDocumentTask({ action: 'start_ratline' })).changed, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'stop_ratline' })).changed, true);
 	await assert.rejects(() => handlePcbDocumentTask({ action: 'clear_routing' }), /routingType is required/);
@@ -766,7 +785,7 @@ async function main() {
 	assert.equal((await handlePcbDocumentTask({ action: 'select_primitives', ids: ['pad-1'] })).ok, false);
 	assert.equal((await handlePcbDocumentTask({ action: 'clear_selection' })).ok, false);
 	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).ok, false);
-	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).ok, false);
+	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 100, bottom: 0 })).ok, false);
 	assert.equal((await handlePcbDocumentTask({ action: 'zoom_to_board_outline' })).ok, false);
 	assert.equal((await handlePcbDocumentTask({ action: 'save' })).ok, false);
 	assert.equal((await handlePcbDocumentTask({ action: 'start_ratline' })).ok, false);
@@ -835,12 +854,14 @@ async function main() {
 	assert.equal(schSelection.selectedPrimitives.length, 1);
 	assert.deepEqual((await handleSchematicDocumentTask({ action: 'mouse_position' })).position, { x: 25, y: 35 });
 	assert.equal((await handleSchematicDocumentTask({ action: 'primitive_at_point', x: 25, y: 35 })).primitive.uuid, 'sch-pin-1');
-	assert.equal((await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 })).total, 1);
-	const largeSchematicRegion = await toSerializableAsync(await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 500, top: 0, bottom: 100, limit: 130 }));
+	assert.equal((await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 100, bottom: 0 })).total, 1);
+	const largeSchematicRegion = await toSerializableAsync(await handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 500, top: 100, bottom: 0, limit: 130 }));
 	assert.equal(largeSchematicRegion.returned, 130);
 	assert.equal(largeSchematicRegion.primitives.length, 130);
 	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
-	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).navigated, true);
+	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 100, bottom: 0 })).navigated, true);
+	await assert.rejects(() => handleSchematicDocumentTask({ action: 'primitives_in_region', left: 0, right: 100, top: 0, bottom: 100 }), /top >= bottom/);
+	await assert.rejects(() => handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 }), /top >= bottom/);
 	assert.equal((await handleSchematicDocumentTask({ action: 'select_primitives', ids: ['sch-pin-1'] })).selected, true);
 	assert.equal((await handleSchematicDocumentTask({ action: 'clear_selection' })).cleared, true);
 	assert.equal((await handleSchematicDocumentTask({ action: 'primitive_type_by_id', id: 'sch-pin-1' })).primitiveType, 'PIN');
@@ -856,7 +877,7 @@ async function main() {
 	globalThis.eda.sch_SelectControl.doSelectPrimitives = async () => false;
 	globalThis.eda.sch_SelectControl.clearSelected = async () => false;
 	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).ok, false);
-	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).ok, false);
+	assert.equal((await handleSchematicDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 100, bottom: 0 })).ok, false);
 	assert.equal((await handleSchematicDocumentTask({ action: 'save' })).ok, false);
 	assert.equal((await handleSchematicDocumentTask({ action: 'import_changes' })).ok, false);
 	assert.equal((await handleSchematicDocumentTask({ action: 'select_primitives', ids: ['sch-pin-1'] })).ok, false);
@@ -918,6 +939,13 @@ async function main() {
 	assert.equal(exactComponent.selection.candidates[0].libraryUuid, 'system-library-1');
 	const symbolSearch = await handleLibrarySearchTask({ kind: 'symbol', keyword: 'LM358' });
 	assert.equal(symbolSearch.items[0].uuid, 'symbol-1');
+	const pagedDeviceSearch = await handleLibrarySearchTask({ kind: 'device', keyword: 'paged', limit: 20, page: 2 });
+	assert.equal(pagedDeviceSearch.returned, 20);
+	assert.equal(pagedDeviceSearch.page, 2);
+	assert.equal(pagedDeviceSearch.pageSize, 20);
+	assert.equal(pagedDeviceSearch.total, undefined);
+	assert.equal(pagedDeviceSearch.totalKnown, false);
+	assert.equal(pagedDeviceSearch.mayHaveMore, true);
 	const classifications = await handleLibraryClassificationTask({ kind: 'symbol', libraryUuid: 'system-library-1' });
 	assert.equal(classifications.total, 2);
 	assert.equal(classifications.tree[0].children[0].name, 'Operational');
@@ -952,7 +980,12 @@ async function main() {
 	const apiIndex = await toSerializableAsync(await handleApiIndexTask({}));
 	assert.ok(apiIndex.total > 120);
 	assert.equal(apiIndex.index.length, apiIndex.total);
+	assert.equal(new Set(apiIndex.index.map(entry => entry.fullName)).size, apiIndex.index.length);
 	assert.ok(apiIndex.index.some(entry => entry.fullName === 'eda.sch_Document.autoRouting'));
+	const apiSearch = await handleApiSearchTask({ query: 'getRealTimeDrcStatus', scope: 'callable' });
+	assert.ok(apiSearch.items.some(item => item.fullName === 'eda.pcb_Drc.getRealTimeDrcStatus'));
+	const renderImageSearch = await handleApiSearchTask({ query: 'getRenderImage', scope: 'callable', owner: 'lib_Symbol' });
+	assert.ok(renderImageSearch.items.some(item => item.fullName === 'eda.lib_Symbol.getRenderImage'));
 	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
 	assert.equal(lcscSearch.searchMode, 'lcsc_ids');
 	assert.equal(lcscSearch.items.length, 2);

@@ -958,7 +958,7 @@
         "leftToRight": { "type": "boolean", "default": true, "description": "Region selection direction passed to getPrimitivesInRegion." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "Maximum selected/region primitives returned." },
         "includeObjects": { "type": "boolean", "default": false, "description": "For selection, include serialized selected primitive objects in addition to IDs." },
-        "uuid": { "type": "string", "minLength": 1, "description": "Optional PCB document UUID for save or schematic UUID for import_changes." },
+        "uuid": { "type": "string", "minLength": 1, "description": "Optional schematic UUID for import_changes." },
         "fileName": { "type": "string", "minLength": 1 },
         "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
@@ -1043,7 +1043,7 @@
         },
         {
           "type": "object",
-          "properties": { "action": { "const": "save" }, "uuid": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "properties": { "action": { "const": "save" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
           "required": ["action"],
           "additionalProperties": false
         },
@@ -1476,7 +1476,7 @@
   },
   {
     "name": "library_search",
-    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets, and search simulation models. Device searches also support exact properties and official LCSC C-number mapping.",
+    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets, and search simulation models. Device searches also support exact properties and official LCSC C-number mapping. SDK keyword/property searches return one page and do not expose a complete hit count.",
     "inputSchema": {
       "$defs": {
         "keyword": { "type": "string", "minLength": 1 },

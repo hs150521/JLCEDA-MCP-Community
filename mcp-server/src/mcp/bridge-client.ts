@@ -723,9 +723,7 @@ export class EdaBridgeServer {
     if (pending.length === 0) {
       return;
     }
-    const longestTimeout = Math.max(...pending.map(request => request.started
-      ? request.executionTimeoutMs ?? 30000
-      : BRIDGE_QUEUE_TIMEOUT_MS));
+    const longestTimeout = Math.max(...pending.map(request => request.executionTimeoutMs ?? 30000));
     const path = pending[0].path ?? '/bridge/jlceda/unknown';
     const existing = this.reconnectBarriers.get(clientId);
     const until = Date.now() + longestTimeout;

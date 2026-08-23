@@ -149,17 +149,31 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	}
 	const allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
 	const items = await toSerializableAsync(allRawItems.slice(0, limit));
-	return {
+	const response = {
 		ok: true,
 		kind,
 		searchMode: lcscIds ? 'lcsc_ids' : properties ? 'properties' : 'keyword',
 		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
 		...(simulationModelType ? { simulationModelType } : {}),
 		libraryUuid: libraryUuid ?? '',
-		...(lcscIds ? {} : { page }),
-		total: allRawItems.length,
 		returned: Array.isArray(items) ? items.length : 0,
-		truncated: allRawItems.length > limit,
 		items,
+	};
+	if (lcscIds) {
+		return {
+			...response,
+			total: allRawItems.length,
+			truncated: allRawItems.length > limit,
+		};
+	}
+
+	// The SDK returns one page without its complete hit count. A full page only
+	// proves another page may exist, so do not present the page length as total.
+	return {
+		...response,
+		page,
+		pageSize: limit,
+		totalKnown: false,
+		mayHaveMore: allRawItems.length >= limit,
 	};
 }

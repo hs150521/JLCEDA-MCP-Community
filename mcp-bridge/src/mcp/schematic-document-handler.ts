@@ -148,8 +148,8 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 		const right = requiredFiniteNumber(payload, 'right');
 		const top = requiredFiniteNumber(payload, 'top');
 		const bottom = requiredFiniteNumber(payload, 'bottom');
-		if (left > right || top > bottom)
-			throw new RangeError('region bounds must satisfy left <= right and top <= bottom.');
+		if (left > right || top < bottom)
+			throw new RangeError('region bounds must satisfy left <= right and top >= bottom.');
 		const rawPrimitives = await document.getPrimitivesInRegion(left, right, top, bottom);
 		const primitives = Array.isArray(rawPrimitives) ? rawPrimitives : [];
 		const limit = inspectLimit(payload);
@@ -171,8 +171,8 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 		const right = requiredFiniteNumber(payload, 'right');
 		const top = requiredFiniteNumber(payload, 'top');
 		const bottom = requiredFiniteNumber(payload, 'bottom');
-		if (left > right || top > bottom)
-			throw new RangeError('region bounds must satisfy left <= right and top <= bottom.');
+		if (left > right || top < bottom)
+			throw new RangeError('region bounds must satisfy left <= right and top >= bottom.');
 		const navigated = await document.navigateToRegion(left, right, top, bottom);
 		return { ok: navigated === true, action, bounds: { left, right, top, bottom }, navigated };
 	}
