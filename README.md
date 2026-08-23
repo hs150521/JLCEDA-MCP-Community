@@ -6,9 +6,10 @@
 
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
 - `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
-- `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
+- `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools. `project_info` can optionally return bounded Board and Panel inventories.
 - `eda_context` includes the detected JLCEDA/EasyEDA edition, online mode, editor version, and editor build date when exposed by the client.
-- `eda_canvas_snapshot`: capture active EDA canvas metadata and, when explicitly requested, a bounded read-only Base64 image for visual inspection.
+- `eda_canvas_snapshot`: capture active EDA canvas metadata and, when explicitly requested, a bounded read-only MCP image for visual inspection.
+- `design_source_export`: read bounded previews of the active document source or its footprint sources, with explicit opt-in for bounded complete source text.
 - `workspace_query`: read the current workspace/team and discover accessible workspaces, teams, projects, and folders.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers, the current layer, and copper-layer count.

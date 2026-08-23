@@ -116,7 +116,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'workspace_query'];
+    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_source_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'workspace_query'];
     if (!['api_invoke', 'eda_context', ...extendedReadTools].includes(toolName)) {
       return undefined;
     }
@@ -151,6 +151,7 @@ export class ToolDispatcher {
       'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
       'netlist_compare': '/bridge/jlceda/netlist/compare',
       'design_compare': '/bridge/jlceda/design/compare',
+      'design_source_export': '/bridge/jlceda/design/source-export',
       'pcb_layer_query': '/bridge/jlceda/pcb/layer-query',
       'pcb_realtime_drc': '/bridge/jlceda/pcb/realtime-drc',
       'pcb_document_action': '/bridge/jlceda/pcb/document',

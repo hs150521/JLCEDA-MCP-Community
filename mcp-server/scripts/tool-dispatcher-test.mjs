@@ -27,7 +27,7 @@ const fakeBridge = {
     if (path === '/bridge/jlceda/component/place/close') {
       return { ok: true };
     }
-    if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query') {
+    if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query' || path === '/bridge/jlceda/design/source-export') {
 	  return { ok: true };
 	}
     if (path === '/bridge/jlceda/canvas/snapshot') {
@@ -103,6 +103,14 @@ assert.equal(workspaceResult.structuredContent.ok, true);
 const workspaceCall = calls.find(call => call.path === '/bridge/jlceda/workspace/query');
 assert.equal(workspaceCall.timeoutMs, 44000);
 
+const sourceExportResult = await dispatcher.dispatch({
+  name: 'design_source_export',
+  arguments: { timeoutMs: 42000 },
+});
+assert.equal(sourceExportResult.structuredContent.ok, true);
+const sourceExportCall = calls.find(call => call.path === '/bridge/jlceda/design/source-export');
+assert.equal(sourceExportCall.timeoutMs, 44000);
+
 const snapshotResult = await dispatcher.dispatch({
   name: 'eda_canvas_snapshot',
   arguments: {},
@@ -155,6 +163,13 @@ for (const input of [
 ]) {
   assert.equal(workspaceSchema.safeParse(input).success, false, `workspace_query should reject ${JSON.stringify(input)}`);
 }
+
+const sourceExportDefinition = definitions.find((definition) => definition.name === 'design_source_export');
+assert.ok(sourceExportDefinition);
+const sourceExportSchema = z.fromJSONSchema(sourceExportDefinition.inputSchema);
+assert.equal(sourceExportSchema.safeParse({}).success, true);
+assert.equal(sourceExportSchema.safeParse({ action: 'footprints', limit: 1 }).success, true);
+assert.equal(sourceExportSchema.safeParse({ action: 'document', limit: 1 }).success, false);
 
 await assert.rejects(
   dispatcher.dispatch({

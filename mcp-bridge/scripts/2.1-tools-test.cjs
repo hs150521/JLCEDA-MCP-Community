@@ -8,6 +8,7 @@ const { handleCanvasSnapshotTask } = require('../src/mcp/canvas-snapshot-handler
 const { handleComponentSelectTask } = require('../src/mcp/component-select-handler.ts');
 const { handleEdaContextTask } = require('../src/mcp/context-handler.ts');
 const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.ts');
+const { handleDesignSourceExportTask } = require('../src/mcp/design-source-export-handler.ts');
 const { handleLibrarySearchTask } = require('../src/mcp/library-search-handler.ts');
 const { handleLibrarySourcesTask } = require('../src/mcp/library-sources-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
@@ -55,7 +56,13 @@ async function main() {
 				return { uuid, name: 'Robot' };
 			},
 		},
-		dmt_Board: { async getCurrentBoardInfo() { return { uuid: 'board-1' }; } },
+		dmt_Board: {
+			async getCurrentBoardInfo() { return { uuid: 'board-1' }; },
+			async getAllBoardsInfo() { return [{ uuid: 'board-1', name: 'Main board' }, { uuid: 'board-2', name: 'Auxiliary board' }]; },
+		},
+		dmt_Panel: {
+			async getAllPanelsInfo() { return [{ uuid: 'panel-1', name: 'Production panel' }]; },
+		},
 		dmt_Schematic: {
 			async getCurrentSchematicInfo() { return { uuid: 'sch-1' }; },
 			async getCurrentSchematicAllSchematicPagesInfo() { return [{ uuid: 'page-1' }]; },
@@ -332,6 +339,15 @@ async function main() {
 			getEditorCurrentVersion() { return '3.2.181'; },
 			getEditorCompliedDate() { return '2026-08-01'; },
 		},
+		sys_FileManager: {
+			async getDocumentSource() { return 'DOCHEAD: example schematic source'; },
+			async getDocumentFootprintSources() {
+				return [
+					{ footprintUuid: 'footprint-1', documentSource: 'FOOTPRINT: one' },
+					{ footprintUuid: 'footprint-2', documentSource: 'FOOTPRINT: two' },
+				];
+			},
+		},
 		sys_Tool: {
 			async netlistComparison(a, b) {
 				if (a === 'net-1') {
@@ -379,6 +395,10 @@ async function main() {
 	const project = await handleProjectInfoTask({ includePages: true });
 	assert.equal(project.project.name, '2026');
 	assert.equal(project.schematicPages.length, 1);
+	const projectInventory = await handleProjectInfoTask({ includePages: false, includeBoards: true, includePanels: true, limit: 2 });
+	assert.equal(projectInventory.boards.total, 2);
+	assert.equal(projectInventory.boards.items[1].name, 'Auxiliary board');
+	assert.equal(projectInventory.panels.items[0].name, 'Production panel');
 	const context = await handleEdaContextTask({});
 	assert.equal(context.environment.editorVersion, '3.2.181');
 	assert.equal(context.environment.isJLCEDAProEdition, true);
@@ -387,6 +407,14 @@ async function main() {
 	assert.ok(typeof canvasSnapshot.image.dataBase64 === 'string');
 	const omittedCanvasSnapshot = await handleCanvasSnapshotTask({ maxBytes: 65536, includeData: false });
 	assert.equal(omittedCanvasSnapshot.image.dataBase64, undefined);
+	const designSource = await handleDesignSourceExportTask({ includeData: true });
+	assert.equal(designSource.source.data, 'DOCHEAD: example schematic source');
+	const designSourceWithSchemaDefault = await handleDesignSourceExportTask({ limit: 50 });
+	assert.equal(designSourceWithSchemaDefault.source.bytes, 33);
+	const footprintSources = await handleDesignSourceExportTask({ action: 'footprints', limit: 1 });
+	assert.equal(footprintSources.total, 2);
+	assert.equal(footprintSources.sources[0].footprintUuid, 'footprint-1');
+	assert.equal(footprintSources.sources[0].source.data, undefined);
 	const workspaceCurrent = await handleWorkspaceQueryTask({});
 	assert.equal(workspaceCurrent.workspace.uuid, 'workspace-1');
 	const workspaceList = await handleWorkspaceQueryTask({ action: 'workspaces' });

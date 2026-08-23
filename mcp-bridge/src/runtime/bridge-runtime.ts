@@ -30,6 +30,7 @@ import {
 import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleDesignCompareTask } from '../mcp/design-compare-handler.ts';
+import { handleDesignSourceExportTask } from '../mcp/design-source-export-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleLibrarySearchTask } from '../mcp/library-search-handler.ts';
 import { handleLibrarySourcesTask } from '../mcp/library-sources-handler.ts';
@@ -85,6 +86,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/pcb/layer-query': handlePcbLayerQueryTask,
 	'/bridge/jlceda/pcb/realtime-drc': handlePcbRealtimeDrcTask,
 	'/bridge/jlceda/design/compare': handleDesignCompareTask,
+	'/bridge/jlceda/design/source-export': handleDesignSourceExportTask,
 	'/bridge/jlceda/project/info': handleProjectInfoTask,
 	'/bridge/jlceda/manufacture/export': handleManufactureExportTask,
 	'/bridge/jlceda/manufacture/templates-query': handleManufactureTemplatesQueryTask,

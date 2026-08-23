@@ -23,11 +23,13 @@ const STANDARD_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/canvas/snapshot',
 	'/bridge/jlceda/library/sources',
 	'/bridge/jlceda/workspace/query',
+	'/bridge/jlceda/design/source-export',
 ]);
 const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/api/invoke',
 	'/bridge/jlceda/context',
 	...EXTENDED_READ_TIMEOUT_PATHS,
+	...STANDARD_READ_TIMEOUT_PATHS,
 ]);
 
 export class BridgeTaskTimeoutError extends Error {

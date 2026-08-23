@@ -5,6 +5,7 @@
 - Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 - Add read-only active-canvas snapshots, library-source discovery, and 3D-model/reusable-module/panel-library search and retrieval.
 - Add read-only workspace, team, project, and folder discovery through `workspace_query`.
+- Add bounded read-only document and footprint source export through `design_source_export`, plus optional Board and Panel inventories in `project_info`.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add structured PCB and schematic DRC tools with non-UI defaults.
@@ -23,6 +24,7 @@
 
 ### Fixes
 
+- Return canvas snapshots as MCP image content, and pass the public snapshot/library/workspace timeout controls through the server and Bridge.
 - Keep long-running EDA mutations quarantined after timeout until their uncancellable Promise settles.
 - Propagate net-label handler timeouts to the runtime quarantine mechanism.
 - Align selector and analysis schemas with handler exclusivity and official primitive enums; preserve full LCSC match counts before bounded serialization.

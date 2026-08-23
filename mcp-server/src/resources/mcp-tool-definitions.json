@@ -1008,12 +1008,57 @@
     }
   },
   {
-    "name": "project_info",
-    "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and schematic pages.",
+    "name": "design_source_export",
+    "description": "Read the active EDA document source or its footprint sources with bounded previews and optional bounded full source data. This tool never modifies the design.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "includePages": { "type": "boolean", "default": true }
+        "action": { "type": "string", "enum": ["document", "footprints"], "default": "document" },
+        "includeData": { "type": "boolean", "default": false, "description": "Include complete source text only when it fits the response budget." },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304, "description": "Maximum source bytes returned as complete data; footprint sources share this budget." },
+        "previewBytes": { "type": "integer", "minimum": 0, "maximum": 65536, "default": 16384 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "document" },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "previewBytes": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "footprints" },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "previewBytes": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "project_info",
+    "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and optional bounded board/panel inventories.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "includePages": { "type": "boolean", "default": true },
+        "includeBoards": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project boards." },
+        "includePanels": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project panels." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 }
       },
       "additionalProperties": false
     }
