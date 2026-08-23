@@ -166,7 +166,6 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.pcb_Drc.getAllEqualLengthNetGroups', summary: '获取 PCB 等长网络组' },
 	{ fullName: 'eda.pcb_Drc.getAllPadPairGroups', summary: '获取 PCB 焊盘对组' },
 	{ fullName: 'eda.pcb_Layer.getAllLayers', summary: '获取 PCB 图层' },
-	{ fullName: 'eda.pcb_Layer.getCurrentPhysicalStackingConfiguration', summary: '获取 PCB 当前物理叠层配置' },
 	{ fullName: 'eda.pcb_ManufactureData.getFlyingProbeTestFile', summary: '导出 PCB 飞针测试文件' },
 	{ fullName: 'eda.lib_Device.get', summary: '按 UUID 获取器件库资产' },
 	{ fullName: 'eda.lib_Symbol.get', summary: '按 UUID 获取符号库资产' },

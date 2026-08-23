@@ -33,6 +33,10 @@ interface PcbSelectControlApi {
 
 const MAX_INSPECT_ITEMS = 500;
 
+async function serializeBoundedArray(values: unknown[]): Promise<unknown[]> {
+	return await Promise.all(values.map(value => toSerializableAsync(value)));
+}
+
 function getApi(): PcbDocumentApi {
 	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
 	const api = eda?.pcb_Document;
@@ -132,14 +136,14 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 			selectedCount: ids.length,
 			returned: Math.min(ids.length, limit),
 			truncated: ids.length > limit,
-			selectedPrimitiveIds: await toSerializableAsync(ids.slice(0, limit)),
+			selectedPrimitiveIds: await serializeBoundedArray(ids.slice(0, limit)),
 		};
 		if (includeObjects) {
 			if (typeof selectApi.getAllSelectedPrimitives !== 'function')
 				throw new TypeError('EDA pcb_SelectControl.getAllSelectedPrimitives API is unavailable in this client version.');
 			const rawObjects = await selectApi.getAllSelectedPrimitives();
 			const objects = Array.isArray(rawObjects) ? rawObjects : [];
-			result.selectedPrimitives = await toSerializableAsync(objects.slice(0, limit));
+			result.selectedPrimitives = await serializeBoundedArray(objects.slice(0, limit));
 			result.objectsTruncated = objects.length > limit;
 		}
 		return result;
@@ -166,7 +170,7 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		const rawPrimitives = await api.getPrimitivesInRegion(left, right, top, bottom, leftToRight);
 		const primitives = Array.isArray(rawPrimitives) ? rawPrimitives : [];
 		const limit = optionalInspectLimit(payload);
-		return { ok: true, action, bounds: { left, right, top, bottom }, total: primitives.length, returned: Math.min(primitives.length, limit), truncated: primitives.length > limit, primitives: await toSerializableAsync(primitives.slice(0, limit)) };
+		return { ok: true, action, bounds: { left, right, top, bottom }, total: primitives.length, returned: Math.min(primitives.length, limit), truncated: primitives.length > limit, primitives: await serializeBoundedArray(primitives.slice(0, limit)) };
 	}
 	if (action === 'convert_canvas_to_data' || action === 'convert_data_to_canvas') {
 		const methodName = action === 'convert_canvas_to_data' ? 'convertCanvasOriginToDataOrigin' : 'convertDataOriginToCanvasOrigin';

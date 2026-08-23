@@ -778,6 +778,44 @@
         "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitive_at_point" }, "x": { "type": "number" }, "y": { "type": "number" } },
+          "required": ["action", "x", "y"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "convert_canvas_to_data" }, "x": { "type": "number" }, "y": { "type": "number" } },
+          "required": ["action", "x", "y"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "convert_data_to_canvas" }, "x": { "type": "number" }, "y": { "type": "number" } },
+          "required": ["action", "x", "y"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "navigate_to_coordinates" }, "x": { "type": "number" }, "y": { "type": "number" } },
+          "required": ["action", "x", "y"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } },
+          "required": ["action", "left", "right", "top", "bottom"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "navigate_to_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } },
+          "required": ["action", "left", "right", "top", "bottom"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "selection", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"] }
+          }
+        }
+      ],
       "additionalProperties": false
     }
   },
