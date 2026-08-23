@@ -21,12 +21,18 @@ export async function handleSchematicDrcCheckTask(payload: unknown): Promise<unk
 	}
 	const result = await toSerializableAsync(await (api.check as SchematicDrcApi['check']).call(api, strict, showUi, true));
 	const errors = Array.isArray(result) ? result : [];
+	const errorCount = errors.reduce((total, error) => {
+		if (isPlainObjectRecord(error) && typeof error.count === 'number' && Number.isFinite(error.count)) {
+			return total + Math.max(0, Math.trunc(error.count));
+		}
+		return total + 1;
+	}, 0);
 	return {
 		ok: Array.isArray(result) ? errors.length === 0 : result === true,
 		strict,
 		showUi,
 		resultType: Array.isArray(result) ? 'detailed' : typeof result,
-		errorCount: errors.length,
+		errorCount,
 		errors,
 	};
 }

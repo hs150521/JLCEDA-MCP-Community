@@ -23,7 +23,7 @@ async function main() {
 		dmt_Pcb: { async getCurrentPcbInfo() { return { uuid: 'pcb-1' }; } },
 		dmt_SelectControl: { async getCurrentDocumentInfo() { return { documentType: 1, uuid: 'page-1' }; } },
 		pcb_Drc: {
-			async check() { return [{ code: 'clearance' }]; },
+			async check() { return [{ code: 'clearance', count: 2 }]; },
 			async getAllDifferentialPairs() { return [{ name: 'USB_P', positiveNet: 'D+', negativeNet: 'D-' }]; },
 		},
 		sch_Drc: { async check() { return []; } },
@@ -43,7 +43,7 @@ async function main() {
 	assert.equal(project.project.name, '2026');
 	assert.equal(project.schematicPages.length, 1);
 	const pcbDrc = await handlePcbDrcCheckTask({});
-	assert.equal(pcbDrc.errorCount, 1);
+	assert.equal(pcbDrc.errorCount, 2);
 	const schDrc = await handleSchematicDrcCheckTask({});
 	assert.equal(schDrc.ok, true);
 	const constraints = await handlePcbConstraintsQueryTask({ kind: 'differential_pairs' });
