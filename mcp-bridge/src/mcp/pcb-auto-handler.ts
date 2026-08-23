@@ -1,100 +1,113 @@
 import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type AutoOperation = 'layout' | 'routing';
+type PcbDocumentApi = Record<string, unknown>;
 
-interface PcbDocumentApi {
-	context: unknown;
-	autoLayout?: (this: unknown) => Promise<unknown>;
-	autoRouting?: (this: unknown, props?: Record<string, unknown>) => Promise<unknown>;
+const MAX_ROUTING_NETS = 200;
+const MAX_LAYERS = 32;
+
+function rejectUnexpectedFields(input: Record<string, unknown>, allowed: readonly string[]): void {
+	const permitted = new Set(['confirm', 'timeoutMs', ...allowed]);
+	for (const key of Object.keys(input)) {
+		if (!permitted.has(key))
+			throw new TypeError(`${key} is not supported for this PCB automation operation.`);
+	}
 }
 
-function resolvePcbDocumentApi(operation: AutoOperation): PcbDocumentApi {
-	const edaGlobal = getEdaRuntime();
-	if (!isPlainObjectRecord(edaGlobal) || !isPlainObjectRecord(edaGlobal.pcb_Document)) {
-		throw new TypeError('EDA PCB document API is unavailable. Open a PCB document first.');
-	}
-
-	const api = edaGlobal.pcb_Document as PcbDocumentApi;
-	if (typeof api[operation === 'layout' ? 'autoLayout' : 'autoRouting'] !== 'function') {
-		throw new TypeError(`EDA pcb_Document.auto${operation === 'layout' ? 'Layout' : 'Routing'} API is unavailable in this client version.`);
-	}
+function getPcbDocumentApi(operation: AutoOperation): PcbDocumentApi {
+	const eda = getEdaRuntime();
+	const api = eda?.pcb_Document;
+	const method = operation === 'layout' ? 'autoLayout' : 'autoRouting';
+	if (!isPlainObjectRecord(api) || typeof api[method] !== 'function')
+		throw new TypeError(`EDA pcb_Document.${method} API is unavailable in this PCB client version.`);
 	return api;
 }
 
-function normalizeUuids(input: Record<string, unknown>): string[] | undefined {
-	if (input.uuids === undefined || input.uuids === null) {
-		return undefined;
-	}
-	if (!Array.isArray(input.uuids) || input.uuids.some(uuid => typeof uuid !== 'string' || uuid.trim().length === 0)) {
-		throw new TypeError('uuids must be an array of non-empty strings.');
-	}
-	return input.uuids.map(uuid => uuid.trim());
+function nonEmptyStringArray(value: unknown, key: string, maximum: number): string[] {
+	if (!Array.isArray(value) || value.length < 1 || value.length > maximum)
+		throw new RangeError(`${key} must contain between 1 and ${String(maximum)} non-empty strings.`);
+	const values = value.map((item, index) => {
+		if (typeof item !== 'string' || item.trim().length === 0)
+			throw new TypeError(`${key}[${String(index)}] must be a non-empty string.`);
+		return item.trim();
+	});
+	if (new Set(values).size !== values.length)
+		throw new TypeError(`${key} must not contain duplicates.`);
+	return values;
 }
 
-function normalizeStringArray(input: Record<string, unknown>, key: string): string[] | undefined {
-	if (input[key] === undefined || input[key] === null) {
+function optionalStringArray(value: unknown, key: string, maximum: number): string[] | undefined {
+	if (value === undefined)
 		return undefined;
-	}
-	if (!Array.isArray(input[key]) || input[key].some(value => typeof value !== 'string' || value.trim().length === 0)) {
-		throw new TypeError(`${key} must be an array of non-empty strings.`);
-	}
-	return input[key].map(value => value.trim());
+	return nonEmptyStringArray(value, key, maximum);
 }
 
-function normalizeRoutingProps(input: Record<string, unknown>): Record<string, unknown> | undefined {
-	const routingNets = input.routingNets === 'selected' || input.routingNets === 'selectedComponents'
-		? input.routingNets
-		: normalizeStringArray(input, 'routingNets');
-	const ignoreNets = normalizeStringArray(input, 'ignoreNets');
-	const props: Record<string, unknown> = {};
-	if (routingNets !== undefined)
-		props.RoutingNets = routingNets;
-	if (ignoreNets !== undefined)
-		props.ignoreNets = ignoreNets;
-	for (const key of ['cornerStyle', 'existingPrimitiveMode', 'optimization', 'layers']) {
-		if (input[key] !== undefined)
-			props[key] = input[key];
-	}
-	if (props.cornerStyle !== undefined && props.cornerStyle !== 0 && props.cornerStyle !== 1) {
+function normalizeRoutingProps(input: Record<string, unknown>): Record<string, unknown> {
+	const routingNets = nonEmptyStringArray(input.routingNets, 'routingNets', MAX_ROUTING_NETS);
+	const ignoreNets = optionalStringArray(input.ignoreNets, 'ignoreNets', MAX_ROUTING_NETS);
+	const cornerStyle = input.cornerStyle === undefined ? undefined : input.cornerStyle;
+	const optimization = input.optimization === undefined ? undefined : input.optimization;
+	if (cornerStyle !== undefined && cornerStyle !== 0 && cornerStyle !== 1)
 		throw new TypeError('cornerStyle must be 0 (45 degrees) or 1 (90 degrees).');
-	}
-	if (props.existingPrimitiveMode !== undefined && props.existingPrimitiveMode !== 'keep' && props.existingPrimitiveMode !== 'remove') {
-		throw new TypeError('existingPrimitiveMode must be \'keep\' or \'remove\'.');
-	}
-	if (props.optimization !== undefined && props.optimization !== 0 && props.optimization !== 1) {
+	if (optimization !== undefined && optimization !== 0 && optimization !== 1)
 		throw new TypeError('optimization must be 0 (faster) or 1 (completion).');
+	if (input.existingPrimitiveMode !== undefined && input.existingPrimitiveMode !== 'keep')
+		throw new TypeError('existingPrimitiveMode is fixed to keep in pcb_auto_routing.');
+
+	let layers: number[] | undefined;
+	if (input.layers !== undefined) {
+		if (!Array.isArray(input.layers) || input.layers.length < 1 || input.layers.length > MAX_LAYERS || input.layers.some(layer => !Number.isInteger(layer)))
+			throw new RangeError(`layers must contain between 1 and ${String(MAX_LAYERS)} integer layer IDs.`);
+		layers = input.layers as number[];
+		if (new Set(layers).size !== layers.length)
+			throw new TypeError('layers must not contain duplicates.');
 	}
-	if (props.layers !== undefined && (!Array.isArray(props.layers) || props.layers.some(layer => !Number.isInteger(layer)))) {
-		throw new TypeError('layers must be an array of integer layer IDs.');
-	}
-	return Object.keys(props).length > 0 ? props : undefined;
+
+	return {
+		RoutingNets: routingNets,
+		existingPrimitiveMode: 'keep',
+		...(ignoreNets ? { ignoreNets } : {}),
+		...(cornerStyle !== undefined ? { cornerStyle } : {}),
+		...(optimization !== undefined ? { optimization } : {}),
+		...(layers ? { layers } : {}),
+	};
 }
 
-export async function handlePcbAutoTask(payload: unknown, operation: AutoOperation): Promise<unknown> {
-	if (payload !== undefined && payload !== null && !isPlainObjectRecord(payload)) {
-		throw new TypeError(`pcb_auto_${operation} payload must be an object.`);
-	}
-	const input = isPlainObjectRecord(payload) ? payload : {};
-	const uuids = operation === 'layout' ? normalizeUuids(input) : undefined;
-	const api = resolvePcbDocumentApi(operation);
-	const method = api[operation === 'layout' ? 'autoLayout' : 'autoRouting'];
-	const routingProps = operation === 'routing' ? normalizeRoutingProps(input) : undefined;
-	const rawResult = operation === 'routing'
-		? await method!.call(api.context, routingProps)
-		: await method!.call(api.context);
+async function resultSummary(rawResult: unknown, operation: AutoOperation): Promise<Record<string, unknown>> {
+	if (!isPlainObjectRecord(rawResult))
+		return { result: await toSerializableAsync(rawResult) };
+	const totalKey = operation === 'layout' ? 'totalComponentsCount' : 'totalNetsCount';
+	const completedKey = operation === 'layout' ? 'successComponentsCount' : 'successNetsCount';
+	const failedKey = operation === 'layout' ? 'failedComponents' : 'failedNets';
+	const failed = Array.isArray(rawResult[failedKey]) ? rawResult[failedKey].slice(0, 120) : [];
 	return {
-		ok: true,
-		operation,
-		...(uuids ? { requestedUuids: uuids, requestedCount: uuids.length } : {}),
-		...(routingProps ? { routingProps } : {}),
+		success: rawResult.success === true,
+		total: typeof rawResult[totalKey] === 'number' ? rawResult[totalKey] : undefined,
+		completed: typeof rawResult[completedKey] === 'number' ? rawResult[completedKey] : undefined,
+		failed: await toSerializableAsync(failed),
+		failedTruncated: Array.isArray(rawResult[failedKey]) && rawResult[failedKey].length > failed.length,
+		durationMs: typeof rawResult.duration === 'number' ? rawResult.duration : undefined,
 		result: await toSerializableAsync(rawResult),
 	};
 }
 
-export async function handlePcbAutoLayoutTask(payload: unknown): Promise<unknown> {
-	return handlePcbAutoTask(payload, 'layout');
+export async function handlePcbAutoTask(payload: unknown, operation: AutoOperation): Promise<unknown> {
+	if (!isPlainObjectRecord(payload))
+		throw new TypeError(`pcb_auto_${operation} payload must be an object.`);
+	if (payload.confirm !== true)
+		throw new TypeError('confirm must be true before running PCB auto-layout or auto-routing.');
+	const api = getPcbDocumentApi(operation);
+	if (operation === 'layout') {
+		rejectUnexpectedFields(payload, []);
+		const rawResult = await (api.autoLayout as () => Promise<unknown>).call(api);
+		return { ok: true, operation, scope: 'all_components', ...(await resultSummary(rawResult, operation)) };
+	}
+
+	rejectUnexpectedFields(payload, ['routingNets', 'ignoreNets', 'cornerStyle', 'existingPrimitiveMode', 'optimization', 'layers']);
+	const routingProps = normalizeRoutingProps(payload);
+	const rawResult = await (api.autoRouting as (props: Record<string, unknown>) => Promise<unknown>).call(api, routingProps);
+	return { ok: true, operation, routingProps, ...(await resultSummary(rawResult, operation)) };
 }
 
-export async function handlePcbAutoRoutingTask(payload: unknown): Promise<unknown> {
-	return handlePcbAutoTask(payload, 'routing');
-}
+export const handlePcbAutoLayoutTask = (payload: unknown): Promise<unknown> => handlePcbAutoTask(payload, 'layout');
+export const handlePcbAutoRoutingTask = (payload: unknown): Promise<unknown> => handlePcbAutoTask(payload, 'routing');

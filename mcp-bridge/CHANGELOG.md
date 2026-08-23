@@ -2,6 +2,7 @@
 
 ### Added
 
+- Add confirmation-gated PCB auto-layout and explicit-network auto-routing with existing-track preservation.
 - Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
 - Add bounded IPC-2581C and JRouter automatic-routing JSON manufacturing exports.
 - Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.

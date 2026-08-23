@@ -6,6 +6,7 @@
 - `schematic_pages_manage`: with `confirm: true`, create, copy, rename, or completely reorder pages in a schematic. Reorder accepts every current page UUID exactly once, reuses freshly read EDA page objects, and verifies the final order; deletion is not exposed.
 
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
+- `pcb_auto_layout` and `pcb_auto_routing`: confirmation-gated PCB automation. Layout affects the active board's full component set; routing requires explicit nets and always preserves existing tracks/vias.
 - `pcb_net_query`: query active PCB networks with filtering and limits; exact-net primitive filters use the official `EPCB_PrimitiveType` enum.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools. `project_info` can optionally return bounded Board and Panel inventories.
 - `eda_context` includes the detected JLCEDA/EasyEDA edition, online mode, editor version, editor build date, and current canvas data unit when exposed by the client.

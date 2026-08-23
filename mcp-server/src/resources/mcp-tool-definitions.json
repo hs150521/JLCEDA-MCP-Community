@@ -611,6 +611,38 @@
     }
   },
   {
+    "name": "pcb_auto_layout",
+    "description": "Run the official PCB auto-layout across the active PCB. This is a document-wide write operation and requires confirm: true.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "confirm": { "const": true, "description": "Must be true to run document-wide auto-layout." },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["confirm"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_auto_routing",
+    "description": "Run the official PCB auto-router only for an explicit network set. It always preserves existing tracks and vias, and requires confirm: true.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "confirm": { "const": true, "description": "Must be true to run the PCB auto-router." },
+        "routingNets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 200, "uniqueItems": true, "description": "Explicit network names to route. Empty or implicit all-network routing is unavailable." },
+        "ignoreNets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 200, "uniqueItems": true },
+        "cornerStyle": { "type": "integer", "enum": [0, 1], "description": "0 for 45-degree corners; 1 for 90-degree corners." },
+        "optimization": { "type": "integer", "enum": [0, 1], "description": "0 for faster routing; 1 for completion priority." },
+        "layers": { "type": "array", "items": { "type": "integer" }, "minItems": 1, "maxItems": 32, "uniqueItems": true },
+        "existingPrimitiveMode": { "const": "keep", "description": "Existing tracks and vias are always retained." },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["confirm", "routingNets"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "pcb_net_query",
     "description": "Read PCB network details from the active PCB document, optionally filtered by a network name or property.",
     "inputSchema": {

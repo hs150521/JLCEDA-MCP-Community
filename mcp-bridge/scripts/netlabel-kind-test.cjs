@@ -45,10 +45,13 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 async function main() {
 	globalThis.eda = {
 		pcb_Document: {
-			context: {},
-			async autoLayout() { return { moved: 2 }; },
+			async autoLayout() {
+				assert.equal(this, globalThis.eda.pcb_Document);
+				return { moved: 2 };
+			},
 			async autoRouting(props) {
-				assert.deepEqual(props, { RoutingNets: ['VCC'], ignoreNets: ['GND'], cornerStyle: 0 });
+				assert.equal(this, globalThis.eda.pcb_Document);
+				assert.deepEqual(props, { RoutingNets: ['VCC'], existingPrimitiveMode: 'keep', ignoreNets: ['GND'], cornerStyle: 0 });
 				return { routed: 3 };
 			},
 		},
@@ -63,8 +66,8 @@ async function main() {
 			},
 		},
 	};
-	assert.equal((await handlePcbAutoLayoutTask({ uuids: ['U1'] })).result.moved, 2);
-	assert.equal((await handlePcbAutoRoutingTask({ routingNets: ['VCC'], ignoreNets: ['GND'], cornerStyle: 0 })).result.routed, 3);
+	assert.equal((await handlePcbAutoLayoutTask({ confirm: true })).result.moved, 2);
+	assert.equal((await handlePcbAutoRoutingTask({ confirm: true, routingNets: ['VCC'], ignoreNets: ['GND'], cornerStyle: 0 })).result.routed, 3);
 	assert.equal((await handlePcbNetQueryTask({ query: 'vcc' })).returned, 1);
 	assert.equal((await handleSchematicNetQueryTask({})).total, 1);
 	const detailedDrc = await handlePcbDrcCheckTask({});
@@ -86,6 +89,8 @@ async function main() {
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/sources', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/preview', {}), 30000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/classification-query', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/pcb/auto-layout', {}), 60000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/pcb/auto-routing', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/workspace/query', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/source-export', {}), 30000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/archive-export', {}), 60000);

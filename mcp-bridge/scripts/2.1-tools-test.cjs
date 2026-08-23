@@ -18,6 +18,7 @@ const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-h
 const { handleManufactureTemplatesQueryTask } = require('../src/mcp/manufacture-template-handler.ts');
 const { handlePcbNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetlistCompareTask } = require('../src/mcp/netlist-compare-handler.ts');
+const { handlePcbAutoLayoutTask, handlePcbAutoRoutingTask } = require('../src/mcp/pcb-auto-handler.ts');
 const { handlePcbConstraintsQueryTask } = require('../src/mcp/pcb-constraints-handler.ts');
 const { handlePcbConstraintsManageTask } = require('../src/mcp/pcb-constraints-manage-handler.ts');
 const { handlePcbDocumentTask } = require('../src/mcp/pcb-document-handler.ts');
@@ -133,6 +134,15 @@ async function main() {
 			},
 		},
 		pcb_Document: {
+			async autoLayout() {
+				assert.equal(this, globalThis.eda.pcb_Document);
+				return { success: true, totalComponentsCount: 3, successComponentsCount: 2, failedComponents: ['component-3'], duration: 25 };
+			},
+			async autoRouting(props) {
+				assert.equal(this, globalThis.eda.pcb_Document);
+				assert.deepEqual(props, { RoutingNets: ['USB_D+', 'USB_D-'], existingPrimitiveMode: 'keep', ignoreNets: ['GND'], cornerStyle: 0, optimization: 1, layers: [1, 2] });
+				return { success: true, totalNetsCount: 2, successNetsCount: 2, failedNets: [], duration: 42 };
+			},
 			async getCalculatingRatlineStatus() { return 'active'; },
 			async startCalculatingRatline() { return true; },
 			async stopCalculatingRatline() { return true; },
@@ -655,6 +665,17 @@ async function main() {
 	assert.equal(folders.folders[0].name, 'Robot');
 	const pcbDrc = await handlePcbDrcCheckTask({});
 	assert.equal(pcbDrc.errorCount, 2);
+	const autoLayout = await handlePcbAutoLayoutTask({ confirm: true });
+	assert.equal(autoLayout.scope, 'all_components');
+	assert.equal(autoLayout.completed, 2);
+	const autoRouting = await handlePcbAutoRoutingTask({ confirm: true, routingNets: ['USB_D+', 'USB_D-'], ignoreNets: ['GND'], cornerStyle: 0, optimization: 1, layers: [1, 2] });
+	assert.equal(autoRouting.total, 2);
+	assert.equal(autoRouting.routingProps.existingPrimitiveMode, 'keep');
+	await assert.rejects(() => handlePcbAutoLayoutTask({ confirm: false }), /confirm must be true/);
+	await assert.rejects(() => handlePcbAutoLayoutTask({ confirm: true, uuids: ['component-1'] }), /uuids is not supported/);
+	await assert.rejects(() => handlePcbAutoRoutingTask({ confirm: true }), /routingNets must contain/);
+	await assert.rejects(() => handlePcbAutoRoutingTask({ confirm: true, routingNets: ['USB_D+'], existingPrimitiveMode: 'remove' }), /fixed to keep/);
+	await assert.rejects(() => handlePcbAutoRoutingTask({ confirm: true, routingNets: ['USB_D+'], layers: [1, 1] }), /layers must not contain duplicates/);
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });
 	assert.equal(layers.copperLayerCount, 2);
 	await assert.rejects(() => handlePcbLayerQueryTask({ kind: 'physical_stacking' }), /kind must be layers or current/);

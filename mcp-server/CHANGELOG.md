@@ -6,6 +6,7 @@
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
 ## 2.1 development
 
+- Add confirmation-gated PCB auto-layout and explicit-network auto-routing with existing-track preservation.
 - Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
 - Add bounded IPC-2581C and JRouter automatic-routing JSON manufacturing exports.
 - Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.

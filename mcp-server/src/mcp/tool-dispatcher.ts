@@ -117,16 +117,19 @@ export class ToolDispatcher {
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
     const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'design_source_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query'];
-    if (!['api_invoke', 'eda_context', ...extendedReadTools].includes(toolName)) {
+    if (!['api_invoke', 'eda_context', 'pcb_auto_layout', 'pcb_auto_routing', ...extendedReadTools].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
+		if (toolName === 'pcb_auto_layout' || toolName === 'pcb_auto_routing')
+			return 60_000;
       return undefined;
     }
 
     const timeoutMs = Number(args.timeoutMs);
     const extendedReadTool = extendedReadTools.includes(toolName);
-    const minimum = extendedReadTool ? 5_000 : 1_000;
+	const longRunningWriteTool = toolName === 'pcb_auto_layout' || toolName === 'pcb_auto_routing';
+	const minimum = extendedReadTool || longRunningWriteTool ? 5_000 : 1_000;
     if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
       throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
     }
@@ -147,6 +150,8 @@ export class ToolDispatcher {
       'netlabel_place': '/bridge/jlceda/netlabel/place',
       'netlabel_modify': '/bridge/jlceda/netlabel/modify',
       'pcb_drc_check': '/bridge/jlceda/pcb/drc-check',
+		'pcb_auto_layout': '/bridge/jlceda/pcb/auto-layout',
+		'pcb_auto_routing': '/bridge/jlceda/pcb/auto-routing',
       'schematic_drc_check': '/bridge/jlceda/schematic/drc-check',
       'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
 		'pcb_constraints_manage': '/bridge/jlceda/pcb/constraints-manage',
