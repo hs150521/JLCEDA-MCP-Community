@@ -768,6 +768,48 @@
     }
   },
   {
+    "name": "pcb_constraints_manage",
+    "description": "Create, rename, delete, or update members of PCB net classes, differential pairs, equal-length groups, and pad-pair groups. Requires explicit confirmation and returns a read-back inventory.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["net_class", "differential_pair", "equal_length_group", "pad_pair_group"] },
+        "operation": { "type": "string", "enum": ["create", "delete", "rename", "add_members", "remove_members", "set_positive_net", "set_negative_net"] },
+        "name": { "type": "string", "minLength": 1 },
+        "newName": { "type": "string", "minLength": 1 },
+        "nets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 100, "uniqueItems": true },
+        "color": {
+          "type": "object",
+          "properties": {
+            "r": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "g": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "b": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "alpha": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["r", "g", "b", "alpha"],
+          "additionalProperties": false
+        },
+        "positiveNet": { "type": "string", "minLength": 1 },
+        "negativeNet": { "type": "string", "minLength": 1 },
+        "padPairs": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 2, "maxItems": 2 },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "confirm": { "const": true, "description": "Must be true to apply this PCB mutation." }
+      },
+      "required": ["kind", "operation", "name", "confirm"],
+      "oneOf": [
+        { "properties": { "kind": { "const": "net_class" }, "operation": { "enum": ["create", "delete", "rename", "add_members", "remove_members"] } }, "required": ["kind", "operation", "name", "confirm"] },
+        { "properties": { "kind": { "const": "differential_pair" }, "operation": { "enum": ["create", "delete", "rename", "set_positive_net", "set_negative_net"] } }, "required": ["kind", "operation", "name", "confirm"] },
+        { "properties": { "kind": { "const": "equal_length_group" }, "operation": { "enum": ["create", "delete", "rename", "add_members", "remove_members"] } }, "required": ["kind", "operation", "name", "confirm"] },
+        { "properties": { "kind": { "const": "pad_pair_group" }, "operation": { "enum": ["create", "delete", "rename", "add_members", "remove_members"] } }, "required": ["kind", "operation", "name", "confirm"] }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "netlist_compare",
     "description": "Compare two schematic or PCB netlist sources and return component/network differences.",
     "inputSchema": {

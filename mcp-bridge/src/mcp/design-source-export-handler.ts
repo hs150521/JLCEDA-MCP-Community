@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray } from '../utils.ts';
 
 type SourceAction = 'document' | 'footprints';
 
@@ -34,7 +34,7 @@ function readIncludeData(value: unknown): boolean {
 }
 
 function getFileManager(): Record<string, unknown> {
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.sys_FileManager;
 	if (!isPlainObjectRecord(api))
 		throw new TypeError('EDA sys_FileManager API is unavailable in this client version.');

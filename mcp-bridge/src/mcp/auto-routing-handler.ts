@@ -9,7 +9,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { isPlainObjectRecord, toSafeErrorMessage } from '../utils';
+import { getEdaRuntime, isPlainObjectRecord, toSafeErrorMessage } from '../utils';
 
 interface AutoRoutingProps {
 	uuids?: string[];
@@ -44,7 +44,7 @@ interface SchDocumentApi {
  * @returns sch_Document API 对象。
  */
 function resolveSchDocumentApi(): SchDocumentApi {
-	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
+	const edaGlobal = getEdaRuntime();
 	if (!edaGlobal || typeof edaGlobal !== 'object') {
 		throw new Error('EDA 环境未就绪，无法访问 eda 全局对象。');
 	}

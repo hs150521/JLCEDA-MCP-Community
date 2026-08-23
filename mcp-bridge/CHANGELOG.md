@@ -9,6 +9,7 @@
 - Add bounded symbol/footprint `library_preview` images and official `library_classification_query` trees; extend `project_info` with schematic and PCB inventories.
 - Add `design_archive_export` for bounded, explicit native project/document archive retrieval without filesystem writes.
 - Include active canvas data unit in `eda_context`, and expose current/default PCB rule-configuration names through `pcb_constraints_query`.
+- Add confirmation-gated `pcb_constraints_manage` for bounded net-class, differential-pair, equal-length-group, and pad-pair-group changes with read-back verification.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add structured PCB and schematic DRC tools with non-UI defaults.

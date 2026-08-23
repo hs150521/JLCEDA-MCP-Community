@@ -22,6 +22,8 @@ The server also exposes `schematic_document_action` for bounded schematic coordi
 
 The server exposes read-only PCB DRC, network-query, library-source/search, and manufacturing-query tools plus guarded document actions. Device `library_search` supports exact 0.4.15 properties, official single/batch LCSC C-number mapping, and exact UUID retrieval; symbol, footprint, 3D-model, reusable-module, and panel-library searches/retrieval use their supported APIs. PCB network exact queries can optionally include length, color, and associated primitives. Manufacturing export includes the official flying-probe test file. `pcb_document_action` exposes bounded PCB primitive/selection inspection, coordinate conversion/navigation, ratline control, and explicitly scoped routing cleanup. PCB auto-layout and auto-routing are not advertised because those methods are absent from the pinned 0.4.15 PCB API surface.
 
+`pcb_constraints_manage` provides a deliberately narrow, confirmation-gated interface for net classes, differential pairs, equal-length groups, and pad-pair groups. It validates operation-specific fields and returns a bounded read-back of the affected item; bulk rule-configuration replacement remains unavailable.
+
 公开的 `timeoutMs` 参数会传递到 WebSocket 请求。EDA 修改超时后，Bridge 仍会
 保持串行队列锁定，直到底层 API 真正结束；请求排队时间不计入 API 执行超时。
 

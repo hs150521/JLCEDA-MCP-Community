@@ -18,6 +18,16 @@ export function isPlainObjectRecord(value: unknown): value is Record<string, unk
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Resolve the EDA global in both browser-global layouts used by EasyEDA clients. */
+export function getEdaRuntime(): Record<string, unknown> | undefined {
+	const globalRuntime = (globalThis as unknown as { eda?: unknown }).eda;
+	if (isPlainObjectRecord(globalRuntime))
+		return globalRuntime;
+	if (typeof eda !== 'undefined' && isPlainObjectRecord(eda))
+		return eda as unknown as Record<string, unknown>;
+	return undefined;
+}
+
 const PRESERVE_BOUNDED_ARRAY = Symbol('preserveBoundedArray');
 
 /** Mark a handler-owned, already bounded array so final bridge serialization keeps its declared limit. */

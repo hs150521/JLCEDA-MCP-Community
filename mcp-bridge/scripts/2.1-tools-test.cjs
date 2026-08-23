@@ -19,6 +19,7 @@ const { handleManufactureTemplatesQueryTask } = require('../src/mcp/manufacture-
 const { handlePcbNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetlistCompareTask } = require('../src/mcp/netlist-compare-handler.ts');
 const { handlePcbConstraintsQueryTask } = require('../src/mcp/pcb-constraints-handler.ts');
+const { handlePcbConstraintsManageTask } = require('../src/mcp/pcb-constraints-manage-handler.ts');
 const { handlePcbDocumentTask } = require('../src/mcp/pcb-document-handler.ts');
 const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { handlePcbLayerQueryTask } = require('../src/mcp/pcb-layer-handler.ts');
@@ -31,6 +32,10 @@ const { toSerializableAsync } = require('../src/utils.ts');
 
 async function main() {
 	const routingCalls = 0;
+	const netClasses = [];
+	const differentialPairs = [{ name: 'USB_P', positiveNet: 'D+', negativeNet: 'D-' }];
+	const equalLengthGroups = [];
+	const padPairGroups = [];
 	globalThis.eda = {
 		dmt_Project: {
 			async getCurrentProjectInfo() { return { uuid: 'project-1', name: '2026' }; },
@@ -286,7 +291,122 @@ async function main() {
 			async getNetRules() { return [{ net: 'USB_D+', width: 0.2 }]; },
 			async getNetByNetRules() { return { 'USB_D+|USB_D-': { clearance: 0.15 } }; },
 			async getRegionRules() { return [{ region: 'power', clearance: 0.3 }]; },
-			async getAllDifferentialPairs() { return [{ name: 'USB_P', positiveNet: 'D+', negativeNet: 'D-' }]; },
+			async getAllNetClasses() { return netClasses; },
+			async getAllDifferentialPairs() { return differentialPairs; },
+			async getAllEqualLengthNetGroups() { return equalLengthGroups; },
+			async getAllPadPairGroups() { return padPairGroups; },
+			async createNetClass(name, nets, color) {
+				netClasses.push({ name, nets, color });
+				return true;
+			},
+			async deleteNetClass(name) {
+				const index = netClasses.findIndex(item => item.name === name);
+				if (index >= 0)
+					netClasses.splice(index, 1);
+				return index >= 0;
+			},
+			async modifyNetClassName(name, newName) {
+				const item = netClasses.find(item => item.name === name);
+				if (item)
+					item.name = newName;
+				return Boolean(item);
+			},
+			async addNetToNetClass(name, nets) {
+				const item = netClasses.find(candidate => candidate.name === name);
+				if (item)
+					item.nets.push(...nets);
+				return Boolean(item);
+			},
+			async removeNetFromNetClass(name, nets) {
+				const item = netClasses.find(candidate => candidate.name === name);
+				if (item)
+					item.nets = item.nets.filter(net => !nets.includes(net));
+				return Boolean(item);
+			},
+			async createDifferentialPair(name, positiveNet, negativeNet) {
+				differentialPairs.push({ name, positiveNet, negativeNet });
+				return true;
+			},
+			async deleteDifferentialPair(name) {
+				const index = differentialPairs.findIndex(item => item.name === name);
+				if (index >= 0)
+					differentialPairs.splice(index, 1);
+				return index >= 0;
+			},
+			async modifyDifferentialPairName(name, newName) {
+				const item = differentialPairs.find(item => item.name === name);
+				if (item)
+					item.name = newName;
+				return Boolean(item);
+			},
+			async modifyDifferentialPairPositiveNet(name, positiveNet) {
+				const item = differentialPairs.find(item => item.name === name);
+				if (item)
+					item.positiveNet = positiveNet;
+				return Boolean(item);
+			},
+			async modifyDifferentialPairNegativeNet(name, negativeNet) {
+				const item = differentialPairs.find(item => item.name === name);
+				if (item)
+					item.negativeNet = negativeNet;
+				return Boolean(item);
+			},
+			async createEqualLengthNetGroup(name, nets, color) {
+				equalLengthGroups.push({ name, nets, color });
+				return true;
+			},
+			async deleteEqualLengthNetGroup(name) {
+				const index = equalLengthGroups.findIndex(item => item.name === name);
+				if (index >= 0)
+					equalLengthGroups.splice(index, 1);
+				return index >= 0;
+			},
+			async modifyEqualLengthNetGroupName(name, newName) {
+				const item = equalLengthGroups.find(item => item.name === name);
+				if (item)
+					item.name = newName;
+				return Boolean(item);
+			},
+			async addNetToEqualLengthNetGroup(name, nets) {
+				const item = equalLengthGroups.find(candidate => candidate.name === name);
+				if (item)
+					item.nets.push(...nets);
+				return Boolean(item);
+			},
+			async removeNetFromEqualLengthNetGroup(name, nets) {
+				const item = equalLengthGroups.find(candidate => candidate.name === name);
+				if (item)
+					item.nets = item.nets.filter(net => !nets.includes(net));
+				return Boolean(item);
+			},
+			async createPadPairGroup(name, padPairs) {
+				padPairGroups.push({ name, padPairs });
+				return true;
+			},
+			async deletePadPairGroup(name) {
+				const index = padPairGroups.findIndex(item => item.name === name);
+				if (index >= 0)
+					padPairGroups.splice(index, 1);
+				return index >= 0;
+			},
+			async modifyPadPairGroupName(name, newName) {
+				const item = padPairGroups.find(item => item.name === name);
+				if (item)
+					item.name = newName;
+				return Boolean(item);
+			},
+			async addPadPairToPadPairGroup(name, padPairs) {
+				const item = padPairGroups.find(candidate => candidate.name === name);
+				if (item)
+					item.padPairs.push(...padPairs);
+				return Boolean(item);
+			},
+			async removePadPairFromPadPairGroup(name, padPairs) {
+				const item = padPairGroups.find(candidate => candidate.name === name);
+				if (item)
+					item.padPairs = item.padPairs.filter(pair => !padPairs.some(candidate => candidate[0] === pair[0] && candidate[1] === pair[1]));
+				return Boolean(item);
+			},
 			async getPadPairGroupMinWireLength(name) {
 				assert.equal(name, 'USB_PADS');
 				return [{ minLength: 12.5 }];
@@ -558,6 +678,23 @@ async function main() {
 	assert.equal(namedRule.result.name, 'strict');
 	const ruleConfigurations = await handlePcbConstraintsQueryTask({ kind: 'rule_configurations', includeSystem: true });
 	assert.equal(ruleConfigurations.count, 1);
+	const netClass = await handlePcbConstraintsManageTask({ kind: 'net_class', operation: 'create', name: 'USB', nets: ['USB_D+', 'USB_D-'], color: { r: 0, g: 120, b: 255, alpha: 1 }, confirm: true });
+	assert.equal(netClass.readback.total, 1);
+	assert.deepEqual(netClass.readback.item.nets, ['USB_D+', 'USB_D-']);
+	const netClassWithMember = await handlePcbConstraintsManageTask({ kind: 'net_class', operation: 'add_members', name: 'USB', nets: ['USB_VBUS'], confirm: true });
+	assert.deepEqual(netClassWithMember.readback.item.nets, ['USB_D+', 'USB_D-', 'USB_VBUS']);
+	const netClassWithoutMember = await handlePcbConstraintsManageTask({ kind: 'net_class', operation: 'remove_members', name: 'USB', nets: ['USB_VBUS'], confirm: true });
+	assert.deepEqual(netClassWithoutMember.readback.item.nets, ['USB_D+', 'USB_D-']);
+	const differentialPair = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'create', name: 'USB_PAIR', positiveNet: 'USB_D+', negativeNet: 'USB_D-', confirm: true });
+	assert.equal(differentialPair.readback.item.positiveNet, 'USB_D+');
+	const updatedDifferentialPair = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'set_positive_net', name: 'USB_PAIR', positiveNet: 'USB_DP', confirm: true });
+	assert.equal(updatedDifferentialPair.readback.item.positiveNet, 'USB_DP');
+	const equalLengthGroup = await handlePcbConstraintsManageTask({ kind: 'equal_length_group', operation: 'create', name: 'MEMORY', nets: ['DQ0', 'DQ1'], color: { r: 255, g: 100, b: 0, alpha: 0.8 }, confirm: true });
+	assert.equal(equalLengthGroup.readback.item.name, 'MEMORY');
+	const padPairGroup = await handlePcbConstraintsManageTask({ kind: 'pad_pair_group', operation: 'create', name: 'USB_PADS', padPairs: [['J1.1', 'U1.1']], confirm: true });
+	assert.deepEqual(padPairGroup.readback.item.padPairs, [['J1.1', 'U1.1']]);
+	await assert.rejects(() => handlePcbConstraintsManageTask({ kind: 'net_class', operation: 'delete', name: 'USB', confirm: false }), /confirm must be true/);
+	await assert.rejects(() => handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'create', name: 'BAD', positiveNet: 'P', negativeNet: 'N', nets: ['unexpected'], confirm: true }), /nets is not supported/);
 	const exactComponent = await handleComponentSelectTask({ properties: { supplierId: 'C1523' }, limit: 2 });
 	assert.equal(exactComponent.searchMode, 'properties');
 	assert.equal(exactComponent.selection.candidates[0].libraryUuid, 'system-library-1');

@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type LayerQueryKind = 'layers' | 'current';
 
@@ -9,7 +9,7 @@ interface PcbLayerApi {
 }
 
 function getPcbLayerApi(): PcbLayerApi {
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.pcb_Layer;
 	if (!isPlainObjectRecord(api)) {
 		throw new TypeError('EDA pcb_Layer API is unavailable. Open a PCB document first.');

@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type ConstraintKind = 'current_rules' | 'current_rule_configuration_name' | 'default_rule_configuration_name' | 'rule_configuration' | 'rule_configurations' | 'net_rules' | 'net_to_net_rules' | 'region_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups' | 'pad_pair_min_wire_length';
 
@@ -27,7 +27,7 @@ export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<u
 	if (typeof kind !== 'string' || !Object.prototype.hasOwnProperty.call(METHOD_BY_KIND, kind)) {
 		throw new TypeError(`kind must be one of: ${Object.keys(METHOD_BY_KIND).join(', ')}.`);
 	}
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.pcb_Drc;
 	const methodName = METHOD_BY_KIND[kind as ConstraintKind];
 	if (!isPlainObjectRecord(api) || typeof api[methodName] !== 'function') {

@@ -1,4 +1,4 @@
-import { isPlainObjectRecord } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord } from '../utils.ts';
 
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
 const MIN_MAX_BYTES = 64 * 1024;
@@ -46,7 +46,7 @@ export async function handleLibraryPreviewTask(payload: unknown): Promise<unknow
 	if (typeof includeData !== 'boolean')
 		throw new TypeError('includeData must be a boolean.');
 	const limit = maxBytes(payload.maxBytes);
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const moduleName = kind === 'symbol' ? 'lib_Symbol' : 'lib_Footprint';
 	const api = eda?.[moduleName];
 	if (!isPlainObjectRecord(api) || typeof api.getRenderImage !== 'function')

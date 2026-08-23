@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type AutoOperation = 'layout' | 'routing';
 
@@ -9,7 +9,7 @@ interface PcbDocumentApi {
 }
 
 function resolvePcbDocumentApi(operation: AutoOperation): PcbDocumentApi {
-	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
+	const edaGlobal = getEdaRuntime();
 	if (!isPlainObjectRecord(edaGlobal) || !isPlainObjectRecord(edaGlobal.pcb_Document)) {
 		throw new TypeError('EDA PCB document API is unavailable. Open a PCB document first.');
 	}

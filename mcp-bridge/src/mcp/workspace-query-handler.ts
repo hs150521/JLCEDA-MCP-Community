@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type WorkspaceQueryAction = 'current' | 'workspaces' | 'teams' | 'projects' | 'folders';
 
@@ -44,7 +44,7 @@ export async function handleWorkspaceQueryTask(payload: unknown): Promise<unknow
 	const input = isPlainObjectRecord(payload) ? payload : {};
 	const action = requiredAction(input.action);
 	const limit = parseBoundedIntegerValue(input.limit, 100, 1, MAX_QUERY_ITEMS);
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	if (!isPlainObjectRecord(eda))
 		throw new TypeError('EDA runtime is unavailable.');
 	const workspace = getModule(eda, 'dmt_Workspace');

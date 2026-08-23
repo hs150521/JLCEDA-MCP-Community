@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 export async function handleManufactureTemplatesQueryTask(payload: unknown): Promise<unknown> {
 	if (payload !== undefined && payload !== null && !isPlainObjectRecord(payload))
@@ -8,7 +8,7 @@ export async function handleManufactureTemplatesQueryTask(payload: unknown): Pro
 	if (domain !== 'pcb' && domain !== 'schematic')
 		throw new TypeError('domain must be pcb or schematic.');
 	const moduleName = domain === 'pcb' ? 'pcb_ManufactureData' : 'sch_ManufactureData';
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.[moduleName];
 	if (!isPlainObjectRecord(api) || typeof api.getBomTemplates !== 'function')
 		throw new TypeError(`EDA ${moduleName}.getBomTemplates API is unavailable in this client version.`);

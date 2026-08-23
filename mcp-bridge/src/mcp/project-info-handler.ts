@@ -1,10 +1,10 @@
-import { isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type EdaRecord = Record<string, unknown>;
 const MAX_INVENTORY_ITEMS = 500;
 
 function resolveEda(): EdaRecord {
-	const eda = (globalThis as unknown as { eda?: unknown }).eda;
+	const eda = getEdaRuntime();
 	if (!isPlainObjectRecord(eda)) {
 		throw new TypeError('EDA runtime is unavailable.');
 	}

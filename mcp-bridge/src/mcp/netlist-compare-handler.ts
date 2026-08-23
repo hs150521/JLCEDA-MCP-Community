@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type NetlistSource = string | { projectUuid: string; documentUuid: string };
 
@@ -19,7 +19,7 @@ export async function handleNetlistCompareTask(payload: unknown): Promise<unknow
 	}
 	const sourceA = normalizeSource(payload.sourceA, 'sourceA');
 	const sourceB = normalizeSource(payload.sourceB, 'sourceB');
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.sys_Tool;
 	if (!isPlainObjectRecord(api) || typeof api.netlistComparison !== 'function') {
 		throw new TypeError('EDA sys_Tool.netlistComparison API is unavailable in this client version.');

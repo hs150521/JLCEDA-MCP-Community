@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, parseBoundedIntegerValue, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, toSerializableAsync } from '../utils.ts';
 
 type LibrarySearchKind = 'device' | 'symbol' | 'footprint' | 'model_3d' | 'cbb' | 'panel_library';
 
@@ -72,7 +72,7 @@ function normalizeLcscIds(raw: unknown): string[] | undefined {
 }
 
 function getApi(kind: LibrarySearchKind): Record<string, unknown> {
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const moduleName = API_MODULE_BY_KIND[kind];
 	const api = eda?.[moduleName];
 	if (!isPlainObjectRecord(api))

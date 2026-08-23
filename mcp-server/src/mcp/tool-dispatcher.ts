@@ -149,6 +149,7 @@ export class ToolDispatcher {
       'pcb_drc_check': '/bridge/jlceda/pcb/drc-check',
       'schematic_drc_check': '/bridge/jlceda/schematic/drc-check',
       'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
+		'pcb_constraints_manage': '/bridge/jlceda/pcb/constraints-manage',
       'netlist_compare': '/bridge/jlceda/netlist/compare',
       'design_compare': '/bridge/jlceda/design/compare',
 		'design_archive_export': '/bridge/jlceda/design/archive-export',

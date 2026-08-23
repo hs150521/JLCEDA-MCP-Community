@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type CompareDomain = 'netlist' | 'schematic' | 'pcb';
 type CompareSource = string | Record<string, string>;
@@ -30,7 +30,7 @@ export async function handleDesignCompareTask(payload: unknown): Promise<unknown
 	if (payload.options !== undefined) {
 		throw new TypeError('options are unavailable because pcbComparison accepts only two arguments in 0.4.15.');
 	}
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.sys_Tool;
 	const methodName = domain === 'netlist' ? 'netlistComparison' : domain === 'schematic' ? 'schematicComparison' : 'pcbComparison';
 	if (!isPlainObjectRecord(api) || typeof api[methodName] !== 'function') {

@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type SchematicDocumentAction = 'status' | 'filter_configuration' | 'selection' | 'mouse_position' | 'primitive_at_point' | 'primitives_in_region' | 'navigate_to_coordinates' | 'navigate_to_region' | 'save' | 'import_changes' | 'select_primitives' | 'clear_selection' | 'primitive_type_by_id' | 'primitive_by_id' | 'primitives_by_id' | 'primitives_bbox';
 
@@ -30,7 +30,7 @@ interface SchematicPrimitiveApi {
 }
 
 function getEdaRecord(): Record<string, unknown> {
-	const eda = (globalThis as unknown as { eda?: unknown }).eda;
+	const eda = getEdaRuntime();
 	if (!isPlainObjectRecord(eda))
 		throw new TypeError('EDA runtime is unavailable.');
 	return eda;

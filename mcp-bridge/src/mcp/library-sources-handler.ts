@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 const MAX_LIBRARY_ITEMS = 500;
 
@@ -11,7 +11,7 @@ export async function handleLibrarySourcesTask(payload: unknown): Promise<unknow
 		throw new TypeError('library_sources payload must be an object.');
 	const input = isPlainObjectRecord(payload) ? payload : {};
 	const limit = parseBoundedIntegerValue(input.limit, 100, 1, MAX_LIBRARY_ITEMS);
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.lib_LibrariesList;
 	if (!isPlainObjectRecord(api) || typeof api.getAllLibrariesList !== 'function')
 		throw new TypeError('EDA lib_LibrariesList.getAllLibrariesList API is unavailable in this client version.');

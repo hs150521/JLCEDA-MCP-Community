@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 export async function handlePcbRealtimeDrcTask(payload: unknown): Promise<unknown> {
 	if (payload !== undefined && payload !== null && !isPlainObjectRecord(payload))
@@ -7,7 +7,7 @@ export async function handlePcbRealtimeDrcTask(payload: unknown): Promise<unknow
 	const action = input.action === undefined ? 'status' : input.action;
 	if (action !== 'status' && action !== 'start' && action !== 'stop')
 		throw new TypeError('action must be status, start, or stop.');
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.pcb_Drc;
 	if (!isPlainObjectRecord(api))
 		throw new TypeError('EDA pcb_Drc API is unavailable. Open a PCB document first.');

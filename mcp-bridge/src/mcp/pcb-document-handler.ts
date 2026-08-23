@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type PcbDocumentAction = 'status' | 'canvas_origin' | 'filter_configuration' | 'selection' | 'mouse_position' | 'select_primitives' | 'clear_selection' | 'primitive_type_by_id' | 'primitive_by_id' | 'primitives_by_id' | 'primitives_bbox' | 'primitive_at_point' | 'primitives_in_region' | 'convert_canvas_to_data' | 'convert_data_to_canvas' | 'navigate_to_coordinates' | 'navigate_to_region' | 'zoom_to_board_outline' | 'save' | 'start_ratline' | 'stop_ratline' | 'clear_routing' | 'import_changes' | 'import_auto_route_json' | 'import_auto_route_ses' | 'import_auto_layout_json';
 
@@ -48,7 +48,7 @@ async function serializeBoundedArray(values: unknown[]): Promise<unknown[]> {
 }
 
 function getApi(): PcbDocumentApi {
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.pcb_Document;
 	if (!isPlainObjectRecord(api))
 		throw new TypeError('EDA pcb_Document API is unavailable. Open a PCB document first.');
@@ -137,7 +137,7 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		return { ok: true, action, filterConfiguration: await toSerializableAsync(await api.getCurrentFilterConfiguration()) };
 	}
 	if (action === 'selection') {
-		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const eda = getEdaRuntime();
 		const selectApi = eda?.pcb_SelectControl as PcbSelectControlApi | undefined;
 		if (!selectApi || typeof selectApi.getAllSelectedPrimitives_PrimitiveId !== 'function')
 			throw new TypeError('EDA pcb_SelectControl selection APIs are unavailable in this client version.');
@@ -166,14 +166,14 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		return result;
 	}
 	if (action === 'mouse_position') {
-		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const eda = getEdaRuntime();
 		const selectApi = eda?.pcb_SelectControl as PcbSelectControlApi | undefined;
 		if (!selectApi || typeof selectApi.getCurrentMousePosition !== 'function')
 			throw new TypeError('EDA pcb_SelectControl.getCurrentMousePosition API is unavailable in this client version.');
 		return { ok: true, action, position: await toSerializableAsync(await selectApi.getCurrentMousePosition()) };
 	}
 	if (action === 'select_primitives' || action === 'clear_selection') {
-		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const eda = getEdaRuntime();
 		const selectApi = eda?.pcb_SelectControl as PcbSelectControlApi | undefined;
 		if (!selectApi)
 			throw new TypeError('EDA pcb_SelectControl selection APIs are unavailable in this client version.');
@@ -188,7 +188,7 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		return { ok: true, action, cleared: await selectApi.clearSelected() };
 	}
 	if (action === 'primitive_type_by_id' || action === 'primitive_by_id' || action === 'primitives_by_id' || action === 'primitives_bbox') {
-		const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+		const eda = getEdaRuntime();
 		const primitive = eda?.pcb_Primitive as PcbPrimitiveApi | undefined;
 		if (!primitive)
 			throw new TypeError('EDA pcb_Primitive API is unavailable in this client version.');

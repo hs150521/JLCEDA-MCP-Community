@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, parseBoundedIntegerValue, preserveBoundedArray } from '../utils.ts';
 
 type LibraryKind = 'device' | 'symbol' | 'footprint' | 'model_3d' | 'cbb' | 'panel_library';
 
@@ -62,7 +62,7 @@ export async function handleLibraryClassificationTask(payload: unknown): Promise
 	const libraryUuid = requiredString(payload, 'libraryUuid');
 	const maxNodes = parseBoundedIntegerValue(payload.maxNodes, 500, 1, 2000);
 	const maxDepth = parseBoundedIntegerValue(payload.maxDepth, 8, 1, 20);
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.lib_Classification;
 	if (!isPlainObjectRecord(api) || typeof api.getAllClassificationTree !== 'function')
 		throw new TypeError('EDA lib_Classification.getAllClassificationTree API is unavailable in this client version.');

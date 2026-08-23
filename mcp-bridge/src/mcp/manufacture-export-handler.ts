@@ -1,4 +1,4 @@
-import { isPlainObjectRecord } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord } from '../utils.ts';
 
 type ExportDomain = 'pcb' | 'schematic';
 
@@ -146,7 +146,7 @@ export async function handleManufactureExportTask(payload: unknown): Promise<unk
 	const includeData = payload.includeData === undefined ? false : payload.includeData;
 	if (typeof includeData !== 'boolean')
 		throw new TypeError('includeData must be a boolean.');
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const moduleName = domain === 'pcb' ? 'pcb_ManufactureData' : 'sch_ManufactureData';
 	const api = eda?.[moduleName];
 	const call = resolveCall(domain, kind, payload);

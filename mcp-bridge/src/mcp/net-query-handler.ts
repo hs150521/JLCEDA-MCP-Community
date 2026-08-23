@@ -1,4 +1,4 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type NetDomain = 'schematic' | 'pcb';
 type NetQueryMode = 'all' | 'names' | 'exact';
@@ -54,7 +54,7 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 	}
 	const analysis = normalizePcbNetAnalysis(input, mode as NetQueryMode, domain);
 
-	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
+	const edaGlobal = getEdaRuntime();
 	if (!isPlainObjectRecord(edaGlobal)) {
 		throw new TypeError('EDA runtime is unavailable.');
 	}

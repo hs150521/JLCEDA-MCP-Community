@@ -1,4 +1,4 @@
-import { isPlainObjectRecord } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord } from '../utils.ts';
 
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -36,7 +36,7 @@ export async function handleCanvasSnapshotTask(payload: unknown): Promise<unknow
 	if (typeof includeData !== 'boolean')
 		throw new TypeError('includeData must be a boolean.');
 	const maxBytes = boundedMaxBytes(input.maxBytes);
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.dmt_EditorControl;
 	if (!isPlainObjectRecord(api) || typeof api.getCurrentRenderedAreaImage !== 'function')
 		throw new TypeError('EDA dmt_EditorControl.getCurrentRenderedAreaImage API is unavailable in this client version.');

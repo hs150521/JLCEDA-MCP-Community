@@ -1,4 +1,4 @@
-import { isPlainObjectRecord } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord } from '../utils.ts';
 
 type ArchiveAction = 'project' | 'document' | 'project_by_uuid';
 
@@ -64,7 +64,7 @@ export async function handleDesignArchiveExportTask(payload: unknown): Promise<u
 	if (typeof includeData !== 'boolean')
 		throw new TypeError('includeData must be a boolean.');
 	const maxBytes = parseMaxBytes(input.maxBytes);
-	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
+	const eda = getEdaRuntime();
 	const api = eda?.sys_FileManager;
 	if (!isPlainObjectRecord(api))
 		throw new TypeError('EDA sys_FileManager API is unavailable in this client version.');

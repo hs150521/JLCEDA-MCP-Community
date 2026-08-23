@@ -1,11 +1,11 @@
-import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 interface PcbDrcApi {
 	check: (strict: boolean, userInterface: boolean, includeVerboseError: true) => Promise<unknown>;
 }
 
 function resolvePcbDrcApi(): PcbDrcApi {
-	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
+	const edaGlobal = getEdaRuntime();
 	if (!isPlainObjectRecord(edaGlobal) || !isPlainObjectRecord(edaGlobal.pcb_Drc)) {
 		throw new TypeError('EDA PCB DRC API is unavailable. Open a PCB document before running pcb_drc_check.');
 	}

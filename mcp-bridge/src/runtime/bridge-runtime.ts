@@ -44,6 +44,7 @@ import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
 import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleNetlistCompareTask } from '../mcp/netlist-compare-handler.ts';
 import { handlePcbConstraintsQueryTask } from '../mcp/pcb-constraints-handler.ts';
+import { handlePcbConstraintsManageTask } from '../mcp/pcb-constraints-manage-handler.ts';
 import { handlePcbDocumentTask } from '../mcp/pcb-document-handler.ts';
 import { handlePcbDrcCheckTask } from '../mcp/pcb-drc-handler.ts';
 import { handlePcbLayerQueryTask } from '../mcp/pcb-layer-handler.ts';
@@ -85,6 +86,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/schematic/drc-check': handleSchematicDrcCheckTask,
 	'/bridge/jlceda/schematic/document': handleSchematicDocumentTask,
 	'/bridge/jlceda/pcb/constraints-query': handlePcbConstraintsQueryTask,
+	'/bridge/jlceda/pcb/constraints-manage': handlePcbConstraintsManageTask,
 	'/bridge/jlceda/netlist/compare': handleNetlistCompareTask,
 	'/bridge/jlceda/pcb/layer-query': handlePcbLayerQueryTask,
 	'/bridge/jlceda/pcb/realtime-drc': handlePcbRealtimeDrcTask,
