@@ -9,7 +9,7 @@
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
 - `eda_context` includes the detected JLCEDA/EasyEDA edition, online mode, editor version, and editor build date when exposed by the client.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
-- `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.
+- `pcb_layer_query`: inspect PCB layers, the current layer, and copper-layer count.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
 - `pcb_document_action`: inspect PCB coordinates, selected/region primitives, filters, and canvas state; navigate the view; save the active board, import schematic changes, or import Base64 auto-layout/route files.
 - `pcb_document_action` also supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.

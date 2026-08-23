@@ -779,20 +779,11 @@
   },
   {
     "name": "pcb_layer_query",
-    "description": "Read PCB layers, current layer, copper count, or EDA v4.2 physical stacking configurations.",
+    "description": "Read PCB layers, current layer, and copper-layer count.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "kind": { "type": "string", "enum": ["layers", "current", "physical_stacking"], "default": "layers" },
-        "configurationName": { "type": "string", "minLength": 1 },
-        "physicalProps": {
-          "type": "object",
-          "properties": {
-            "numberOfLayers": { "type": "integer", "minimum": 2, "maximum": 32, "multipleOf": 2 },
-            "substrateMaterial": { "type": "string", "enum": ["Common", "FPC Flexible"] }
-          },
-          "additionalProperties": false
-        }
+        "kind": { "type": "string", "enum": ["layers", "current"], "default": "layers" }
       },
       "additionalProperties": false
     }

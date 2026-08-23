@@ -324,8 +324,7 @@ async function main() {
 	assert.equal(pcbDrc.errorCount, 2);
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });
 	assert.equal(layers.copperLayerCount, 2);
-	const stacking = await handlePcbLayerQueryTask({ kind: 'physical_stacking', configurationName: '2 Layer' });
-	assert.equal(stacking.selected.name, '2 Layer');
+	await assert.rejects(() => handlePcbLayerQueryTask({ kind: 'physical_stacking' }), /kind must be layers or current/);
 	const realtimeDrc = await handlePcbRealtimeDrcTask({ action: 'status' });
 	assert.equal(realtimeDrc.enabled, false);
 	const realtimeDrcStart = await handlePcbRealtimeDrcTask({ action: 'start' });

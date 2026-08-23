@@ -28,7 +28,7 @@
 - `pcb_constraints_query`：只读读取当前 PCB 的规则、网络类、差分对、等长组或焊盘对组。需要 PCB 页面。
 - `netlist_compare`：对比两个已知的原理图或 PCB 文档 UUID；必须先通过 `project_info` 或 `eda_context` 确认 UUID，不得猜测。
 - `design_compare`：按 `domain` 调用官方原理图、PCB 或网表对比 API。PCB 对比在 `0.4.15` 中标注为 EDA v4.2，旧客户端应返回版本能力错误；不得反复猜测参数。
-- `pcb_layer_query`：读取当前 PCB 图层、当前工作层和 EDA v4.2 物理叠层配置；`physical_stacking` 失败时应接受旧客户端能力错误，不得改用猜测的图层参数。
+- `pcb_layer_query`：读取当前 PCB 图层、当前工作层和铜层数量。
 - `pcb_realtime_drc`：默认只查询实时 DRC 状态；只有用户明确要求时才执行 `start` 或 `stop`。
 - `component_select`：可使用 `properties.supplierId` 等 0.4.15 精确字段查询器件。`keyword` 与 `properties` 二选一，结果仍必须等待用户确认后才能放置。
 - `project_info`：读取工程、板子、原理图、PCB 和图页身份，适合在跨页面任务开始时建立上下文。
