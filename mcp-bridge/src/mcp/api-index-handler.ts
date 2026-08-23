@@ -170,6 +170,15 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.lib_Device.get', summary: '按 UUID 获取器件库资产' },
 	{ fullName: 'eda.lib_Symbol.get', summary: '按 UUID 获取符号库资产' },
 	{ fullName: 'eda.lib_Footprint.get', summary: '按 UUID 获取封装库资产' },
+	{ fullName: 'eda.pcb_SelectControl.getCurrentMousePosition', summary: 'PCB mouse position' },
+	{ fullName: 'eda.pcb_SelectControl.doSelectPrimitives', summary: 'Select PCB primitives' },
+	{ fullName: 'eda.pcb_SelectControl.clearSelected', summary: 'Clear PCB selection' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitiveTypeByPrimitiveId', summary: 'Get PCB primitive type' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitiveByPrimitiveId', summary: 'Get PCB primitive' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitivesByPrimitiveId', summary: 'Get PCB primitives' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitivesBBox', summary: 'Get PCB primitive bounds' },
+	{ fullName: 'eda.sch_Document.getCurrentFilterConfiguration', summary: 'Get schematic filter configuration' },
+	{ fullName: 'eda.sch_SelectControl.getAllSelectedPrimitives_PrimitiveId', summary: 'Get selected schematic primitive IDs' },
 ];
 
 /**
