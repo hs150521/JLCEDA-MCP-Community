@@ -67,8 +67,9 @@ export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> 
 		const rawNames = await (api.getAllNetsName as () => Promise<unknown>).call(api);
 		if (!Array.isArray(rawNames))
 			throw new TypeError(`EDA ${moduleName}.getAllNetsName returned an invalid result.`);
-		const filteredNames = rawNames.filter(name => !query || String(name).toLowerCase().includes(query)).slice(0, limit);
-		return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: rawNames.length, returned: Math.min(filteredNames.length, 120), names: await toSerializableAsync(filteredNames), truncated: filteredNames.length > 120 || rawNames.length > filteredNames.length };
+		const matchingNames = rawNames.filter(name => !query || String(name).toLowerCase().includes(query));
+		const returnedNames = matchingNames.slice(0, Math.min(limit, 120));
+		return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: matchingNames.length, returned: returnedNames.length, names: await toSerializableAsync(returnedNames), truncated: matchingNames.length > returnedNames.length };
 	}
 	if (mode === 'exact' && typeof api.getNet === 'function') {
 		const net = await toSerializableAsync(await (api.getNet as (name: string) => Promise<unknown>).call(api, queryText));
@@ -104,8 +105,7 @@ export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> 
 	if (!Array.isArray(rawNets)) {
 		throw new TypeError(`EDA ${moduleName}.getAllNets returned an invalid result.`);
 	}
-	const filteredNets = rawNets
-		.filter(net => !query || JSON.stringify(net).toLowerCase().includes(query))
-		.slice(0, limit);
-	return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: rawNets.length, returned: Math.min(filteredNets.length, 120), nets: await toSerializableAsync(filteredNets), truncated: filteredNets.length > 120 || rawNets.length > filteredNets.length };
+	const matchingNets = rawNets.filter(net => !query || JSON.stringify(net).toLowerCase().includes(query));
+	const returnedNets = matchingNets.slice(0, Math.min(limit, 120));
+	return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: matchingNets.length, returned: returnedNets.length, nets: await toSerializableAsync(returnedNets), truncated: matchingNets.length > returnedNets.length };
 }

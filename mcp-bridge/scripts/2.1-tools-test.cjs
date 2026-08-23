@@ -115,6 +115,7 @@ async function main() {
 			async getAllPcbsInfo() { return [{ uuid: 'pcb-1', name: 'Main PCB' }, { uuid: 'pcb-2', name: 'Auxiliary PCB' }]; },
 		},
 		pcb_Net: {
+			async getAllNets() { return [{ name: 'USB_D+' }, { name: 'GND' }]; },
 			async getNet(name) {
 				assert.equal(name, 'USB_D+');
 				return { name, color: '#00ff00' };
@@ -706,6 +707,10 @@ async function main() {
 	assert.equal(pcbNetAnalysis.length, 42.5);
 	assert.equal(pcbNetAnalysis.color, '#00ff00');
 	assert.equal(pcbNetAnalysis.primitiveCount, 1);
+	const filteredPcbNets = await handlePcbNetQueryTask({ query: 'USB' });
+	assert.equal(filteredPcbNets.total, 1);
+	assert.equal(filteredPcbNets.returned, 1);
+	assert.equal(filteredPcbNets.truncated, false);
 	globalThis.eda.pcb_Drc.modifyDifferentialPairName = async () => true;
 	globalThis.eda.pcb_Drc.getAllDifferentialPairs = async () => ({ USB_PAIR_RENAMED: { name: 'USB_PAIR_RENAMED', positiveNet: 'USB_D+', negativeNet: 'USB_D-' } });
 	const objectReadback = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'rename', name: 'USB_PAIR', newName: 'USB_PAIR_RENAMED', confirm: true });

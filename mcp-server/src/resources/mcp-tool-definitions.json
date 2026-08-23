@@ -650,7 +650,7 @@
             "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
             "analysis": { "$ref": "#/$defs/pcbNetAnalysis" }
           },
-          "required": ["query"],
+          "required": ["query", "mode"],
           "additionalProperties": false
         }
       ],
@@ -712,7 +712,7 @@
         { "type": "object", "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 } }, "required": ["action", "id"] },
         { "type": "object", "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
         { "type": "object", "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
-        { "type": "object", "properties": { "action": { "enum": ["status", "filter_configuration", "selection", "mouse_position", "save", "import_changes", "clear_selection"] } } }
+        { "type": "object", "properties": { "action": { "enum": ["status", "filter_configuration", "selection", "mouse_position", "save", "import_changes", "clear_selection"] } }, "additionalProperties": false }
       ],
       "additionalProperties": false
     }
