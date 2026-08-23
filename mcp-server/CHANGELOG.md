@@ -4,6 +4,12 @@
 
 - Bridge 会在心跳超时后释放挂起请求，避免失联页面永久占用活动租约；`bridge_select_client` 新增受限的 `force` 恢复选项，用于从已确认卡死的活动页面切换到新的就绪页面。
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
+## 2.1.5 - 2026-08-23
+
+- Keep the Bridge client quarantined after an uncancellable EDA mutation times out, so later tasks cannot overlap the pending API call.
+- Preserve the existing `bridge_select_client.force` recovery path for confirmed stale active clients.
+- This release does not change the EDA client's component-creation implementation; it reports the timeout safely and prevents queue corruption.
+
 ## 2.1.4 - 2026-08-17
 
 - 将校验后的 `api_invoke` 和 `eda_context` 超时值传递给 Bridge 请求。

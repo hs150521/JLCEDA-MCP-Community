@@ -10,7 +10,7 @@ const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-aut
 const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
-const { resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
+const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
 
 for (const name of ['UART_TX', 'SPI_CLK', 'BLUE_LED_DATA']) {
 	assert.equal(detectNetLabelKind(name), 'NetLabel', `${name} must use an ordinary net label`);
@@ -54,21 +54,44 @@ async function main() {
 		resolveBackgroundTask = resolve;
 	});
 	const timedTask = startTimedTask(backgroundTask, '/bridge/jlceda/component/place-auto', 10);
-	await assert.rejects(timedTask.result, /timed out/);
+	await assert.rejects(timedTask.result, BridgeTaskTimeoutError);
 	let backgroundSettled = false;
 	void timedTask.settled.then(() => {
 		backgroundSettled = true;
 	});
 	await new Promise(resolve => setTimeout(resolve, 0));
 	assert.equal(backgroundSettled, false, 'timed-out task must remain unsettled until its handler finishes');
+	assert.equal(backgroundSettled, false, 'a timed-out mutation must keep its serialization barrier until it settles');
+	const quarantine = new BridgeTaskQuarantine();
+	quarantine.enter('/bridge/jlceda/component/place-auto', timedTask.settled);
+	assert.equal(quarantine.getActive().path, '/bridge/jlceda/component/place-auto', 'timed-out mutations must quarantine the bridge client');
 	resolveBackgroundTask('late result');
 	await timedTask.settled;
 	assert.equal(backgroundSettled, true);
+	await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(quarantine.getActive(), undefined, 'the bridge client must recover after the original mutation settles');
 
-	await assert.rejects(
-		createNetLabelWithTimeout(new Promise(() => {}), 'UART_TX', 10),
-		/createNetLabel alpha API timed out/,
-	);
+	let resolveNetLabelCreate;
+	const pendingNetLabelCreate = new Promise((resolve) => {
+		resolveNetLabelCreate = resolve;
+	});
+	let netLabelTimeout;
+	try {
+		await createNetLabelWithTimeout(pendingNetLabelCreate, 'UART_TX', 10);
+		assert.fail('createNetLabelWithTimeout must time out');
+	}
+	catch (error) {
+		assert(error instanceof BridgeTaskTimeoutError);
+		netLabelTimeout = error;
+	}
+	assert.match(netLabelTimeout.message, /createNetLabel alpha API timed out/);
+	const netLabelQuarantine = new BridgeTaskQuarantine();
+	netLabelQuarantine.enter('/bridge/jlceda/netlabel/place', netLabelTimeout.backgroundSettled);
+	assert.equal(netLabelQuarantine.getActive().path, '/bridge/jlceda/netlabel/place', 'handler-level EDA timeouts must quarantine the bridge client');
+	resolveNetLabelCreate({ primitiveId: 'label-late' });
+	await netLabelTimeout.backgroundSettled;
+	await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(netLabelQuarantine.getActive(), undefined, 'handler-level quarantine must clear only after the EDA call settles');
 
 	const createNetLabelCalls = [];
 	const regionCalls = [];
@@ -128,6 +151,20 @@ async function main() {
 	});
 	assert.equal(placed.ok, true);
 	assert.deepEqual(createNetLabelCalls, [[320, 240, 'UART_TX']]);
+
+	globalThis.eda.sch_PrimitiveAttribute.createNetLabel = async () => {
+		throw new BridgeTaskTimeoutError('/bridge/jlceda/netlabel/place', 5_000, Promise.resolve());
+	};
+	await assert.rejects(
+		handleNetLabelPlaceTask({
+			placements: [{ componentId: 'component-1', pinIdentifier: '1', netName: 'UART_TX' }],
+		}),
+		BridgeTaskTimeoutError,
+	);
+	globalThis.eda.sch_PrimitiveAttribute.createNetLabel = async (...args) => {
+		createNetLabelCalls.push(args);
+		return { primitiveId: 'label-1' };
+	};
 
 	const modified = await handleNetLabelModifyTask({
 		target: { type: 'pin', componentId: 'component-1', pinIdentifier: '1' },

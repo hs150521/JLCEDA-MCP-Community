@@ -9,6 +9,36 @@ const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/context',
 ]);
 
+export class BridgeTaskTimeoutError extends Error {
+	public constructor(
+		path: string,
+		timeoutMs: number,
+		public readonly backgroundSettled?: Promise<void>,
+		message = `Bridge task timed out after ${String(timeoutMs)}ms: ${path}`,
+	) {
+		super(message);
+		this.name = 'BridgeTaskTimeoutError';
+	}
+}
+
+export class BridgeTaskQuarantine {
+	private active: { path: string; startedAt: number } | undefined;
+
+	public getActive(): { path: string; startedAt: number } | undefined {
+		return this.active;
+	}
+
+	public enter(path: string, settled: Promise<void>): void {
+		const quarantine = { path, startedAt: Date.now() };
+		this.active = quarantine;
+		void settled.then(() => {
+			if (this.active === quarantine) {
+				this.active = undefined;
+			}
+		});
+	}
+}
+
 export interface TimedTask<T> {
 	result: Promise<T>;
 	settled: Promise<void>;
@@ -41,7 +71,7 @@ export function startTimedTask<T>(task: Promise<T>, path: string, timeoutMs: num
 		task,
 		new Promise<T>((_resolve, reject) => {
 			timeoutId = globalThis.setTimeout(() => {
-				reject(new Error(`Bridge task timed out after ${String(timeoutMs)}ms: ${path}`));
+				reject(new BridgeTaskTimeoutError(path, timeoutMs));
 			}, timeoutMs);
 		}),
 	]).finally(() => {

@@ -1,5 +1,26 @@
 ## 未发布
 
+## [2.0.9] - 2026-08-23
+
+### Fixes
+
+- Keep timed-out EDA mutations quarantined until their uncancellable API Promise settles, preventing later reads and writes from overlapping the pending mutation.
+- Propagate net-label handler timeouts to the runtime quarantine mechanism.
+
+### Changes
+
+- Upgrade `@jlceda/pro-api-types` from `0.2.15` to `0.4.15` for current EDA Pro API declarations. This is a compile-time type update and does not change the EDA client's runtime implementation.
+
+---
+
+## Unreleased
+
+### Fixes
+
+- Release the Bridge task queue after an EDA write API times out, so a permanently pending API call cannot block later read or write tasks.
+
+---
+
 ## [2.0.8] - 2026-08-23
 
 ### Fixes
