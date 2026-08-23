@@ -116,7 +116,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_source_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'workspace_query'];
+    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'design_source_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query'];
     if (!['api_invoke', 'eda_context', ...extendedReadTools].includes(toolName)) {
       return undefined;
     }
@@ -151,6 +151,7 @@ export class ToolDispatcher {
       'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
       'netlist_compare': '/bridge/jlceda/netlist/compare',
       'design_compare': '/bridge/jlceda/design/compare',
+		'design_archive_export': '/bridge/jlceda/design/archive-export',
       'design_source_export': '/bridge/jlceda/design/source-export',
       'pcb_layer_query': '/bridge/jlceda/pcb/layer-query',
       'pcb_realtime_drc': '/bridge/jlceda/pcb/realtime-drc',
@@ -161,6 +162,8 @@ export class ToolDispatcher {
       'manufacture_export': '/bridge/jlceda/manufacture/export',
       'manufacture_templates_query': '/bridge/jlceda/manufacture/templates-query',
       'library_search': '/bridge/jlceda/library/search',
+		'library_classification_query': '/bridge/jlceda/library/classification-query',
+		'library_preview': '/bridge/jlceda/library/preview',
 		'library_sources': '/bridge/jlceda/library/sources',
       'pcb_net_query': '/bridge/jlceda/net/query-pcb',
       'schematic_auto_layout': '/bridge/jlceda/auto/layout',
@@ -185,7 +188,7 @@ export class ToolDispatcher {
    * 包装为MCP tools/call响应格式
    */
   private toToolContent(result: unknown): ToolCallResult {
-    if (this.isCanvasSnapshotResult(result)) {
+    if (this.isImageResult(result)) {
       const image = result.image;
       const { dataBase64, ...imageMetadata } = image;
       const metadata = {
@@ -221,7 +224,7 @@ export class ToolDispatcher {
     return response;
   }
 
-  private isCanvasSnapshotResult(
+  private isImageResult(
     result: unknown,
   ): result is Record<string, unknown> & {
     ok: true;

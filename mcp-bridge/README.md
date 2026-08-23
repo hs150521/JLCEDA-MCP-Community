@@ -4,13 +4,17 @@
 
 The 2.1 release also adds `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 
-`eda_context` reports the client edition, connection mode, editor version, and build date when the installed EDA exposes those 0.4.15 APIs.
+`eda_context` reports the client edition, connection mode, editor version, build date, and current canvas data unit when the installed EDA exposes those 0.4.15 APIs.
 
 `eda_canvas_snapshot` can return the rendered active canvas as a bounded image without changing the document or viewport.
 
 `workspace_query` reads the current workspace/team and bounded lists of accessible workspaces, teams, projects, or folders.
 
 `design_source_export` reads bounded previews of the active document or its footprint sources; complete source text requires explicit opt-in and remains byte-limited.
+
+`design_archive_export` returns metadata for native current-project/current-document archives by default and only includes bounded Base64 data when explicitly requested.
+
+`library_preview` renders symbol and footprint assets as bounded MCP images, while `library_classification_query` returns bounded official library category trees.
 
 `project_info` can optionally return bounded Board and Panel inventories for the current project.
 

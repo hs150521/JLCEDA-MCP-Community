@@ -4,13 +4,17 @@
 
 The server also exposes `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 
-`eda_context` reports the client edition, connection mode, editor version, and build date when available.
+`eda_context` reports the client edition, connection mode, editor version, build date, and current canvas data unit when available.
 
 `eda_canvas_snapshot` can return the rendered active canvas as a bounded MCP image without changing the document or viewport.
 
 `workspace_query` reads the current workspace/team and bounded lists of accessible workspaces, teams, projects, or folders.
 
 `design_source_export` reads bounded document/footprint source previews and only returns complete source text after explicit opt-in within a byte limit.
+
+`design_archive_export` returns metadata for native design archives and provides bounded Base64 only after explicit opt-in, without writing files to disk.
+
+`library_preview` renders symbol and footprint assets as bounded MCP images, and `library_classification_query` provides bounded library category trees before asset searches.
 
 `project_info` can optionally return bounded Board and Panel inventories for the current project.
 

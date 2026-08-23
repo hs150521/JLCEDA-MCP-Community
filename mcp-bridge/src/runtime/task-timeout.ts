@@ -12,16 +12,21 @@ const EXTENDED_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/schematic/drc-check',
 	'/bridge/jlceda/netlist/compare',
 	'/bridge/jlceda/design/compare',
+	'/bridge/jlceda/design/archive-export',
 	'/bridge/jlceda/manufacture/export',
 	'/bridge/jlceda/pcb/document',
 	'/bridge/jlceda/schematic/document',
 	'/bridge/jlceda/canvas/snapshot',
 	'/bridge/jlceda/library/sources',
+	'/bridge/jlceda/library/classification-query',
+	'/bridge/jlceda/library/preview',
 	'/bridge/jlceda/workspace/query',
 ]);
 const STANDARD_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/canvas/snapshot',
 	'/bridge/jlceda/library/sources',
+	'/bridge/jlceda/library/classification-query',
+	'/bridge/jlceda/library/preview',
 	'/bridge/jlceda/workspace/query',
 	'/bridge/jlceda/design/source-export',
 ]);

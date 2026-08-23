@@ -1,9 +1,11 @@
 import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
-type ConstraintKind = 'current_rules' | 'rule_configuration' | 'rule_configurations' | 'net_rules' | 'net_to_net_rules' | 'region_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups' | 'pad_pair_min_wire_length';
+type ConstraintKind = 'current_rules' | 'current_rule_configuration_name' | 'default_rule_configuration_name' | 'rule_configuration' | 'rule_configurations' | 'net_rules' | 'net_to_net_rules' | 'region_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups' | 'pad_pair_min_wire_length';
 
 const METHOD_BY_KIND: Record<ConstraintKind, string> = {
 	current_rules: 'getCurrentRuleConfiguration',
+	current_rule_configuration_name: 'getCurrentRuleConfigurationName',
+	default_rule_configuration_name: 'getDefaultRuleConfigurationName',
 	rule_configuration: 'getRuleConfiguration',
 	rule_configurations: 'getAllRuleConfigurations',
 	net_rules: 'getNetRules',

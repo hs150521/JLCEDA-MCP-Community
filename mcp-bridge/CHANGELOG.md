@@ -6,6 +6,9 @@
 - Add read-only active-canvas snapshots, library-source discovery, and 3D-model/reusable-module/panel-library search and retrieval.
 - Add read-only workspace, team, project, and folder discovery through `workspace_query`.
 - Add bounded read-only document and footprint source export through `design_source_export`, plus optional Board and Panel inventories in `project_info`.
+- Add bounded symbol/footprint `library_preview` images and official `library_classification_query` trees; extend `project_info` with schematic and PCB inventories.
+- Add `design_archive_export` for bounded, explicit native project/document archive retrieval without filesystem writes.
+- Include active canvas data unit in `eda_context`, and expose current/default PCB rule-configuration names through `pcb_constraints_query`.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add structured PCB and schematic DRC tools with non-UI defaults.

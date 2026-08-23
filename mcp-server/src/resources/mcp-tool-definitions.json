@@ -725,7 +725,7 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["current_rules", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups", "pad_pair_min_wire_length"],
+          "enum": ["current_rules", "current_rule_configuration_name", "default_rule_configuration_name", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups", "pad_pair_min_wire_length"],
           "default": "current_rules"
         },
         "configurationName": { "type": "string", "minLength": 1 },
@@ -760,7 +760,7 @@
         {
           "type": "object",
           "properties": {
-            "kind": { "enum": ["current_rules", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"] }
+            "kind": { "enum": ["current_rules", "current_rule_configuration_name", "default_rule_configuration_name", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"] }
           }
         }
       ],
@@ -1008,6 +1008,64 @@
     }
   },
   {
+    "name": "design_archive_export",
+    "description": "Export the current project or document as a bounded native EasyEDA archive. Complete Base64 data is opt-in; this tool never writes an archive to disk.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["project", "document", "project_by_uuid"], "default": "project" },
+        "projectUuid": { "type": "string", "minLength": 1 },
+        "fileName": { "type": "string", "minLength": 1 },
+        "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+        "includeData": { "type": "boolean", "default": false },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "project" },
+            "fileName": { "type": "string", "minLength": 1 },
+            "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "document" },
+            "fileName": { "type": "string", "minLength": 1 },
+            "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "project_by_uuid" },
+            "projectUuid": { "type": "string", "minLength": 1 },
+            "fileName": { "type": "string", "minLength": 1 },
+            "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action", "projectUuid"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "design_source_export",
     "description": "Read the active EDA document source or its footprint sources with bounded previews and optional bounded full source data. This tool never modifies the design.",
     "inputSchema": {
@@ -1051,11 +1109,13 @@
   },
   {
     "name": "project_info",
-    "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and optional bounded board/panel inventories.",
+    "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and optional bounded project-document inventories.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "includePages": { "type": "boolean", "default": true },
+        "includeSchematics": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project schematics." },
+        "includePcbs": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project PCBs." },
         "includeBoards": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project boards." },
         "includePanels": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project panels." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 }
@@ -1119,6 +1179,69 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] }
       },
       "required": ["domain"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_classification_query",
+    "description": "Read a bounded classification tree for an EasyEDA library before searching that library. This tool never changes library contents.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["device", "symbol", "footprint", "model_3d", "cbb", "panel_library"] },
+        "libraryUuid": { "type": "string", "minLength": 1 },
+        "maxNodes": { "type": "integer", "minimum": 1, "maximum": 2000, "default": 500 },
+        "maxDepth": { "type": "integer", "minimum": 1, "maximum": 20, "default": 8 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "required": ["kind", "libraryUuid"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_preview",
+    "description": "Render a symbol or footprint library asset for visual inspection without modifying the library or active design.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["symbol", "footprint"] },
+        "uuid": { "type": "string", "minLength": 1 },
+        "libraryUuid": { "type": "string", "minLength": 1 },
+        "subPartName": { "type": "string", "minLength": 1, "description": "Optional symbol sub-part name." },
+        "includeData": { "type": "boolean", "default": false, "description": "Return MCP image data only when explicitly requested." },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "required": ["kind", "uuid", "libraryUuid"],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "symbol" },
+            "uuid": { "type": "string", "minLength": 1 },
+            "libraryUuid": { "type": "string", "minLength": 1 },
+            "subPartName": { "type": "string", "minLength": 1 },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["kind", "uuid", "libraryUuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "footprint" },
+            "uuid": { "type": "string", "minLength": 1 },
+            "libraryUuid": { "type": "string", "minLength": 1 },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["kind", "uuid", "libraryUuid"],
+          "additionalProperties": false
+        }
+      ],
       "additionalProperties": false
     }
   },

@@ -23,9 +23,12 @@ import {
 } from '../mcp/component-place-handler.ts';
 import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
+import { handleDesignArchiveExportTask } from '../mcp/design-archive-export-handler.ts';
 import { handleDesignCompareTask } from '../mcp/design-compare-handler.ts';
 import { handleDesignSourceExportTask } from '../mcp/design-source-export-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
+import { handleLibraryClassificationTask } from '../mcp/library-classification-handler.ts';
+import { handleLibraryPreviewTask } from '../mcp/library-preview-handler.ts';
 import { handleLibrarySearchTask } from '../mcp/library-search-handler.ts';
 import { handleLibrarySourcesTask } from '../mcp/library-sources-handler.ts';
 import { handleManufactureExportTask } from '../mcp/manufacture-export-handler.ts';
@@ -78,11 +81,14 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/pcb/layer-query': handlePcbLayerQueryTask,
 	'/bridge/jlceda/pcb/realtime-drc': handlePcbRealtimeDrcTask,
 	'/bridge/jlceda/design/compare': handleDesignCompareTask,
+	'/bridge/jlceda/design/archive-export': handleDesignArchiveExportTask,
 	'/bridge/jlceda/design/source-export': handleDesignSourceExportTask,
 	'/bridge/jlceda/project/info': handleProjectInfoTask,
 	'/bridge/jlceda/manufacture/export': handleManufactureExportTask,
 	'/bridge/jlceda/manufacture/templates-query': handleManufactureTemplatesQueryTask,
 	'/bridge/jlceda/library/search': handleLibrarySearchTask,
+	'/bridge/jlceda/library/preview': handleLibraryPreviewTask,
+	'/bridge/jlceda/library/classification-query': handleLibraryClassificationTask,
 	'/bridge/jlceda/library/sources': handleLibrarySourcesTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,

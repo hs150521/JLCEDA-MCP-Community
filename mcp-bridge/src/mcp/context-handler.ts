@@ -28,6 +28,7 @@ async function buildContextSnapshot(scope: string): Promise<Record<string, unkno
 		isOfflineMode: await safeCall(() => eda.sys_Environment.isOfflineMode()),
 		editorVersion: await safeCall(() => eda.sys_Environment.getEditorCurrentVersion()),
 		editorCompiledDate: await safeCall(() => eda.sys_Environment.getEditorCompliedDate()),
+		frontendDataUnit: await safeCall(() => eda.sys_Unit.getFrontendDataUnit()),
 	};
 	const selectedPcbPrimitiveIds = await safeCall(() => eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId()) ?? [];
 	const selectedSchPrimitiveIds = await safeCall(() => eda.sch_SelectControl.getAllSelectedPrimitives_PrimitiveId()) ?? [];

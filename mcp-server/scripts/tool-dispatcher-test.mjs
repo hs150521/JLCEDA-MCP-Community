@@ -30,6 +30,9 @@ const fakeBridge = {
     if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query' || path === '/bridge/jlceda/design/source-export') {
 	  return { ok: true };
 	}
+	if (path === '/bridge/jlceda/library/preview') {
+	  return { ok: true, kind: 'symbol', uuid: 'symbol-1', libraryUuid: 'library-1', image: { kind: 'file', type: 'image/png', size: 4, dataBase64: 'AAAA', encoding: 'base64' } };
+	}
     if (path === '/bridge/jlceda/canvas/snapshot') {
       return {
         ok: true,
@@ -110,6 +113,15 @@ const sourceExportResult = await dispatcher.dispatch({
 assert.equal(sourceExportResult.structuredContent.ok, true);
 const sourceExportCall = calls.find(call => call.path === '/bridge/jlceda/design/source-export');
 assert.equal(sourceExportCall.timeoutMs, 44000);
+
+const libraryPreviewResult = await dispatcher.dispatch({
+  name: 'library_preview',
+  arguments: { kind: 'symbol', uuid: 'symbol-1', libraryUuid: 'library-1', timeoutMs: 42000 },
+});
+assert.deepEqual(libraryPreviewResult.content[0], { type: 'image', data: 'AAAA', mimeType: 'image/png' });
+assert.equal(libraryPreviewResult.structuredContent.image.dataBase64, undefined);
+const libraryPreviewCall = calls.find(call => call.path === '/bridge/jlceda/library/preview');
+assert.equal(libraryPreviewCall.timeoutMs, 44000);
 
 const snapshotResult = await dispatcher.dispatch({
   name: 'eda_canvas_snapshot',

@@ -84,8 +84,11 @@ async function main() {
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', {}), 15000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/canvas/snapshot', {}), 30000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/sources', { timeoutMs: 42000 }), 42000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/preview', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/classification-query', {}), 30000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/workspace/query', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/source-export', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/archive-export', {}), 60000);
 	assert.throws(
 		() => resolveBridgeTaskTimeoutMs('/bridge/jlceda/canvas/snapshot', { timeoutMs: 4999 }),
 		/timeoutMs/,

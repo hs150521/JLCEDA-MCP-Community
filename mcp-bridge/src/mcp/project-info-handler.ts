@@ -32,13 +32,15 @@ export async function handleProjectInfoTask(payload: unknown): Promise<unknown> 
 	}
 	const input = isPlainObjectRecord(payload) ? payload : {};
 	const includePages = input.includePages === undefined ? true : input.includePages;
+	const includeSchematics = input.includeSchematics === undefined ? false : input.includeSchematics;
+	const includePcbs = input.includePcbs === undefined ? false : input.includePcbs;
 	const includeBoards = input.includeBoards === undefined ? false : input.includeBoards;
 	const includePanels = input.includePanels === undefined ? false : input.includePanels;
 	if (typeof includePages !== 'boolean') {
 		throw new TypeError('includePages must be a boolean.');
 	}
-	if (typeof includeBoards !== 'boolean' || typeof includePanels !== 'boolean')
-		throw new TypeError('includeBoards and includePanels must be booleans.');
+	if (typeof includeSchematics !== 'boolean' || typeof includePcbs !== 'boolean' || typeof includeBoards !== 'boolean' || typeof includePanels !== 'boolean')
+		throw new TypeError('includeSchematics, includePcbs, includeBoards, and includePanels must be booleans.');
 	const limit = parseBoundedIntegerValue(input.limit, 100, 1, MAX_INVENTORY_ITEMS);
 	const eda = resolveEda();
 	const project = await callEda(eda, 'dmt_Project', 'getCurrentProjectInfo');
@@ -48,6 +50,12 @@ export async function handleProjectInfoTask(payload: unknown): Promise<unknown> 
 	const document = await callEda(eda, 'dmt_SelectControl', 'getCurrentDocumentInfo');
 	const pages = includePages
 		? await callEda(eda, 'dmt_Schematic', 'getCurrentSchematicAllSchematicPagesInfo')
+		: undefined;
+	const schematics = includeSchematics
+		? await callEda(eda, 'dmt_Schematic', 'getAllSchematicsInfo')
+		: undefined;
+	const pcbs = includePcbs
+		? await callEda(eda, 'dmt_Pcb', 'getAllPcbsInfo')
 		: undefined;
 	const boards = includeBoards
 		? await callEda(eda, 'dmt_Board', 'getAllBoardsInfo')
@@ -63,6 +71,8 @@ export async function handleProjectInfoTask(payload: unknown): Promise<unknown> 
 		pcb: await toSerializableAsync(pcb),
 		currentDocument: await toSerializableAsync(document),
 		...(includePages ? { schematicPages: await toSerializableAsync(pages) } : {}),
+		...(includeSchematics ? { schematics: await serializeInventory(schematics, 'dmt_Schematic', 'getAllSchematicsInfo', limit) } : {}),
+		...(includePcbs ? { pcbs: await serializeInventory(pcbs, 'dmt_Pcb', 'getAllPcbsInfo', limit) } : {}),
 		...(includeBoards ? { boards: await serializeInventory(boards, 'dmt_Board', 'getAllBoardsInfo', limit) } : {}),
 		...(includePanels ? { panels: await serializeInventory(panels, 'dmt_Panel', 'getAllPanelsInfo', limit) } : {}),
 	};

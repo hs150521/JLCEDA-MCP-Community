@@ -7,8 +7,11 @@ require('ts-node/register/transpile-only');
 const { handleCanvasSnapshotTask } = require('../src/mcp/canvas-snapshot-handler.ts');
 const { handleComponentSelectTask } = require('../src/mcp/component-select-handler.ts');
 const { handleEdaContextTask } = require('../src/mcp/context-handler.ts');
+const { handleDesignArchiveExportTask } = require('../src/mcp/design-archive-export-handler.ts');
 const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.ts');
 const { handleDesignSourceExportTask } = require('../src/mcp/design-source-export-handler.ts');
+const { handleLibraryClassificationTask } = require('../src/mcp/library-classification-handler.ts');
+const { handleLibraryPreviewTask } = require('../src/mcp/library-preview-handler.ts');
 const { handleLibrarySearchTask } = require('../src/mcp/library-search-handler.ts');
 const { handleLibrarySourcesTask } = require('../src/mcp/library-sources-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
@@ -66,8 +69,12 @@ async function main() {
 		dmt_Schematic: {
 			async getCurrentSchematicInfo() { return { uuid: 'sch-1' }; },
 			async getCurrentSchematicAllSchematicPagesInfo() { return [{ uuid: 'page-1' }]; },
+			async getAllSchematicsInfo() { return [{ uuid: 'sch-1', name: 'Power' }, { uuid: 'sch-2', name: 'Control' }]; },
 		},
-		dmt_Pcb: { async getCurrentPcbInfo() { return { uuid: 'pcb-1' }; } },
+		dmt_Pcb: {
+			async getCurrentPcbInfo() { return { uuid: 'pcb-1' }; },
+			async getAllPcbsInfo() { return [{ uuid: 'pcb-1', name: 'Main PCB' }, { uuid: 'pcb-2', name: 'Auxiliary PCB' }]; },
+		},
 		pcb_Net: {
 			async getNet(name) {
 				assert.equal(name, 'USB_D+');
@@ -199,6 +206,13 @@ async function main() {
 			async getFavoriteLibraryUuid() { return 'favorite-library-1'; },
 			async getAllLibrariesList() { return Array.from({ length: 130 }, (_value, index) => ({ uuid: `library-${index}`, name: `Library ${index}` })); },
 		},
+		lib_Classification: {
+			async getAllClassificationTree(libraryUuid, libraryType) {
+				assert.equal(libraryUuid, 'system-library-1');
+				assert.equal(libraryType, '2');
+				return [{ name: 'Amplifiers', uuid: 'classification-1', children: [{ name: 'Operational', uuid: 'classification-2' }] }];
+			},
+		},
 		lib_Symbol: {
 			async get(uuid, libraryUuid) {
 				assert.equal(uuid, 'symbol-1');
@@ -208,6 +222,10 @@ async function main() {
 			async search(keyword) {
 				assert.equal(keyword, 'LM358');
 				return [{ uuid: 'symbol-1', libraryUuid: 'system-library-1', name: 'LM358' }];
+			},
+			async getRenderImage(input) {
+				assert.deepEqual(input, { symbolUuid: 'symbol-1', libraryUuid: 'system-library-1', subPartName: 'A' });
+				return new Blob(['symbol-preview'], { type: 'image/svg+xml' });
 			},
 		},
 		lib_Footprint: {
@@ -219,6 +237,10 @@ async function main() {
 			async search(keyword) {
 				assert.equal(keyword, 'SOIC-8');
 				return [{ uuid: 'footprint-1', libraryUuid: 'system-library-1', name: 'SOIC-8' }];
+			},
+			async getRenderImage(input) {
+				assert.deepEqual(input, { footprintUuid: 'footprint-1', libraryUuid: 'system-library-1' });
+				return new Blob(['footprint-preview'], { type: 'image/png' });
 			},
 		},
 		lib_3DModel: {
@@ -251,6 +273,8 @@ async function main() {
 		pcb_Drc: {
 			async check() { return [{ code: 'clearance', count: 2 }]; },
 			async getCurrentRuleConfiguration() { return { name: 'current', clearance: 0.2 }; },
+			async getCurrentRuleConfigurationName() { return 'current'; },
+			async getDefaultRuleConfigurationName() { return 'default'; },
 			async getRuleConfiguration(name) {
 				assert.equal(name, 'strict');
 				return { name, clearance: 0.1 };
@@ -339,7 +363,22 @@ async function main() {
 			getEditorCurrentVersion() { return '3.2.181'; },
 			getEditorCompliedDate() { return '2026-08-01'; },
 		},
+		sys_Unit: {
+			async getFrontendDataUnit() { return 'mm'; },
+		},
 		sys_FileManager: {
+			async getProjectFile(fileName, password, fileType) {
+				assert.deepEqual([fileName, password, fileType], ['robot', undefined, 'epro2']);
+				return new File(['project-archive'], 'robot.epro2', { type: 'application/octet-stream' });
+			},
+			async getDocumentFile(fileName, password, fileType) {
+				assert.deepEqual([fileName, password, fileType], [undefined, undefined, undefined]);
+				return new File(['document-archive'], 'power.epro2', { type: 'application/octet-stream' });
+			},
+			async getProjectFileByProjectUuid(projectUuid, fileName, password, fileType) {
+				assert.deepEqual([projectUuid, fileName, password, fileType], ['project-2', undefined, undefined, undefined]);
+				return new File(['other-project'], 'other.epro2', { type: 'application/octet-stream' });
+			},
 			async getDocumentSource() { return 'DOCHEAD: example schematic source'; },
 			async getDocumentFootprintSources() {
 				return [
@@ -395,18 +434,26 @@ async function main() {
 	const project = await handleProjectInfoTask({ includePages: true });
 	assert.equal(project.project.name, '2026');
 	assert.equal(project.schematicPages.length, 1);
-	const projectInventory = await handleProjectInfoTask({ includePages: false, includeBoards: true, includePanels: true, limit: 2 });
+	const projectInventory = await handleProjectInfoTask({ includePages: false, includeSchematics: true, includePcbs: true, includeBoards: true, includePanels: true, limit: 2 });
+	assert.equal(projectInventory.schematics.items[1].name, 'Control');
+	assert.equal(projectInventory.pcbs.items[1].name, 'Auxiliary PCB');
 	assert.equal(projectInventory.boards.total, 2);
 	assert.equal(projectInventory.boards.items[1].name, 'Auxiliary board');
 	assert.equal(projectInventory.panels.items[0].name, 'Production panel');
 	const context = await handleEdaContextTask({});
 	assert.equal(context.environment.editorVersion, '3.2.181');
 	assert.equal(context.environment.isJLCEDAProEdition, true);
+	assert.equal(context.environment.frontendDataUnit, 'mm');
 	const canvasSnapshot = await handleCanvasSnapshotTask({ includeData: true });
 	assert.equal(canvasSnapshot.image.type, 'image/png');
 	assert.ok(typeof canvasSnapshot.image.dataBase64 === 'string');
 	const omittedCanvasSnapshot = await handleCanvasSnapshotTask({ maxBytes: 65536, includeData: false });
 	assert.equal(omittedCanvasSnapshot.image.dataBase64, undefined);
+	const projectArchive = await handleDesignArchiveExportTask({ action: 'project', fileName: 'robot', fileType: 'epro2', includeData: true });
+	assert.equal(projectArchive.archive.name, 'robot.epro2');
+	assert.ok(typeof projectArchive.archive.dataBase64 === 'string');
+	assert.equal((await handleDesignArchiveExportTask({ action: 'document' })).archive.name, 'power.epro2');
+	assert.equal((await handleDesignArchiveExportTask({ action: 'project_by_uuid', projectUuid: 'project-2' })).archive.name, 'other.epro2');
 	const designSource = await handleDesignSourceExportTask({ includeData: true });
 	assert.equal(designSource.source.data, 'DOCHEAD: example schematic source');
 	const designSourceWithSchemaDefault = await handleDesignSourceExportTask({ limit: 50 });
@@ -501,6 +548,8 @@ async function main() {
 	assert.equal((await handleSchematicDocumentTask({ action: 'import_changes' })).imported, true);
 	const constraints = await handlePcbConstraintsQueryTask({ kind: 'differential_pairs' });
 	assert.equal(constraints.count, 1);
+	assert.equal((await handlePcbConstraintsQueryTask({ kind: 'current_rule_configuration_name' })).result, 'current');
+	assert.equal((await handlePcbConstraintsQueryTask({ kind: 'default_rule_configuration_name' })).result, 'default');
 	const netRules = await handlePcbConstraintsQueryTask({ kind: 'net_rules' });
 	assert.equal(netRules.count, 1);
 	const padPairMinimum = await handlePcbConstraintsQueryTask({ kind: 'pad_pair_min_wire_length', padPairGroupName: 'USB_PADS' });
@@ -514,12 +563,20 @@ async function main() {
 	assert.equal(exactComponent.selection.candidates[0].libraryUuid, 'system-library-1');
 	const symbolSearch = await handleLibrarySearchTask({ kind: 'symbol', keyword: 'LM358' });
 	assert.equal(symbolSearch.items[0].uuid, 'symbol-1');
+	const classifications = await handleLibraryClassificationTask({ kind: 'symbol', libraryUuid: 'system-library-1' });
+	assert.equal(classifications.total, 2);
+	assert.equal(classifications.tree[0].children[0].name, 'Operational');
 	const deviceGet = await handleLibrarySearchTask({ kind: 'device', uuid: 'device-1', libraryUuid: 'system-library-1' });
 	assert.equal(deviceGet.item.name, 'R0402');
 	const symbolGet = await handleLibrarySearchTask({ kind: 'symbol', uuid: 'symbol-1', libraryUuid: 'system-library-1' });
 	assert.equal(symbolGet.item.name, 'LM358');
 	const footprintGet = await handleLibrarySearchTask({ kind: 'footprint', uuid: 'footprint-1', libraryUuid: 'system-library-1' });
 	assert.equal(footprintGet.item.name, 'SOIC-8');
+	const symbolPreview = await handleLibraryPreviewTask({ kind: 'symbol', uuid: 'symbol-1', libraryUuid: 'system-library-1', subPartName: 'A', includeData: true });
+	assert.equal(symbolPreview.image.type, 'image/svg+xml');
+	assert.ok(typeof symbolPreview.image.dataBase64 === 'string');
+	const footprintPreview = await handleLibraryPreviewTask({ kind: 'footprint', uuid: 'footprint-1', libraryUuid: 'system-library-1' });
+	assert.equal(footprintPreview.image.dataBase64, undefined);
 	const footprintSearch = await handleLibrarySearchTask({ kind: 'footprint', keyword: 'SOIC-8' });
 	assert.equal(footprintSearch.items[0].name, 'SOIC-8');
 	const modelSearch = await handleLibrarySearchTask({ kind: 'model_3d', keyword: 'SOT-23' });
