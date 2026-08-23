@@ -17,7 +17,7 @@
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.1.4
+       JLCEDA MCP Server 2.1.5
                   | localhost WebSocket
                   v
        MCP Bridge 社区版 2.0.7
@@ -39,7 +39,7 @@ Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.1.4.tgz
+   npm install --global .\jlceda-mcp-server-2.1.5.tgz
    Get-Command jlceda-mcp
    ```
 
