@@ -700,6 +700,12 @@ async function main() {
 	assert.equal(pcbNetAnalysis.length, 42.5);
 	assert.equal(pcbNetAnalysis.color, '#00ff00');
 	assert.equal(pcbNetAnalysis.primitiveCount, 1);
+	globalThis.eda.pcb_Drc.modifyDifferentialPairName = async () => true;
+	globalThis.eda.pcb_Drc.getAllDifferentialPairs = async () => ({ USB_PAIR_RENAMED: { name: 'USB_PAIR_RENAMED', positiveNet: 'USB_D+', negativeNet: 'USB_D-' } });
+	const objectReadback = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'rename', name: 'USB_PAIR', newName: 'USB_PAIR_RENAMED', confirm: true });
+	assert.equal(objectReadback.readback.total, 1);
+	assert.deepEqual(objectReadback.readback.item, { name: 'USB_PAIR_RENAMED', positiveNet: 'USB_D+', negativeNet: 'USB_D-' });
+	globalThis.eda.pcb_Drc.getAllDifferentialPairs = async () => differentialPairs;
 	const schDrc = await handleSchematicDrcCheckTask({});
 	assert.equal(schDrc.ok, true);
 	assert.deepEqual((await handleSchematicDocumentTask({ action: 'status' })).filterConfiguration, { wires: true });

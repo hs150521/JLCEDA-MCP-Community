@@ -37,6 +37,7 @@
 - Keep long-running EDA mutations quarantined after timeout until their uncancellable Promise settles.
 - Propagate net-label handler timeouts to the runtime quarantine mechanism.
 - Align selector and analysis schemas with handler exclusivity and official primitive enums; preserve full LCSC match counts before bounded serialization.
+- Normalize object-shaped differential-pair read-backs returned by some 0.4.15 EDA builds.
 
 ### Changes
 

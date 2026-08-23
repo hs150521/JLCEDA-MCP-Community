@@ -111,6 +111,25 @@ function rejectUnexpectedFields(input: Record<string, unknown>, allowed: readonl
 	}
 }
 
+function findReadbackItem(items: unknown, targetName: unknown): { total: number | undefined; item: unknown } {
+	if (Array.isArray(items)) {
+		return {
+			total: items.length,
+			item: items.find(item => isPlainObjectRecord(item) && item.name === targetName),
+		};
+	}
+	if (!isPlainObjectRecord(items))
+		return { total: undefined, item: undefined };
+
+	// Some EDA builds expose differential-pair groups as a name-keyed object
+	// instead of the array shape used by the type declaration.
+	const directItem = items[String(targetName)];
+	if (directItem !== undefined)
+		return { total: Object.keys(items).length, item: directItem };
+	const item = Object.values(items).find(value => isPlainObjectRecord(value) && value.name === targetName);
+	return { total: Object.keys(items).length, item };
+}
+
 export async function handlePcbConstraintsManageTask(payload: unknown): Promise<unknown> {
 	if (!isPlainObjectRecord(payload))
 		throw new TypeError('pcb_constraints_manage payload must be an object.');
@@ -178,9 +197,7 @@ export async function handlePcbConstraintsManageTask(payload: unknown): Promise<
 		throw new TypeError(`EDA pcb_Drc.${config.list} API is unavailable for read-back verification.`);
 	const items = await toSerializableAsync(await (api[config.list] as () => Promise<unknown>).call(api));
 	const targetName = operation === 'rename' ? args[1] : name;
-	const matchingItem = Array.isArray(items)
-		? items.find(item => isPlainObjectRecord(item) && item.name === targetName)
-		: undefined;
+	const readback = findReadbackItem(items, targetName);
 	return {
 		ok: changed === true,
 		kind,
@@ -189,8 +206,8 @@ export async function handlePcbConstraintsManageTask(payload: unknown): Promise<
 		...(operation === 'rename' ? { newName: targetName } : {}),
 		changed,
 		readback: {
-			total: Array.isArray(items) ? items.length : undefined,
-			item: matchingItem,
+			total: readback.total,
+			item: readback.item,
 		},
 	};
 }
