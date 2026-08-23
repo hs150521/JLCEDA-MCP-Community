@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node'
 require('ts-node/register/transpile-only');
 
 const { handleComponentSelectTask } = require('../src/mcp/component-select-handler.ts');
+const { handleEdaContextTask } = require('../src/mcp/context-handler.ts');
 const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.ts');
 const { handleLibrarySearchTask } = require('../src/mcp/library-search-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
@@ -253,6 +254,15 @@ async function main() {
 				return { minX: 1, minY: 2, maxX: 3, maxY: 4 };
 			},
 		},
+		sys_Environment: {
+			isJLCEDAProEdition() { return true; },
+			isEasyEDAProEdition() { return false; },
+			isOnlineMode() { return true; },
+			isHalfOfflineMode() { return false; },
+			isOfflineMode() { return false; },
+			getEditorCurrentVersion() { return '3.2.181'; },
+			getEditorCompliedDate() { return '2026-08-01'; },
+		},
 		sys_Tool: {
 			async netlistComparison(a, b) {
 				if (a === 'net-1') {
@@ -300,6 +310,9 @@ async function main() {
 	const project = await handleProjectInfoTask({ includePages: true });
 	assert.equal(project.project.name, '2026');
 	assert.equal(project.schematicPages.length, 1);
+	const context = await handleEdaContextTask({});
+	assert.equal(context.environment.editorVersion, '3.2.181');
+	assert.equal(context.environment.isJLCEDAProEdition, true);
 	const pcbDrc = await handlePcbDrcCheckTask({});
 	assert.equal(pcbDrc.errorCount, 2);
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });
