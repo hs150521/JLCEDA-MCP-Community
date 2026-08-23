@@ -15,7 +15,7 @@ function resolvePcbDrcApi(): PcbDrcApi {
 		throw new TypeError('EDA pcb_Drc.check API is unavailable in this client version.');
 	}
 
-	return { check: api.check as PcbDrcApi['check'] };
+	return api as PcbDrcApi;
 }
 
 export async function handlePcbDrcCheckTask(payload: unknown): Promise<unknown> {
@@ -30,7 +30,8 @@ export async function handlePcbDrcCheckTask(payload: unknown): Promise<unknown> 
 		throw new TypeError('strict and showUi must be booleans.');
 	}
 
-	const rawResult = await resolvePcbDrcApi().check(strict, showUi, true);
+	const api = resolvePcbDrcApi();
+	const rawResult = await api.check(strict, showUi, true);
 	const rawErrors = Array.isArray(rawResult) ? rawResult : [];
 	const errorCount = rawErrors.reduce((total, error) => {
 		if (isPlainObjectRecord(error) && typeof error.count === 'number' && Number.isFinite(error.count)) {

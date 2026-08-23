@@ -325,7 +325,11 @@ async function main() {
 			},
 		},
 		pcb_Drc: {
-			async check() { return [{ code: 'clearance', count: 2 }]; },
+			receiver: 'pcb-drc',
+			async check() {
+				assert.equal(this.receiver, 'pcb-drc');
+				return [{ code: 'clearance', count: 2 }];
+			},
 			async getCurrentRuleConfiguration() { return { name: 'current', clearance: 0.2 }; },
 			async getCurrentRuleConfigurationName() { return 'current'; },
 			async getDefaultRuleConfigurationName() { return 'default'; },
