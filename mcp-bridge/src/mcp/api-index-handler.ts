@@ -10,6 +10,8 @@
  * ------------------------------------------------------------------------
  */
 
+import { preserveBoundedArray } from '../utils.ts';
+
 interface ApiIndexEntry {
 	fullName: string;
 	summary: string;
@@ -259,6 +261,6 @@ export async function handleApiIndexTask(payload: unknown): Promise<unknown> {
 	return {
 		ok: true,
 		total: index.length,
-		index,
+		index: preserveBoundedArray(index),
 	};
 }

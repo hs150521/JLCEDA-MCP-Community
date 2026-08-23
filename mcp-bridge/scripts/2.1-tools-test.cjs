@@ -4,6 +4,7 @@ const process = require('node:process');
 process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
+const { handleApiIndexTask } = require('../src/mcp/api-index-handler.ts');
 const { handleCanvasSnapshotTask } = require('../src/mcp/canvas-snapshot-handler.ts');
 const { handleComponentSelectTask } = require('../src/mcp/component-select-handler.ts');
 const { handleEdaContextTask } = require('../src/mcp/context-handler.ts');
@@ -822,6 +823,10 @@ async function main() {
 	assert.equal(librarySources.total, 130);
 	assert.equal(librarySources.libraries.length, 130);
 	assert.equal(librarySources.knownLibraryUuids.project, 'project-library-1');
+	const apiIndex = await toSerializableAsync(await handleApiIndexTask({}));
+	assert.ok(apiIndex.total > 120);
+	assert.equal(apiIndex.index.length, apiIndex.total);
+	assert.ok(apiIndex.index.some(entry => entry.fullName === 'eda.pcb_Document.autoRouting'));
 	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
 	assert.equal(lcscSearch.searchMode, 'lcsc_ids');
 	assert.equal(lcscSearch.items.length, 2);
