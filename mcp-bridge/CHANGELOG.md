@@ -7,6 +7,10 @@
 - Add PCB/schematic network queries, PCB constraints, project information, netlist comparison, and whitelisted manufacturing exports.
 - Add exact device-property search, PCB layer/physical stacking queries, real-time DRC control, and JRouter auto-route export.
 - Add read-only BOM template discovery and template selection for PCB/schematic BOM exports.
+- Add `library_search` for exact device, symbol, and footprint library searches.
+- Expand `pcb_constraints_query` with rule configurations, net rules, net-to-net rules, and region rules.
+- Add `pcb_document_action` for PCB save, schematic-change import, and Base64 auto-layout/route file imports.
+- Include schematic BOM assembly-variant configurations in template discovery and export.
 
 ### Fixes
 

@@ -13,5 +13,8 @@ export async function handleManufactureTemplatesQueryTask(payload: unknown): Pro
 	if (!isPlainObjectRecord(api) || typeof api.getBomTemplates !== 'function')
 		throw new TypeError(`EDA ${moduleName}.getBomTemplates API is unavailable in this client version.`);
 	const templates = await toSerializableAsync(await (api.getBomTemplates as () => Promise<unknown>).call(api));
-	return { ok: true, domain, templates };
+	const assemblyVariants = typeof api.getAssemblyVariantsConfigs === 'function'
+		? await toSerializableAsync(await (api.getAssemblyVariantsConfigs as () => Promise<unknown>).call(api))
+		: undefined;
+	return { ok: true, domain, templates, ...(assemblyVariants !== undefined ? { assemblyVariants } : {}) };
 }

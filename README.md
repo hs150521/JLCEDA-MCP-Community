@@ -10,9 +10,13 @@
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
+- `pcb_document_action`: inspect PCB calculation state, save the active board, import schematic changes, or import Base64 auto-layout/route files.
 - `component_select`: supports exact device-property searches, including LCSC `supplierId`.
+- `library_search`: searches 0.4.15 device, symbol, and footprint libraries by keyword or exact properties.
+- `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
 - `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 - `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.
+- `manufacture_export`: schematic BOM exports can select an assembly variant returned by `manufacture_templates_query`.
 
 当前开发版会拒绝空的自动布局/自动布线 UUID 选择；EDA 操作超时后仍保持串行，
 直到底层 API 真正结束；网络标签修改同时支持普通标签和组件形式的电源/地标识。

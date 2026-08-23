@@ -1,9 +1,14 @@
 import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
-type ConstraintKind = 'current_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups';
+type ConstraintKind = 'current_rules' | 'rule_configuration' | 'rule_configurations' | 'net_rules' | 'net_to_net_rules' | 'region_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups';
 
 const METHOD_BY_KIND: Record<ConstraintKind, string> = {
 	current_rules: 'getCurrentRuleConfiguration',
+	rule_configuration: 'getRuleConfiguration',
+	rule_configurations: 'getAllRuleConfigurations',
+	net_rules: 'getNetRules',
+	net_to_net_rules: 'getNetByNetRules',
+	region_rules: 'getRegionRules',
 	net_classes: 'getAllNetClasses',
 	differential_pairs: 'getAllDifferentialPairs',
 	equal_length_groups: 'getAllEqualLengthNetGroups',
@@ -25,7 +30,22 @@ export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<u
 	if (!isPlainObjectRecord(api) || typeof api[methodName] !== 'function') {
 		throw new TypeError(`EDA pcb_Drc.${methodName} API is unavailable in this client version.`);
 	}
-	const result = await toSerializableAsync(await (api[methodName] as () => Promise<unknown>).call(api));
+	if (kind === 'rule_configuration') {
+		if (typeof input.configurationName !== 'string' || input.configurationName.trim().length === 0)
+			throw new TypeError('configurationName is required for rule_configuration.');
+	}
+	if (kind !== 'rule_configuration' && input.configurationName !== undefined)
+		throw new TypeError('configurationName is only supported for rule_configuration.');
+	if (kind !== 'rule_configurations' && input.includeSystem !== undefined)
+		throw new TypeError('includeSystem is only supported for rule_configurations.');
+	if (input.includeSystem !== undefined && typeof input.includeSystem !== 'boolean')
+		throw new TypeError('includeSystem must be a boolean.');
+	const args = kind === 'rule_configuration'
+		? [input.configurationName.trim()]
+		: kind === 'rule_configurations'
+			? [input.includeSystem === undefined ? false : input.includeSystem]
+			: [];
+	const result = await toSerializableAsync(await (api[methodName] as (...args: unknown[]) => Promise<unknown>).call(api, ...args));
 	const items = Array.isArray(result) ? result : undefined;
 	return {
 		ok: true,

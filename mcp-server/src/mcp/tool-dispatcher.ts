@@ -113,7 +113,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_auto_layout', 'pcb_auto_routing'].includes(toolName)) {
+    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_document_action', 'pcb_auto_layout', 'pcb_auto_routing'].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
@@ -121,7 +121,7 @@ export class ToolDispatcher {
     }
 
     const timeoutMs = Number(args.timeoutMs);
-    const extendedReadTool = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'manufacture_export'].includes(toolName);
+    const extendedReadTool = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'manufacture_export', 'pcb_document_action'].includes(toolName);
     const minimum = toolName.startsWith('pcb_auto_') ? 10_000 : extendedReadTool ? 5_000 : 1_000;
     if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
       throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
@@ -148,9 +148,11 @@ export class ToolDispatcher {
       'design_compare': '/bridge/jlceda/design/compare',
       'pcb_layer_query': '/bridge/jlceda/pcb/layer-query',
       'pcb_realtime_drc': '/bridge/jlceda/pcb/realtime-drc',
+      'pcb_document_action': '/bridge/jlceda/pcb/document',
       'project_info': '/bridge/jlceda/project/info',
       'manufacture_export': '/bridge/jlceda/manufacture/export',
       'manufacture_templates_query': '/bridge/jlceda/manufacture/templates-query',
+      'library_search': '/bridge/jlceda/library/search',
       'pcb_auto_layout': '/bridge/jlceda/pcb/auto-layout',
       'pcb_auto_routing': '/bridge/jlceda/pcb/auto-routing',
       'pcb_net_query': '/bridge/jlceda/net/query-pcb',

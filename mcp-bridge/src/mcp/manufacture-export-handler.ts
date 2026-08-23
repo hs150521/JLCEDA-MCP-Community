@@ -54,6 +54,18 @@ function optionalString(input: Record<string, unknown>, key: string): string | u
 	return input[key].trim();
 }
 
+function optionalAssemblyVariant(input: Record<string, unknown>): { text: string; value: string } | undefined {
+	if (input.assemblyVariantsConfig === undefined || input.assemblyVariantsConfig === null)
+		return undefined;
+	if (!isPlainObjectRecord(input.assemblyVariantsConfig))
+		throw new TypeError('assemblyVariantsConfig must be an object.');
+	const text = input.assemblyVariantsConfig.text;
+	const value = input.assemblyVariantsConfig.value;
+	if (typeof text !== 'string' || text.trim().length === 0 || typeof value !== 'string' || value.trim().length === 0)
+		throw new TypeError('assemblyVariantsConfig.text and value must be non-empty strings.');
+	return { text: text.trim(), value: value.trim() };
+}
+
 async function encodeBlob(blob: unknown, includeData: boolean): Promise<Record<string, unknown>> {
 	if (!(typeof Blob !== 'undefined' && blob instanceof Blob)) {
 		return { kind: 'value', value: blob };
@@ -83,6 +95,7 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 	const fileName = optionalString(input, 'fileName');
 	const fileType = optionalString(input, 'fileType');
 	const template = optionalString(input, 'template');
+	const assemblyVariantsConfig = optionalAssemblyVariant(input);
 	const unit = optionalString(input, 'unit');
 	if (domain === 'pcb') {
 		if (!PCB_METHODS.has(kind))
@@ -116,7 +129,7 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 	if (!SCHEMATIC_METHODS.has(kind))
 		throw new TypeError(`Unsupported schematic export kind: ${kind}.`);
 	const calls: Record<string, { method: string; args: unknown[] }> = {
-		bom: { method: 'getBomFile', args: [fileName, fileType, template] },
+		bom: { method: 'getBomFile', args: [fileName, fileType, template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] },
 		netlist: { method: 'getNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
 		simulation_netlist: { method: 'getSimulationNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
 		document: { method: 'getExportDocumentFile', args: [fileName, fileType, undefined, optionalString(input, 'documentScope')] },
@@ -138,6 +151,8 @@ export async function handleManufactureExportTask(payload: unknown): Promise<unk
 	const moduleName = domain === 'pcb' ? 'pcb_ManufactureData' : 'sch_ManufactureData';
 	const api = eda?.[moduleName];
 	const call = resolveCall(domain, kind, payload);
+	if (domain === 'pcb' && payload.assemblyVariantsConfig !== undefined)
+		throw new TypeError('assemblyVariantsConfig is only supported for schematic BOM exports.');
 	if (!isPlainObjectRecord(api) || typeof api[call.method] !== 'function') {
 		throw new TypeError(`EDA ${moduleName}.${call.method} API is unavailable in this client version.`);
 	}

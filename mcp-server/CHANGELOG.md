@@ -8,6 +8,11 @@
 
 - Add `pcb_layer_query`, `pcb_realtime_drc`, exact `component_select.properties` search, and JRouter auto-route output.
 - Add `manufacture_templates_query` and `manufacture_export.template` for selecting official BOM templates.
+- Add `library_search` for official device, symbol, and footprint searches.
+- Expand PCB constraint schema for rule configurations and structured routing-rule data.
+- Add `pcb_document_action` for controlled PCB document save and external routing/layout imports.
+- Add `all`, `names`, and exact `getNet` modes to schematic/PCB network queries.
+- Add schematic BOM assembly-variant selection to `manufacture_export`.
 - Add the read-only `pcb_drc_check` MCP tool with strict checking and structured violation results.
 - Add `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query` tool definitions and synchronized routes.
 - Expose supported PCB auto-routing controls from `@jlceda/pro-api-types@0.4.15`.

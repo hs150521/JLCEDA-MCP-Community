@@ -23,6 +23,7 @@ import { handleComponentSelectTask } from '../mcp/component-select-handler.ts';
 import { handleEdaContextTask } from '../mcp/context-handler.ts';
 import { handleDesignCompareTask } from '../mcp/design-compare-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
+import { handleLibrarySearchTask } from '../mcp/library-search-handler.ts';
 import { handleManufactureExportTask } from '../mcp/manufacture-export-handler.ts';
 import { handleManufactureTemplatesQueryTask } from '../mcp/manufacture-template-handler.ts';
 import { handlePcbNetQueryTask, handleSchematicNetQueryTask } from '../mcp/net-query-handler.ts';
@@ -31,6 +32,7 @@ import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleNetlistCompareTask } from '../mcp/netlist-compare-handler.ts';
 import { handlePcbAutoLayoutTask, handlePcbAutoRoutingTask } from '../mcp/pcb-auto-handler.ts';
 import { handlePcbConstraintsQueryTask } from '../mcp/pcb-constraints-handler.ts';
+import { handlePcbDocumentTask } from '../mcp/pcb-document-handler.ts';
 import { handlePcbDrcCheckTask } from '../mcp/pcb-drc-handler.ts';
 import { handlePcbLayerQueryTask } from '../mcp/pcb-layer-handler.ts';
 import { handlePcbRealtimeDrcTask } from '../mcp/pcb-realtime-drc-handler.ts';
@@ -65,6 +67,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/netlabel/place': handleNetLabelPlaceTask,
 	'/bridge/jlceda/netlabel/modify': handleNetLabelModifyTask,
 	'/bridge/jlceda/pcb/drc-check': handlePcbDrcCheckTask,
+	'/bridge/jlceda/pcb/document': handlePcbDocumentTask,
 	'/bridge/jlceda/schematic/drc-check': handleSchematicDrcCheckTask,
 	'/bridge/jlceda/pcb/constraints-query': handlePcbConstraintsQueryTask,
 	'/bridge/jlceda/netlist/compare': handleNetlistCompareTask,
@@ -74,6 +77,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/project/info': handleProjectInfoTask,
 	'/bridge/jlceda/manufacture/export': handleManufactureExportTask,
 	'/bridge/jlceda/manufacture/templates-query': handleManufactureTemplatesQueryTask,
+	'/bridge/jlceda/library/search': handleLibrarySearchTask,
 	'/bridge/jlceda/pcb/auto-layout': handlePcbAutoLayoutTask,
 	'/bridge/jlceda/pcb/auto-routing': handlePcbAutoRoutingTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,

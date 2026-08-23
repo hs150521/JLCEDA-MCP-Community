@@ -661,6 +661,7 @@
       "type": "object",
       "properties": {
         "query": { "type": "string", "default": "" },
+        "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all", "description": "all returns details, names returns only names, exact uses the official getNet API." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
       },
       "additionalProperties": false
@@ -673,6 +674,7 @@
       "type": "object",
       "properties": {
         "query": { "type": "string", "default": "" },
+        "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all", "description": "all returns details, names returns only names, exact uses the official getNet API." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
       },
       "additionalProperties": false
@@ -699,9 +701,11 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["current_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"],
+          "enum": ["current_rules", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"],
           "default": "current_rules"
-        }
+        },
+        "configurationName": { "type": "string", "minLength": 1 },
+        "includeSystem": { "type": "boolean", "default": false }
       },
       "additionalProperties": false
     }
@@ -757,6 +761,21 @@
       "type": "object",
       "properties": {
         "action": { "type": "string", "enum": ["status", "start", "stop"], "default": "status" }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_document_action",
+    "description": "Read PCB document calculation state, save the active PCB, import schematic changes, or import external auto-layout/route files.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["status", "save", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
+        "uuid": { "type": "string", "minLength": 1, "description": "Optional schematic UUID for import_changes." },
+        "fileName": { "type": "string", "minLength": 1 },
+        "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
       "additionalProperties": false
     }
@@ -824,6 +843,15 @@
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string" },
         "template": { "type": "string", "minLength": 1 },
+        "assemblyVariantsConfig": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string", "minLength": 1 },
+            "value": { "type": "string", "minLength": 1 }
+          },
+          "required": ["text", "value"],
+          "additionalProperties": false
+        },
         "netlistType": { "type": "string", "enum": ["Allegro", "PADS", "Protel2", "JLCEDA", "Ngspice"] },
         "unit": { "type": "string", "enum": ["mm", "in", "mil"] },
         "documentScope": { "type": "string", "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] },
@@ -843,6 +871,41 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] }
       },
       "required": ["domain"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_search",
+    "description": "Search official EasyEDA device, symbol, or footprint libraries by keyword or exact 0.4.15 properties.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["device", "symbol", "footprint"] },
+        "keyword": { "type": "string", "minLength": 1 },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "value": { "type": "string", "minLength": 1 },
+            "symbolName": { "type": "string", "minLength": 1 },
+            "footprintName": { "type": "string", "minLength": 1 },
+            "supplierFootprint": { "type": "string", "minLength": 1 },
+            "supplierId": { "type": "string", "minLength": 1 },
+            "partNumber": { "type": "string", "minLength": 1 },
+            "partCode": { "type": "string", "minLength": 1 }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
+        "libraryUuid": { "type": "string", "minLength": 1 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        "page": { "type": "integer", "minimum": 1, "maximum": 9999, "default": 1 }
+      },
+      "required": ["kind"],
+      "anyOf": [
+        { "required": ["keyword"] },
+        { "required": ["properties"] }
+      ],
       "additionalProperties": false
     }
   }

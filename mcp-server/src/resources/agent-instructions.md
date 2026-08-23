@@ -37,6 +37,11 @@
 - `project_info`：读取工程、板子、原理图、PCB 和图页身份，适合在跨页面任务开始时建立上下文。
 - `manufacture_export`：仅生成白名单制造数据，不直接写入本地文件系统。默认返回文件元数据和文本预览；只有用户明确需要下载数据时才设置 `includeData: true`，并注意 Base64 结果可能很大。
 - `manufacture_templates_query`：在 BOM 导出前读取当前 PCB 或原理图可用模板；将返回的模板名原样传给 `manufacture_export` 的 `template` 参数，不要猜测模板名称。
+- `manufacture_templates_query` 还会返回原理图装配变体；如需指定变体，必须将返回的完整 `{text, value}` 传给 schematic `manufacture_export` 的 `assemblyVariantsConfig`。
+- `library_search`：搜索官方 device、symbol、footprint 库；device 可使用 `supplierId` 等精确字段，symbol/footprint 使用 `properties.name`，`keyword` 与 `properties` 必须二选一。
+- `pcb_constraints_query`：按需读取当前规则、命名规则配置、网络规则、网络间规则、区域规则或约束组；查询命名规则配置时必须提供 `configurationName`。
+- `pcb_document_action`：读取 PCB 计算状态或执行用户明确要求的保存、原理图变更导入、JSON/SES 自动布线/布局导入；导入文件必须使用 Base64，执行后应运行 DRC 并让用户确认结果。
+- `pcb_net_query` / `schematic_net_query`：默认返回网络详情；只需名称时使用 `mode: "names"`，查询单个官方网络时使用 `mode: "exact"` 与原始大小写的 `query`。
 
 ## 透传 API 工具约束
 
