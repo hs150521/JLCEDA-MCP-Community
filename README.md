@@ -2,6 +2,8 @@
 
 ## 2.1 development tools
 
+- `bridge_clients` and `bridge_select_client` switch MCP routing between connected EDA page clients; they do not change the visible tab within one client. Use `api_invoke` with `eda.dmt_EditorControl.activateDocument(tabId)` for explicit in-client tab activation.
+
 - `schematic_document_action`: inspect schematic coordinates, selected/region primitives, filters, and mouse position; navigate the view; select primitives; retrieve primitive properties/BBoxes; save or import schematic changes.
 - `schematic_pages_manage`: with `confirm: true`, create, copy, rename, or completely reorder pages in a schematic. Reorder accepts every current page UUID exactly once, reuses freshly read EDA page objects, and verifies the final order; deletion is not exposed.
 

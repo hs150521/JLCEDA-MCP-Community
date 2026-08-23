@@ -63,7 +63,7 @@ function waitForMessage(socket, predicate, timeoutMs = 3000) {
 async function waitUntil(predicate, timeoutMs = 4000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) {
+    if (await predicate()) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -118,11 +118,18 @@ const secondaryServer = new EdaBridgeServer(port);
 let expiryServer;
 let queueServer;
 let recoveryServer;
+let disconnectServer;
+let reconnectServer;
 let blue;
 let red;
 let queued;
 let stuck;
 let replacement;
+let disconnectActive;
+let disconnectReplacement;
+let reconnectOld;
+let reconnectNew;
+let reconnectTarget;
 
 try {
   await mainServer.start();
@@ -268,6 +275,107 @@ try {
   recoveryServer.close();
   recoveryServer = undefined;
 
+  const disconnectPort = await reservePort();
+  disconnectServer = new EdaBridgeServer(disconnectPort);
+  await disconnectServer.start();
+  disconnectActive = await registerEda(
+    `ws://127.0.0.1:${disconnectPort}/bridge/ws${tokenQuery}`,
+    'disconnect-active',
+  );
+  let receivedDisconnectedTask = false;
+  disconnectActive.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type === 'bridge/task') {
+      receivedDisconnectedTask = true;
+    }
+  });
+  disconnectReplacement = await registerEda(
+    `ws://127.0.0.1:${disconnectPort}/bridge/ws${tokenQuery}`,
+    'disconnect-replacement',
+  );
+  attachTaskResponder(disconnectReplacement.socket, 'disconnect-replacement', (message) => ({
+    source: 'disconnect-replacement',
+    path: message.path,
+  }));
+  const mcpSocket = new WebSocket(`ws://127.0.0.1:${disconnectPort}/mcp-internal${tokenQuery}`);
+  const mcpReady = waitForMessage(mcpSocket, (message) => message.type === 'bridge/internal-ready');
+  await new Promise((resolve, reject) => {
+    mcpSocket.once('open', resolve);
+    mcpSocket.once('error', reject);
+  });
+  await mcpReady;
+  mcpSocket.send(JSON.stringify({
+    type: 'bridge/task',
+    requestId: 'disconnected-mcp-request',
+    path: '/bridge/test/disconnected',
+    payload: {},
+    timeoutMs: 15000,
+  }));
+  await waitUntil(() => receivedDisconnectedTask);
+  mcpSocket.close();
+  await waitUntil(async () => {
+    try {
+      await disconnectServer.request('/bridge/admin/select-client', { clientId: 'disconnect-replacement' }, 2000);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  assert.deepEqual(
+    await disconnectServer.request('/bridge/test/disconnected-recovered', {}, 2000),
+    { source: 'disconnect-replacement', path: '/bridge/test/disconnected-recovered' },
+  );
+  disconnectActive.socket.close();
+  disconnectActive = undefined;
+  disconnectReplacement.socket.close();
+  disconnectReplacement = undefined;
+  disconnectServer.close();
+  disconnectServer = undefined;
+
+  const reconnectPort = await reservePort();
+  reconnectServer = new EdaBridgeServer(reconnectPort);
+  await reconnectServer.start();
+  reconnectOld = await registerEda(
+    `ws://127.0.0.1:${reconnectPort}/bridge/ws${tokenQuery}`,
+    'reconnect-page',
+  );
+  let receivedReconnectTask = false;
+  reconnectOld.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type === 'bridge/task') {
+      receivedReconnectTask = true;
+    }
+  });
+  reconnectTarget = await registerEda(
+    `ws://127.0.0.1:${reconnectPort}/bridge/ws${tokenQuery}`,
+    'reconnect-target',
+  );
+  attachTaskResponder(reconnectTarget.socket, 'reconnect-target', (message) => ({
+    source: 'reconnect-target',
+    path: message.path,
+  }));
+  const reconnectPending = reconnectServer.request('/bridge/test/reconnect-pending', {}, 2000);
+  const reconnectPendingAssertion = assert.rejects(reconnectPending, /reconnected/);
+  await waitUntil(() => receivedReconnectTask);
+  reconnectNew = await registerEda(
+    `ws://127.0.0.1:${reconnectPort}/bridge/ws${tokenQuery}`,
+    'reconnect-page',
+  );
+  await reconnectPendingAssertion;
+  await reconnectServer.request('/bridge/admin/select-client', { clientId: 'reconnect-target' }, 2000);
+  assert.deepEqual(
+    await reconnectServer.request('/bridge/test/reconnect-recovered', {}, 2000),
+    { source: 'reconnect-target', path: '/bridge/test/reconnect-recovered' },
+  );
+  reconnectOld.socket.close();
+  reconnectOld = undefined;
+  reconnectNew.socket.close();
+  reconnectNew = undefined;
+  reconnectTarget.socket.close();
+  reconnectTarget = undefined;
+  reconnectServer.close();
+  reconnectServer = undefined;
+
   const expiryPort = await reservePort();
   expiryServer = new EdaBridgeServer(expiryPort, { peerTtlMs: 250, peerSweepIntervalMs: 25 });
   await expiryServer.start();
@@ -301,9 +409,16 @@ try {
   queued?.socket.close();
   stuck?.socket.close();
   replacement?.socket.close();
+  disconnectActive?.socket.close();
+  disconnectReplacement?.socket.close();
+  reconnectOld?.socket.close();
+  reconnectNew?.socket.close();
+  reconnectTarget?.socket.close();
   expiryServer?.close();
   queueServer?.close();
   recoveryServer?.close();
+  disconnectServer?.close();
+  reconnectServer?.close();
   secondaryServer.close();
   mainServer.close();
   if (originalToken === undefined) {

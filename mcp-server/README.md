@@ -1,5 +1,7 @@
 # JLCEDA MCP Server
 
+`bridge_clients` and `bridge_select_client` switch MCP routing between already-connected EDA page clients. They do not activate a different visible tab inside one EDA process; use `api_invoke` with the documented `eda.dmt_EditorControl.activateDocument(tabId)` API for that explicit UI action.
+
 ## 2.1 development tools
 
 The server also exposes `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.

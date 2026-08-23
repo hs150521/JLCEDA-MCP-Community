@@ -1,5 +1,8 @@
 # Changelog
 
+- Clean up pending bridge requests when their MCP WebSocket disconnects, so a stale caller cannot lock `bridge_select_client` until the queue timeout.
+- Reject requests tied to an EDA socket when the same page reconnects, preventing stale results from crossing connection generations.
+
 ## 未发布
 
 - Bridge 会在心跳超时后释放挂起请求，避免失联页面永久占用活动租约；`bridge_select_client` 新增受限的 `force` 恢复选项，用于从已确认卡死的活动页面切换到新的就绪页面。

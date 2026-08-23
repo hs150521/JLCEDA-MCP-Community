@@ -2,6 +2,8 @@
 
 ## 2.1 PCB tools
 
+`bridge_select_client` selects the MCP routing target among connected EDA page clients. It does not activate a different visible tab within one EDA process; use `api_invoke` with `eda.dmt_EditorControl.activateDocument(tabId)` when an explicit in-client tab switch is required.
+
 The 2.1 release also adds `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 
 `schematic_pages_manage` is a confirmation-gated page workflow: create, copy, rename, or completely reorder a schematic's pages. Reorder validates the complete UUID set against freshly read EDA page objects, then verifies the resulting order. Page deletion is deliberately unavailable.

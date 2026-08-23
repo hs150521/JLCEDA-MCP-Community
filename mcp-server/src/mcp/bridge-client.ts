@@ -33,6 +33,8 @@ interface PendingRequest {
   executionTimeoutMs?: number;
   clientId?: string;
   leaseTerm?: number;
+  mcpSocket?: WebSocket;
+  edaSocket?: WebSocket;
 }
 
 interface BridgeTask {
@@ -381,6 +383,7 @@ export class EdaBridgeServer {
   ): BridgePeer {
     const previous = this.peers.get(clientId);
     if (previous && previous.socket !== socket) {
+      this.rejectPendingForClient(clientId, 'EDA client reconnected before the pending request completed');
       this.clientIdBySocket.delete(previous.socket);
       previous.socket.close(4001, 'Replaced by a newer connection');
     }
@@ -452,7 +455,7 @@ export class EdaBridgeServer {
   private completePendingRequest(peer: BridgePeer, message: Record<string, unknown>): void {
     const requestId = String(message.requestId ?? '');
     const pending = this.pendingRequests.get(requestId);
-    if (!pending || pending.clientId !== peer.clientId || pending.leaseTerm !== Number(message.leaseTerm)) {
+    if (!pending || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
       return;
     }
     this.clearPendingTimeout(pending);
@@ -471,7 +474,7 @@ export class EdaBridgeServer {
   private markPendingRequestStarted(peer: BridgePeer, message: Record<string, unknown>): void {
     const requestId = String(message.requestId ?? '');
     const pending = this.pendingRequests.get(requestId);
-    if (!pending || pending.clientId !== peer.clientId || pending.leaseTerm !== Number(message.leaseTerm)) {
+    if (!pending || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
       return;
     }
 
@@ -510,7 +513,7 @@ export class EdaBridgeServer {
       const timeoutMs = Number.isInteger(forwardedTimeoutMs) && forwardedTimeoutMs > 0
         ? forwardedTimeoutMs
         : 30000;
-      void this.dispatchRequest(path, message.payload, timeoutMs).then(
+      void this.dispatchRequest(path, message.payload, timeoutMs, socket).then(
         (result) => this.trySend(socket, { type: 'bridge/result', requestId, result }),
         (error) => this.trySend(socket, {
           type: 'bridge/result',
@@ -519,8 +522,12 @@ export class EdaBridgeServer {
         }),
       );
     });
-    socket.on('close', () => this.mcpClients.delete(socket));
-    socket.on('error', () => this.mcpClients.delete(socket));
+    const cleanupMcpSocket = (): void => {
+      this.mcpClients.delete(socket);
+      this.rejectPendingForMcpSocket(socket, 'MCP client disconnected while the request was pending');
+    };
+    socket.on('close', cleanupMcpSocket);
+    socket.on('error', cleanupMcpSocket);
   }
 
   private handleInternalMessage(data: RawData): void {
@@ -556,7 +563,7 @@ export class EdaBridgeServer {
     return this.dispatchRequest(path, payload, timeoutMs);
   }
 
-  private async dispatchRequest(path: string, payload: unknown, timeoutMs: number): Promise<unknown> {
+  private async dispatchRequest(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket): Promise<unknown> {
     if (path === '/bridge/admin/clients') {
       return this.getClientSnapshot();
     }
@@ -565,7 +572,7 @@ export class EdaBridgeServer {
       const force = isRecord(payload) && payload.force === true;
       return this.selectClient(clientId, force);
     }
-    return this.dispatchToEda(path, payload, timeoutMs);
+    return this.dispatchToEda(path, payload, timeoutMs, mcpSocket);
   }
 
   private getClientSnapshot(): Record<string, unknown> {
@@ -609,7 +616,7 @@ export class EdaBridgeServer {
     return this.getClientSnapshot();
   }
 
-  private async dispatchToEda(path: string, payload: unknown, timeoutMs: number): Promise<unknown> {
+  private async dispatchToEda(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket): Promise<unknown> {
     const peer = this.peers.get(this.activeClientId);
     if (!peer || !peer.isReady || peer.socket.readyState !== WebSocket.OPEN) {
       throw new Error('No ready EDA client connected');
@@ -627,6 +634,8 @@ export class EdaBridgeServer {
         executionTimeoutMs: timeoutMs,
         clientId: peer.clientId,
         leaseTerm: this.leaseTerm,
+        mcpSocket,
+        edaSocket: peer.socket,
       });
       try {
         sendJson(peer.socket, {
@@ -679,6 +688,17 @@ export class EdaBridgeServer {
   private rejectPendingForClient(clientId: string, reason: string): void {
     for (const [requestId, pending] of this.pendingRequests) {
       if (pending.clientId !== clientId) {
+        continue;
+      }
+      this.clearPendingTimeout(pending);
+      this.pendingRequests.delete(requestId);
+      pending.reject(new Error(reason));
+    }
+  }
+
+  private rejectPendingForMcpSocket(socket: WebSocket, reason: string): void {
+    for (const [requestId, pending] of this.pendingRequests) {
+      if (pending.mcpSocket !== socket) {
         continue;
       }
       this.clearPendingTimeout(pending);
