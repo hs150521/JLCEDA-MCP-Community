@@ -712,7 +712,36 @@
         { "type": "object", "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 } }, "required": ["action", "id"] },
         { "type": "object", "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
         { "type": "object", "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } }, "required": ["action", "ids"] },
-        { "type": "object", "properties": { "action": { "enum": ["status", "filter_configuration", "selection", "mouse_position", "save", "import_changes", "clear_selection"] } }, "additionalProperties": false }
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["status", "filter_configuration", "mouse_position", "save", "clear_selection"] },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "selection" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120 },
+            "includeObjects": { "type": "boolean", "default": false },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "import_changes" },
+            "uuid": { "type": "string", "minLength": 1 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
       ],
       "additionalProperties": false
     }
