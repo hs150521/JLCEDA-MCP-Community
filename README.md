@@ -12,7 +12,7 @@
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
 - `pcb_document_action`: inspect PCB calculation state, save the active board, import schematic changes, or import Base64 auto-layout/route files.
 - `component_select`: supports exact device-property searches, including LCSC `supplierId`.
-- `library_search`: searches 0.4.15 device, symbol, and footprint libraries by keyword or exact properties.
+- `library_search`: searches 0.4.15 device, symbol, footprint, and simulation-model libraries by keyword or exact properties; device searches can use the official `lcscIds` mapping for one or more LCSC C-numbers.
 - `pcb_constraints_query`: reads current rules, named rule configurations, net rules, net-to-net rules, region rules, and constraint groups.
 - `manufacture_export`: generate whitelisted BOM, Gerber, netlist, pick-and-place, and related manufacturing artifacts.
 - `manufacture_templates_query`: list BOM templates available in the active PCB or schematic document before selecting a `manufacture_export` template.

@@ -69,6 +69,22 @@ async function main() {
 				assert.equal(properties.supplierId, 'C1523');
 				return [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }];
 			},
+			async getByLcscIds(ids, libraryUuid, allowMultiMatch) {
+				assert.deepEqual(ids, ['C1523', 'C17168']);
+				assert.equal(libraryUuid, undefined);
+				assert.equal(allowMultiMatch, true);
+				return [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-2', name: 'C17168', supplierId: 'C17168' }];
+			},
+		},
+		lib_SimulationModel: {
+			async search(keyword, libraryUuid, classification, modelType, limit, page) {
+				assert.equal(keyword, 'LM358');
+				assert.equal(libraryUuid, undefined);
+				assert.equal(modelType, 'Ngspice');
+				assert.equal(limit, 5);
+				assert.equal(page, 1);
+				return [{ uuid: 'model-1', name: 'LM358', type: 'Ngspice' }];
+			},
 		},
 		lib_LibrariesList: { async getSystemLibraryUuid() { return 'system-library-1'; } },
 		lib_Symbol: {
@@ -197,6 +213,11 @@ async function main() {
 	assert.equal(symbolSearch.items[0].uuid, 'symbol-1');
 	const footprintSearch = await handleLibrarySearchTask({ kind: 'footprint', keyword: 'SOIC-8' });
 	assert.equal(footprintSearch.items[0].name, 'SOIC-8');
+	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
+	assert.equal(lcscSearch.searchMode, 'lcsc_ids');
+	assert.equal(lcscSearch.items.length, 2);
+	const simulationSearch = await handleLibrarySearchTask({ kind: 'simulation_model', keyword: 'LM358', simulationModelType: 'Ngspice', limit: 5 });
+	assert.equal(simulationSearch.items[0].uuid, 'model-1');
 	const comparison = await handleNetlistCompareTask({ sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', documentUuid: 'pcb-2' } });
 	assert.equal(comparison.differenceCount, 1);
 	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });

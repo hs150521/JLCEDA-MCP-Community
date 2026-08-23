@@ -1,16 +1,17 @@
 import { isPlainObjectRecord, parseBoundedIntegerValue, toSerializableAsync } from '../utils.ts';
 
-type LibrarySearchKind = 'device' | 'symbol' | 'footprint';
+type LibrarySearchKind = 'device' | 'symbol' | 'footprint' | 'simulation_model';
 
 const PROPERTY_KEYS: Record<LibrarySearchKind, readonly string[]> = {
 	device: ['name', 'value', 'symbolName', 'footprintName', 'supplierFootprint', 'supplierId', 'partNumber', 'partCode'],
 	symbol: ['name'],
 	footprint: ['name'],
+	simulation_model: [],
 };
 
 function requiredKind(value: unknown): LibrarySearchKind {
-	if (value !== 'device' && value !== 'symbol' && value !== 'footprint')
-		throw new TypeError('kind must be device, symbol, or footprint.');
+	if (value !== 'device' && value !== 'symbol' && value !== 'footprint' && value !== 'simulation_model')
+		throw new TypeError('kind must be device, symbol, footprint, or simulation_model.');
 	return value;
 }
 
@@ -41,9 +42,25 @@ function normalizeProperties(kind: LibrarySearchKind, raw: unknown): Record<stri
 	return properties;
 }
 
+function normalizeLcscIds(raw: unknown): string[] | undefined {
+	if (raw === undefined || raw === null)
+		return undefined;
+	const values = Array.isArray(raw) ? raw : [raw];
+	if (values.length < 1 || values.length > 50)
+		throw new RangeError('lcscIds must contain between 1 and 50 IDs.');
+	const ids = values.map((value, index) => {
+		if (typeof value !== 'string' || !/^C\d+$/i.test(value.trim()))
+			throw new TypeError(`lcscIds[${String(index)}] must be an LCSC C-number such as C1523.`);
+		return value.trim().toUpperCase();
+	});
+	if (new Set(ids).size !== ids.length)
+		throw new TypeError('lcscIds must not contain duplicates.');
+	return ids;
+}
+
 function getApi(kind: LibrarySearchKind): Record<string, unknown> {
 	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
-	const api = eda?.[kind === 'device' ? 'lib_Device' : kind === 'symbol' ? 'lib_Symbol' : 'lib_Footprint'];
+	const api = eda?.[kind === 'device' ? 'lib_Device' : kind === 'symbol' ? 'lib_Symbol' : kind === 'footprint' ? 'lib_Footprint' : 'lib_SimulationModel'];
 	if (!isPlainObjectRecord(api))
 		throw new TypeError(`EDA lib_${kind[0].toUpperCase()}${kind.slice(1)} API is unavailable in this client version.`);
 	return api;
@@ -55,14 +72,35 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	const kind = requiredKind(payload.kind);
 	const keyword = optionalNonEmptyString(payload, 'keyword');
 	const properties = normalizeProperties(kind, payload.properties);
-	if ((keyword === undefined) === (properties === undefined))
-		throw new TypeError('Provide exactly one of keyword or properties.');
+	const lcscIds = normalizeLcscIds(payload.lcscIds);
+	if ([keyword !== undefined, properties !== undefined, lcscIds !== undefined].filter(Boolean).length !== 1)
+		throw new TypeError('Provide exactly one of keyword, properties, or lcscIds.');
+	if (lcscIds !== undefined && kind !== 'device')
+		throw new TypeError('lcscIds is only supported for device searches.');
+	if (properties !== undefined && kind === 'simulation_model')
+		throw new TypeError('properties are not supported for simulation_model searches.');
+	const simulationModelType = optionalNonEmptyString(payload, 'simulationModelType');
+	if (simulationModelType !== undefined && kind !== 'simulation_model')
+		throw new TypeError('simulationModelType is only supported for simulation_model searches.');
+	if (simulationModelType !== undefined && simulationModelType !== 'Ngspice' && simulationModelType !== 'SimulIDE')
+		throw new TypeError('simulationModelType must be Ngspice or SimulIDE.');
+	const allowMultiMatch = payload.allowMultiMatch === undefined ? false : payload.allowMultiMatch;
+	if (typeof allowMultiMatch !== 'boolean')
+		throw new TypeError('allowMultiMatch must be a boolean.');
+	if (payload.allowMultiMatch !== undefined && lcscIds === undefined)
+		throw new TypeError('allowMultiMatch is only supported with lcscIds.');
 	const libraryUuid = optionalNonEmptyString(payload, 'libraryUuid');
 	const limit = parseBoundedIntegerValue(payload.limit, 20, 1, 50);
 	const page = parseBoundedIntegerValue(payload.page, 1, 1, 9999);
 	const api = getApi(kind);
 	let rawResults: unknown;
-	if (properties) {
+	if (lcscIds) {
+		if (typeof api.getByLcscIds !== 'function')
+			throw new TypeError('EDA lib_Device.getByLcscIds API is unavailable in this client version.');
+		const ids = lcscIds.length === 1 ? lcscIds[0] : lcscIds;
+		rawResults = await (api.getByLcscIds as (...args: unknown[]) => Promise<unknown>).call(api, ids, libraryUuid, allowMultiMatch);
+	}
+	else if (properties) {
 		if (typeof api.searchByProperties !== 'function')
 			throw new TypeError(`EDA lib_${kind}.searchByProperties API is unavailable in this client version.`);
 		rawResults = kind === 'device'
@@ -74,18 +112,22 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 			throw new TypeError(`EDA lib_${kind}.search API is unavailable in this client version.`);
 		rawResults = kind === 'device' || kind === 'symbol'
 			? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
-			: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
+			: kind === 'footprint'
+				? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page)
+				: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, simulationModelType, limit, page);
 	}
-	const allItems = Array.isArray(rawResults) ? await toSerializableAsync(rawResults) : [];
-	const items = Array.isArray(allItems) ? allItems.slice(0, limit) : [];
+	const serializedResults = await toSerializableAsync(rawResults);
+	const allItems = Array.isArray(serializedResults) ? serializedResults : serializedResults === undefined || serializedResults === null ? [] : [serializedResults];
+	const items = allItems.slice(0, limit);
 	return {
 		ok: true,
 		kind,
-		searchMode: properties ? 'properties' : 'keyword',
-		...(keyword ? { keyword } : { properties }),
+		searchMode: lcscIds ? 'lcsc_ids' : properties ? 'properties' : 'keyword',
+		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
 		libraryUuid: libraryUuid ?? '',
+		...(simulationModelType ? { simulationModelType } : {}),
 		page,
-		total: Array.isArray(allItems) ? allItems.length : 0,
+		total: allItems.length,
 		returned: items.length,
 		items,
 	};

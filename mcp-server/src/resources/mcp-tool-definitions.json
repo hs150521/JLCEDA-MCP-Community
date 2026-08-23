@@ -876,12 +876,15 @@
   },
   {
     "name": "library_search",
-    "description": "Search official EasyEDA device, symbol, or footprint libraries by keyword or exact 0.4.15 properties.",
+    "description": "Search official EasyEDA device, symbol, footprint, or simulation-model libraries by keyword, exact properties, or official LCSC C-number mapping.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "kind": { "type": "string", "enum": ["device", "symbol", "footprint"] },
+        "kind": { "type": "string", "enum": ["device", "symbol", "footprint", "simulation_model"] },
         "keyword": { "type": "string", "minLength": 1 },
+        "lcscIds": { "type": "array", "items": { "type": "string", "pattern": "^[Cc][0-9]+$" }, "minItems": 1, "maxItems": 50, "uniqueItems": true },
+        "allowMultiMatch": { "type": "boolean", "default": false, "description": "Only for lcscIds device lookup; return all matches for duplicate catalog IDs." },
+        "simulationModelType": { "type": "string", "enum": ["Ngspice", "SimulIDE"] },
         "properties": {
           "type": "object",
           "properties": {
@@ -902,9 +905,10 @@
         "page": { "type": "integer", "minimum": 1, "maximum": 9999, "default": 1 }
       },
       "required": ["kind"],
-      "anyOf": [
+      "oneOf": [
         { "required": ["keyword"] },
-        { "required": ["properties"] }
+        { "required": ["properties"] },
+        { "required": ["lcscIds"] }
       ],
       "additionalProperties": false
     }
