@@ -46,6 +46,9 @@ const fakeBridge = {
         },
       };
     }
+    if (path.startsWith('/bridge/jlceda/')) {
+      return { ok: true };
+    }
     throw new Error(`Unexpected path: ${path}`);
   },
 };
@@ -122,6 +125,31 @@ assert.equal(pcbNetQueryResult.structuredContent.ok, true);
 const pcbNetQueryCall = calls.find(call => call.path === '/bridge/jlceda/net/query-pcb');
 assert.equal(pcbNetQueryCall.timeoutMs, 44000);
 
+for (const [name, timeoutMs] of [
+  ['pcb_drc_check', 62_000],
+  ['schematic_drc_check', 62_000],
+  ['netlist_compare', 62_000],
+  ['design_compare', 62_000],
+  ['design_archive_export', 62_000],
+  ['manufacture_export', 62_000],
+  ['pcb_document_action', 62_000],
+  ['schematic_document_action', 62_000],
+  ['pcb_net_query', 62_000],
+  ['design_source_export', 32_000],
+  ['eda_canvas_snapshot', 32_000],
+  ['library_sources', 32_000],
+  ['library_classification_query', 32_000],
+  ['library_preview', 32_000],
+  ['workspace_query', 32_000],
+  ['api_invoke', 17_000],
+  ['eda_context', 17_000],
+]) {
+  const callCount = calls.length;
+  await dispatcher.dispatch({ name, arguments: {} });
+  assert.equal(calls.length, callCount + 1, `${name} should dispatch exactly once`);
+  assert.equal(calls.at(-1).timeoutMs, timeoutMs, `${name} should use its bridge default timeout plus transport grace`);
+}
+
 const constraintsManageResult = await dispatcher.dispatch({
 	name: 'pcb_constraints_manage',
 	arguments: { kind: 'net_class', operation: 'delete', name: 'obsolete', confirm: true },
@@ -144,7 +172,7 @@ const libraryPreviewResult = await dispatcher.dispatch({
 });
 assert.deepEqual(libraryPreviewResult.content[0], { type: 'image', data: 'AAAA', mimeType: 'image/png' });
 assert.equal(libraryPreviewResult.structuredContent.image.dataBase64, undefined);
-const libraryPreviewCall = calls.find(call => call.path === '/bridge/jlceda/library/preview');
+const libraryPreviewCall = calls.findLast(call => call.path === '/bridge/jlceda/library/preview');
 assert.equal(libraryPreviewCall.timeoutMs, 44000);
 
 const snapshotResult = await dispatcher.dispatch({

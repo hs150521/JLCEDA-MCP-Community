@@ -116,12 +116,16 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'design_source_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query', 'pcb_net_query'];
-    if (!['api_invoke', 'eda_context', ...extendedReadTools].includes(toolName)) {
+    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'pcb_net_query'];
+    const standardReadTools = ['design_source_export', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query'];
+    if (!['api_invoke', 'eda_context', ...extendedReadTools, ...standardReadTools].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
-      return undefined;
+      if (standardReadTools.includes(toolName)) {
+        return 30_000;
+      }
+      return extendedReadTools.includes(toolName) ? 60_000 : 15_000;
     }
 
     const timeoutMs = Number(args.timeoutMs);
