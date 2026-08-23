@@ -1,5 +1,34 @@
 # JLCEDA MCP Server
 
+`bridge_clients` and `bridge_select_client` switch MCP routing between already-connected EDA page clients. They do not activate a different visible tab inside one EDA process; use `api_invoke` with the documented `eda.dmt_EditorControl.activateDocument(tabId)` API for that explicit UI action.
+
+## 2.1 development tools
+
+The server also exposes `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
+
+`schematic_pages_manage` creates, copies, renames, or fully reorders pages only with `confirm: true`. A reorder must list every page UUID exactly once; the Bridge derives the ordered page objects from a fresh EDA read and returns verified bounded read-back data. Deletion is not exposed.
+
+`eda_context` reports the client edition, connection mode, editor version, build date, and current canvas data unit when available.
+
+`eda_canvas_snapshot` can return the rendered active canvas as a bounded MCP image without changing the document or viewport.
+
+`workspace_query` reads the current workspace/team and bounded lists of accessible workspaces, teams, projects, or folders.
+
+`design_source_export` reads bounded document/footprint source previews and only returns complete source text after explicit opt-in within a byte limit.
+
+`design_archive_export` returns metadata for native design archives and provides bounded Base64 only after explicit opt-in, without writing files to disk.
+
+`library_preview` renders symbol and footprint assets as bounded MCP images, and `library_classification_query` provides bounded library category trees before asset searches.
+
+`project_info` can optionally return bounded Board and Panel inventories for the current project.
+
+`pcb_document_action` additionally supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
+
+The server exposes read-only PCB DRC, network-query, library-source/search, and manufacturing-query tools plus guarded document actions. Device `library_search` supports exact 0.4.15 properties, official single/batch LCSC C-number mapping, and exact UUID retrieval; symbol, footprint, 3D-model, reusable-module, and panel-library searches/retrieval use their supported APIs, while simulation-model search supports optional Ngspice/SimulIDE filtering. Its official model retrieval API requires a private deployment and is not exposed. PCB network exact queries can optionally include length, color, and associated primitives. Manufacturing export includes the official flying-probe test file. `pcb_document_action` exposes bounded PCB primitive/selection inspection, coordinate conversion/navigation, ratline control, and explicitly scoped routing cleanup. PCB auto-layout/auto-routing remain deferred until the target client exposes and a live PCB page confirms those APIs.
+
+`pcb_constraints_manage` provides a deliberately narrow, confirmation-gated interface for net classes, differential pairs, equal-length groups, and pad-pair groups. It validates operation-specific fields and returns a bounded read-back of the affected item; bulk rule-configuration replacement remains unavailable.
+
+
 公开的 `timeoutMs` 参数会传递到 WebSocket 请求。EDA 修改超时后，Bridge 仍会
 保持串行队列锁定，直到底层 API 真正结束；请求排队时间不计入 API 执行超时。
 
@@ -17,10 +46,10 @@ WebSocket 与嘉立创 EDA 专业版扩展通信。
 
 ## 安装
 
-从 GitHub Release 下载 `jlceda-mcp-server-2.1.5.tgz`：
+从 GitHub Release 下载 `jlceda-mcp-server-2.2.0.tgz`：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.5.tgz
+npm install --global .\jlceda-mcp-server-2.2.0.tgz
 Get-Command jlceda-mcp
 ```
 

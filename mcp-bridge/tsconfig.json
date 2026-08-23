@@ -4,7 +4,7 @@
 		"target": "ESNext",
 		"lib": ["ESNext", "DOM"],
 		"experimentalDecorators": true,
-		"module": "CommonJS",
+		"module": "ESNext",
 		"moduleResolution": "bundler",
 		"resolveJsonModule": true,
 		"types": ["node"],
@@ -27,5 +27,5 @@
 		"forceConsistentCasingInFileNames": true,
 		"isolatedModules": true
 	},
-	"include": ["./src/**/*", "./config/**/*", "./build/**/*", "./node_modules/@jlceda/pro-api-types/**/*"]
+	"include": ["./src/index.ts", "./src/page/settings.ts", "./node_modules/@jlceda/pro-api-types/**/*"]
 }

@@ -1,5 +1,33 @@
 # MCP Bridge 社区版
 
+## 2.1 PCB tools
+
+`bridge_select_client` selects the MCP routing target among connected EDA page clients. It does not activate a different visible tab within one EDA process; use `api_invoke` with `eda.dmt_EditorControl.activateDocument(tabId)` when an explicit in-client tab switch is required.
+
+The 2.1 release also adds `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
+
+`schematic_pages_manage` is a confirmation-gated page workflow: create, copy, rename, or completely reorder a schematic's pages. Reorder validates the complete UUID set against freshly read EDA page objects, then verifies the resulting order. Page deletion is deliberately unavailable.
+
+`eda_context` reports the client edition, connection mode, editor version, build date, and current canvas data unit when the installed EDA exposes those 0.4.15 APIs.
+
+`eda_canvas_snapshot` can return the rendered active canvas as a bounded image without changing the document or viewport.
+
+`workspace_query` reads the current workspace/team and bounded lists of accessible workspaces, teams, projects, or folders.
+
+`design_source_export` reads bounded previews of the active document or its footprint sources; complete source text requires explicit opt-in and remains byte-limited.
+
+`design_archive_export` returns metadata for native current-project/current-document archives by default and only includes bounded Base64 data when explicitly requested.
+
+`library_preview` renders symbol and footprint assets as bounded MCP images, while `library_classification_query` returns bounded official library category trees.
+
+`project_info` can optionally return bounded Board and Panel inventories for the current project.
+
+`pcb_document_action` additionally supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
+
+The 2.1 release adds `pcb_drc_check`, `schematic_drc_check`, `pcb_net_query`, `pcb_constraints_query`, `pcb_layer_query`, `pcb_realtime_drc`, `pcb_document_action`, `project_info`, `netlist_compare`, `design_compare`, `manufacture_export`, read-only `manufacture_templates_query`, `library_sources`, and `library_search`. Network queries support full details, name-only lists, exact official `getNet` lookup, and optional exact-net length/color/primitive analysis. `component_select` and device `library_search` support exact 0.4.15 property searches; device `library_search` also exposes official single/batch LCSC C-number mapping and exact UUID retrieval, while symbol, footprint, 3D-model, reusable-module, panel-library, and simulation-model searches use their supported APIs. Simulation-model retrieval stays unavailable because its official `get` API requires a private deployment. PCB BOM exports can select a template returned by `manufacture_templates_query`; schematic BOM exports can select a returned assembly variant. Manufacturing exports include the official flying-probe test file. `pcb_constraints_query` exposes structured rule data and constraint groups. `pcb_document_action` can inspect PCB coordinates, selected/region primitives, filters, and canvas state; it also accepts Base64 JSON/SES imports, controls navigation/ratline calculation, and supports explicitly requested scoped routing cleanup. PCB auto-layout/auto-routing remain deferred until the target client exposes and a live PCB page confirms those APIs.
+
+`pcb_constraints_manage` is the confirmation-gated write companion for constraint groups: it supports individual net class, differential-pair, equal-length-group, and pad-pair-group changes, validates only fields relevant to the requested operation, and reads back the affected item. Bulk rule-configuration replacement is intentionally excluded.
+
 当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
 直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。
 
@@ -56,10 +84,10 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 2. 原生 MCP Server
 
-从同版本 GitHub Release 下载 `jlceda-mcp-server-2.1.5.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.2.0.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.5.tgz
+npm install --global .\jlceda-mcp-server-2.2.0.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。

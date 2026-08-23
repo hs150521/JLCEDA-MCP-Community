@@ -30,7 +30,10 @@ export interface ToolDefinition {
 
 export interface ToolCallResult {
   [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
+  content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: string }
+  >;
   structuredContent?: Record<string, unknown>;
 }
 
@@ -113,16 +116,23 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    if (toolName !== 'api_invoke' && toolName !== 'eda_context') {
+    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'pcb_net_query'];
+    const standardReadTools = ['design_source_export', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query'];
+    if (!['api_invoke', 'eda_context', ...extendedReadTools, ...standardReadTools].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
-      return undefined;
+      if (standardReadTools.includes(toolName)) {
+        return 30_000;
+      }
+      return extendedReadTools.includes(toolName) ? 60_000 : 15_000;
     }
 
     const timeoutMs = Number(args.timeoutMs);
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
-      throw new RangeError('timeoutMs must be an integer between 1000 and 120000');
+    const extendedReadTool = extendedReadTools.includes(toolName);
+	const minimum = extendedReadTool ? 5_000 : 1_000;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
+      throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
     }
     return timeoutMs;
   }
@@ -135,10 +145,33 @@ export class ToolDispatcher {
       'schematic_read': '/bridge/jlceda/schematic/read',
       'schematic_review': '/bridge/jlceda/schematic/review',
       'component_select': '/bridge/jlceda/component/select',
+		'eda_canvas_snapshot': '/bridge/jlceda/canvas/snapshot',
       'component_place': '/bridge/jlceda/component/place',
       'component_place_auto': '/bridge/jlceda/component/place-auto',
       'netlabel_place': '/bridge/jlceda/netlabel/place',
       'netlabel_modify': '/bridge/jlceda/netlabel/modify',
+      'pcb_drc_check': '/bridge/jlceda/pcb/drc-check',
+      'schematic_drc_check': '/bridge/jlceda/schematic/drc-check',
+      'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
+		'pcb_constraints_manage': '/bridge/jlceda/pcb/constraints-manage',
+      'netlist_compare': '/bridge/jlceda/netlist/compare',
+      'design_compare': '/bridge/jlceda/design/compare',
+		'design_archive_export': '/bridge/jlceda/design/archive-export',
+      'design_source_export': '/bridge/jlceda/design/source-export',
+      'pcb_layer_query': '/bridge/jlceda/pcb/layer-query',
+      'pcb_realtime_drc': '/bridge/jlceda/pcb/realtime-drc',
+      'pcb_document_action': '/bridge/jlceda/pcb/document',
+      'schematic_document_action': '/bridge/jlceda/schematic/document',
+      'schematic_pages_manage': '/bridge/jlceda/schematic/pages-manage',
+      'project_info': '/bridge/jlceda/project/info',
+		'workspace_query': '/bridge/jlceda/workspace/query',
+      'manufacture_export': '/bridge/jlceda/manufacture/export',
+      'manufacture_templates_query': '/bridge/jlceda/manufacture/templates-query',
+      'library_search': '/bridge/jlceda/library/search',
+		'library_classification_query': '/bridge/jlceda/library/classification-query',
+		'library_preview': '/bridge/jlceda/library/preview',
+		'library_sources': '/bridge/jlceda/library/sources',
+      'pcb_net_query': '/bridge/jlceda/net/query-pcb',
       'schematic_auto_layout': '/bridge/jlceda/auto/layout',
       'schematic_auto_routing': '/bridge/jlceda/auto/routing',
       'api_index': '/bridge/jlceda/api/index',
@@ -161,6 +194,30 @@ export class ToolDispatcher {
    * 包装为MCP tools/call响应格式
    */
   private toToolContent(result: unknown): ToolCallResult {
+    if (this.isImageResult(result)) {
+      const image = result.image;
+      const { dataBase64, ...imageMetadata } = image;
+      const metadata = {
+        ...result,
+        image: imageMetadata,
+      };
+
+      return {
+        content: [
+          {
+            type: 'image',
+            data: dataBase64,
+            mimeType: image.type,
+          },
+          {
+            type: 'text',
+            text: JSON.stringify(metadata, null, 2),
+          },
+        ],
+        structuredContent: metadata,
+      };
+    }
+
     const response: ToolCallResult = {
       content: [{
         type: 'text',
@@ -171,6 +228,28 @@ export class ToolDispatcher {
       response.structuredContent = result;
     }
     return response;
+  }
+
+  private isImageResult(
+    result: unknown,
+  ): result is Record<string, unknown> & {
+    ok: true;
+    image: Record<string, unknown> & {
+      type: string;
+      dataBase64: string;
+      encoding: 'base64';
+    };
+  } {
+    if (!isPlainObjectRecord(result) || result.ok !== true || !isPlainObjectRecord(result.image)) {
+      return false;
+    }
+
+    const image = result.image;
+    return typeof image.type === 'string'
+      && image.type.length > 0
+      && typeof image.dataBase64 === 'string'
+      && image.dataBase64.length > 0
+      && image.encoding === 'base64';
   }
 
   private async dispatchInteractiveComponentPlace(args: Record<string, unknown>): Promise<ToolCallResult> {

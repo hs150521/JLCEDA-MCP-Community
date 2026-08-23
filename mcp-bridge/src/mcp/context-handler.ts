@@ -20,6 +20,16 @@ async function buildContextSnapshot(scope: string): Promise<Record<string, unkno
 	const currentSchematicPageInfo = await safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo());
 	const currentPcbInfo = await safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo());
 	const currentPanelInfo = await safeCall(() => eda.dmt_Panel.getCurrentPanelInfo());
+	const environment = {
+		isJLCEDAProEdition: await safeCall(() => eda.sys_Environment.isJLCEDAProEdition()),
+		isEasyEDAProEdition: await safeCall(() => eda.sys_Environment.isEasyEDAProEdition()),
+		isOnlineMode: await safeCall(() => eda.sys_Environment.isOnlineMode()),
+		isHalfOfflineMode: await safeCall(() => eda.sys_Environment.isHalfOfflineMode()),
+		isOfflineMode: await safeCall(() => eda.sys_Environment.isOfflineMode()),
+		editorVersion: await safeCall(() => eda.sys_Environment.getEditorCurrentVersion()),
+		editorCompiledDate: await safeCall(() => eda.sys_Environment.getEditorCompliedDate()),
+		frontendDataUnit: await safeCall(() => eda.sys_Unit.getFrontendDataUnit()),
+	};
 	const selectedPcbPrimitiveIds = await safeCall(() => eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId()) ?? [];
 	const selectedSchPrimitiveIds = await safeCall(() => eda.sch_SelectControl.getAllSelectedPrimitives_PrimitiveId()) ?? [];
 
@@ -33,6 +43,7 @@ async function buildContextSnapshot(scope: string): Promise<Record<string, unkno
 		currentSchematicPageInfo: toSerializable(currentSchematicPageInfo),
 		currentPcbInfo: toSerializable(currentPcbInfo),
 		currentPanelInfo: toSerializable(currentPanelInfo),
+		environment: toSerializable(environment),
 		selectedPcbPrimitiveIds: toSerializable(selectedPcbPrimitiveIds),
 		selectedSchPrimitiveIds: toSerializable(selectedSchPrimitiveIds),
 	};

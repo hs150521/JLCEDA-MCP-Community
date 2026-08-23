@@ -129,6 +129,20 @@
     }
   },
   {
+    "name": "eda_canvas_snapshot",
+    "description": "Capture the rendered area of the active EDA canvas as a bounded image payload. This is read-only and does not modify the document or viewport.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "tabId": { "type": "string", "minLength": 1, "description": "Optional EDA tab ID; defaults to the current rendered tab." },
+        "includeData": { "type": "boolean", "default": false, "description": "Include Base64 image data when it fits maxBytes." },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304, "description": "Maximum image size returned as Base64." },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "schematic_read",
     "description": "读取当前原理图页面的完整电路语义快照。",
     "inputSchema": {
@@ -154,6 +168,22 @@
           "type": "string",
           "description": "器件搜索关键词或 LCSC C 编号。对于电阻/电容/电感，必须带单位（如 1kΩ、100nF、10uH）。"
         },
+        "properties": {
+          "type": "object",
+          "description": "Exact 0.4.15 device search fields. supplierId accepts an LCSC C number.",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "value": { "type": "string", "minLength": 1 },
+            "symbolName": { "type": "string", "minLength": 1 },
+            "footprintName": { "type": "string", "minLength": 1 },
+            "supplierFootprint": { "type": "string", "minLength": 1 },
+            "supplierId": { "type": "string", "minLength": 1 },
+            "partNumber": { "type": "string", "minLength": 1 },
+            "partCode": { "type": "string", "minLength": 1 }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
         "limit": {
           "type": "integer",
           "minimum": 2,
@@ -162,8 +192,9 @@
           "description": "返回候选数量，默认 5。"
         }
       },
-      "required": [
-        "keyword"
+      "oneOf": [
+        { "required": ["keyword"] },
+        { "required": ["properties"] }
       ]
     }
   },
@@ -551,6 +582,1098 @@
           }
         }
       }
+    }
+  },
+  {
+    "name": "pcb_drc_check",
+    "description": "Run a read-only PCB design-rule check and return structured violations. The tool requires an active PCB document; it does not modify the design and does not open the EDA DRC panel unless showUi is explicitly true.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strict": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to use strict PCB rule checking. Defaults to true."
+        },
+        "showUi": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to show the EDA DRC panel. Defaults to false."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 120000,
+          "default": 60000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_net_query",
+    "description": "Read PCB network details from the active PCB document, optionally filtered by a network name or property.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "default": "" },
+        "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all", "description": "all returns details, names returns only names, exact uses the official getNet API." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 },
+        "analysis": {
+          "type": "object",
+          "description": "Optional exact PCB-net analysis using getNetLength, getNetColor, and getAllPrimitivesByNet.",
+          "properties": {
+            "length": { "type": "boolean", "default": false },
+            "color": { "type": "boolean", "default": false },
+            "primitives": { "type": "boolean", "default": false },
+            "primitiveTypes": { "type": "array", "items": { "type": "string", "enum": ["ARC", "COMPONENT", "PAD", "COMPONENT_PAD", "POLYLINE", "POUR", "FILL", "REGION", "LINE", "VIA", "DIMENSION", "IMAGE", "OBJECT", "POURED", "STRING", "ATTRIBUTE"] }, "minItems": 1, "uniqueItems": true }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "default": "" },
+            "mode": { "enum": ["all", "names"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "minLength": 1 },
+            "mode": { "const": "exact" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+            "analysis": { "$ref": "#/$defs/pcbNetAnalysis" },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["query", "mode"],
+          "additionalProperties": false
+        }
+      ],
+      "$defs": {
+        "pcbNetAnalysis": {
+          "type": "object",
+          "properties": {
+            "length": { "type": "boolean", "default": false },
+            "color": { "type": "boolean", "default": false },
+            "primitives": { "type": "boolean", "default": false },
+            "primitiveTypes": { "type": "array", "items": { "type": "string", "enum": ["ARC", "COMPONENT", "PAD", "COMPONENT_PAD", "POLYLINE", "POUR", "FILL", "REGION", "LINE", "VIA", "DIMENSION", "IMAGE", "OBJECT", "POURED", "STRING", "ATTRIBUTE"] }, "minItems": 1, "uniqueItems": true }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "schematic_drc_check",
+    "description": "Run a read-only schematic design-rule check and return structured violations.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strict": { "type": "boolean", "default": true },
+        "showUi": { "type": "boolean", "default": false },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "schematic_document_action",
+    "description": "Inspect schematic coordinates, selection, filters, and primitives; navigate the active canvas; or perform explicitly requested selection/save/import actions.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["status", "filter_configuration", "selection", "mouse_position", "primitive_at_point", "primitives_in_region", "navigate_to_coordinates", "navigate_to_region", "save", "import_changes", "select_primitives", "clear_selection", "primitive_type_by_id", "primitive_by_id", "primitives_by_id", "primitives_bbox"], "default": "status" },
+        "x": { "type": "number", "description": "Required for point inspection and coordinate navigation." },
+        "y": { "type": "number", "description": "Required for point inspection and coordinate navigation." },
+        "left": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "right": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "top": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "bottom": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Primitive IDs for selection or primitive queries." },
+        "id": { "type": "string", "minLength": 1, "description": "One primitive ID for primitive_by_id or primitive_type_by_id." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120 },
+        "includeObjects": { "type": "boolean", "default": false },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "additionalProperties": false
+        },
+        { "type": "object", "properties": { "action": { "const": "primitive_at_point" }, "x": { "type": "number" }, "y": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "x", "y"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "navigate_to_coordinates" }, "x": { "type": "number" }, "y": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "x", "y"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "left", "right", "top", "bottom"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "navigate_to_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "left", "right", "top", "bottom"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "ids"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "primitive_by_id" }, "id": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "id"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "id"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "ids"], "additionalProperties": false },
+        { "type": "object", "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } }, "required": ["action", "ids"], "additionalProperties": false },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["status", "filter_configuration", "mouse_position", "save", "clear_selection"] },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "selection" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120 },
+            "includeObjects": { "type": "boolean", "default": false },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "import_changes" },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_constraints_query",
+    "description": "Read PCB rules and constraint groups such as net classes, differential pairs, and length groups.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["current_rules", "current_rule_configuration_name", "default_rule_configuration_name", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups", "pad_pair_min_wire_length"],
+          "default": "current_rules"
+        },
+        "configurationName": { "type": "string", "minLength": 1 },
+        "padPairGroupName": { "type": "string", "minLength": 1 },
+        "includeSystem": { "type": "boolean", "default": false }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "rule_configuration" },
+            "configurationName": { "type": "string", "minLength": 1 }
+          },
+          "required": ["kind", "configurationName"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "rule_configurations" },
+            "includeSystem": { "type": "boolean", "default": false }
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "pad_pair_min_wire_length" },
+            "padPairGroupName": { "type": "string", "minLength": 1 }
+          },
+          "required": ["kind", "padPairGroupName"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "enum": ["current_rules", "current_rule_configuration_name", "default_rule_configuration_name", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"] }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "schematic_pages_manage",
+    "description": "Create, copy, rename, or completely reorder schematic pages. Every mutation requires confirm: true; deletion is intentionally unavailable.",
+    "inputSchema": {
+      "type": "object",
+      "oneOf": [
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "create" }, "schematicUuid": { "type": "string", "minLength": 1 }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "schematicUuid", "confirm"],
+          "additionalProperties": false
+        },
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "copy" }, "sourcePageUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "sourcePageUuid", "confirm"],
+          "additionalProperties": false
+        },
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "rename" }, "schematicPageUuid": { "type": "string", "minLength": 1 }, "newName": { "type": "string", "minLength": 1 }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "schematicPageUuid", "newName", "confirm"],
+          "additionalProperties": false
+        },
+        {
+		  "type": "object",
+          "properties": { "operation": { "const": "reorder" }, "schematicUuid": { "type": "string", "minLength": 1 }, "orderedPageUuids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Every current page UUID of schematicUuid exactly once, in the requested final order." }, "confirm": { "const": true, "description": "Must be true to apply this schematic page mutation." } },
+          "required": ["operation", "schematicUuid", "orderedPageUuids", "confirm"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pcb_constraints_manage",
+    "description": "Create, rename, delete, or update members of PCB net classes, differential pairs, equal-length groups, and pad-pair groups. Requires explicit confirmation and returns a read-back inventory.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["net_class", "differential_pair", "equal_length_group", "pad_pair_group"] },
+        "operation": { "type": "string", "enum": ["create", "delete", "rename", "add_members", "remove_members", "set_positive_net", "set_negative_net"] },
+        "name": { "type": "string", "minLength": 1 },
+        "newName": { "type": "string", "minLength": 1 },
+        "nets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 100, "uniqueItems": true },
+        "color": {
+          "type": "object",
+          "properties": {
+            "r": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "g": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "b": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "alpha": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["r", "g", "b", "alpha"],
+          "additionalProperties": false
+        },
+        "positiveNet": { "type": "string", "minLength": 1 },
+        "negativeNet": { "type": "string", "minLength": 1 },
+        "padPairs": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 2, "maxItems": 2 },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "confirm": { "const": true, "description": "Must be true to apply this PCB mutation." }
+      },
+      "oneOf": [
+        { "type": "object", "properties": { "kind": { "enum": ["net_class", "equal_length_group"] }, "operation": { "const": "create" }, "name": { "type": "string", "minLength": 1 }, "nets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 100, "uniqueItems": true }, "color": { "type": "object", "properties": { "r": { "type": "integer", "minimum": 0, "maximum": 255 }, "g": { "type": "integer", "minimum": 0, "maximum": 255 }, "b": { "type": "integer", "minimum": 0, "maximum": 255 }, "alpha": { "type": "number", "minimum": 0, "maximum": 1 } }, "required": ["r", "g", "b", "alpha"], "additionalProperties": false }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "nets", "color", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "enum": ["net_class", "equal_length_group"] }, "operation": { "const": "delete" }, "name": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "enum": ["net_class", "equal_length_group"] }, "operation": { "const": "rename" }, "name": { "type": "string", "minLength": 1 }, "newName": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "newName", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "enum": ["net_class", "equal_length_group"] }, "operation": { "enum": ["add_members", "remove_members"] }, "name": { "type": "string", "minLength": 1 }, "nets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 100, "uniqueItems": true }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "nets", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "differential_pair" }, "operation": { "const": "create" }, "name": { "type": "string", "minLength": 1 }, "positiveNet": { "type": "string", "minLength": 1 }, "negativeNet": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "positiveNet", "negativeNet", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "differential_pair" }, "operation": { "const": "delete" }, "name": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "differential_pair" }, "operation": { "const": "rename" }, "name": { "type": "string", "minLength": 1 }, "newName": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "newName", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "differential_pair" }, "operation": { "const": "set_positive_net" }, "name": { "type": "string", "minLength": 1 }, "positiveNet": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "positiveNet", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "differential_pair" }, "operation": { "const": "set_negative_net" }, "name": { "type": "string", "minLength": 1 }, "negativeNet": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "negativeNet", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "pad_pair_group" }, "operation": { "const": "create" }, "name": { "type": "string", "minLength": 1 }, "padPairs": { "type": "array", "items": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 2, "maxItems": 2 }, "minItems": 1, "maxItems": 100 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "padPairs", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "pad_pair_group" }, "operation": { "const": "delete" }, "name": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "pad_pair_group" }, "operation": { "const": "rename" }, "name": { "type": "string", "minLength": 1 }, "newName": { "type": "string", "minLength": 1 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "newName", "confirm"], "additionalProperties": false },
+        { "type": "object", "properties": { "kind": { "const": "pad_pair_group" }, "operation": { "enum": ["add_members", "remove_members"] }, "name": { "type": "string", "minLength": 1 }, "padPairs": { "type": "array", "items": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 2, "maxItems": 2 }, "minItems": 1, "maxItems": 100 }, "confirm": { "const": true } }, "required": ["kind", "operation", "name", "padPairs", "confirm"], "additionalProperties": false }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "netlist_compare",
+    "description": "Compare two schematic or PCB netlist sources and return component/network differences.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sourceA": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }
+          ]
+        },
+        "sourceB": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }
+          ]
+        },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["sourceA", "sourceB"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_layer_query",
+    "description": "Read PCB layers and copper-layer count.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["layers"], "default": "layers" }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_realtime_drc",
+    "description": "Read or explicitly control the PCB real-time DRC state exposed by EDA v4.2.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["status", "start", "stop"], "default": "status" }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_document_action",
+    "description": "Inspect PCB coordinates, selection, filters, and primitives; navigate the active canvas; read calculation state; or perform explicitly requested PCB document actions/imports.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "select_primitives", "clear_selection", "primitive_type_by_id", "primitive_by_id", "primitives_by_id", "primitives_bbox", "primitive_at_point", "primitives_in_region", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates", "navigate_to_region", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
+        "routingType": { "type": "string", "enum": ["all", "net", "connection"], "description": "Required for clear_routing; all clears all tracks/vias, net or connection limits the scope." },
+        "x": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
+        "y": { "type": "number", "description": "Required for point, coordinate conversion, and coordinate navigation actions." },
+        "left": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "right": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "top": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "bottom": { "type": "number", "description": "Required region bound for region inspection/navigation." },
+        "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500, "uniqueItems": true, "description": "Primitive IDs for selection or primitive queries." },
+        "id": { "type": "string", "minLength": 1, "description": "One primitive ID for primitive_by_id or primitive_type_by_id." },
+        "confirm": { "type": "boolean", "description": "Must be true before clear_routing changes PCB routing." },
+        "leftToRight": { "type": "boolean", "default": true, "description": "Region selection direction passed to getPrimitivesInRegion." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "Maximum selected/region primitives returned." },
+        "includeObjects": { "type": "boolean", "default": false, "description": "For selection, include serialized selected primitive objects in addition to IDs." },
+        "uuid": { "type": "string", "minLength": 1, "description": "Optional schematic UUID for import_changes." },
+        "fileName": { "type": "string", "minLength": 1 },
+        "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_auto_route_json" }, "fileName": { "type": "string", "minLength": 1 }, "dataBase64": { "type": "string", "minLength": 4 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "dataBase64"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_auto_route_ses" }, "fileName": { "type": "string", "minLength": 1 }, "dataBase64": { "type": "string", "minLength": 4 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "dataBase64"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_auto_layout_json" }, "fileName": { "type": "string", "minLength": 1 }, "dataBase64": { "type": "string", "minLength": 4 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "dataBase64"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "ids"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitive_type_by_id" }, "id": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "id"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitive_by_id" }, "id": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "id"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitives_by_id" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "ids"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitives_bbox" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "ids"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "enum": ["primitive_at_point", "convert_canvas_to_data", "convert_data_to_canvas", "navigate_to_coordinates"] }, "x": { "type": "number" }, "y": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "x", "y"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "primitives_in_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "leftToRight": { "type": "boolean" }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "left", "right", "top", "bottom"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "navigate_to_region" }, "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action", "left", "right", "top", "bottom"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "selection" }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 }, "includeObjects": { "type": "boolean" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "save" }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_changes" }, "uuid": { "type": "string", "minLength": 1 }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 } },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "clear_routing" },
+            "routingType": { "type": "string", "enum": ["all", "net", "connection"] },
+            "confirm": { "const": true, "description": "Must be true to clear PCB routing." },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action", "routingType", "confirm"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "mouse_position", "clear_selection", "zoom_to_board_outline", "start_ratline", "stop_ratline"] },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "design_compare",
+    "description": "Compare schematic, PCB, or netlist sources through the official EDA comparison APIs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string", "enum": ["netlist", "schematic", "pcb"] },
+        "sourceA": {},
+        "sourceB": {},
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["domain", "sourceA", "sourceB"],
+      "oneOf": [
+        {
+          "properties": {
+            "domain": { "const": "netlist" },
+            "sourceA": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }] },
+            "sourceB": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "schematic" },
+            "sourceA": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "schematicUuid"], "additionalProperties": false }] },
+            "sourceB": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "schematicUuid"], "additionalProperties": false }] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "pcb" },
+            "sourceA": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "pcbUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "pcbUuid"], "additionalProperties": false }] },
+            "sourceB": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "pcbUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "pcbUuid"], "additionalProperties": false }] }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "workspace_query",
+    "description": "Read the current workspace/team or discover accessible workspaces, teams, projects, and folders without changing any EDA data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["current", "workspaces", "teams", "projects", "folders"], "default": "current" },
+        "teamUuid": { "type": "string", "minLength": 1, "description": "Optional project filter; required for folders." },
+        "folderUuid": { "type": "string", "minLength": 1, "description": "Optional project filter." },
+        "workspaceUuid": { "type": "string", "minLength": 1, "description": "Optional project filter." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "folders" },
+            "teamUuid": { "type": "string", "minLength": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action", "teamUuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "projects" },
+            "teamUuid": { "type": "string", "minLength": 1 },
+            "folderUuid": { "type": "string", "minLength": 1 },
+            "workspaceUuid": { "type": "string", "minLength": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["current", "workspaces", "teams"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "design_archive_export",
+    "description": "Export the current project or document as a bounded native EasyEDA archive. Complete Base64 data is opt-in; this tool never writes an archive to disk.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["project", "document", "project_by_uuid"], "default": "project" },
+        "projectUuid": { "type": "string", "minLength": 1 },
+        "fileName": { "type": "string", "minLength": 1 },
+        "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+        "includeData": { "type": "boolean", "default": false },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "project" },
+            "fileName": { "type": "string", "minLength": 1 },
+            "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "document" },
+            "fileName": { "type": "string", "minLength": 1 },
+            "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "project_by_uuid" },
+            "projectUuid": { "type": "string", "minLength": 1 },
+            "fileName": { "type": "string", "minLength": 1 },
+            "fileType": { "type": "string", "enum": ["epro", "epro2"] },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action", "projectUuid"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "design_source_export",
+    "description": "Read the active EDA document source or its footprint sources with bounded previews and optional bounded full source data. This tool never modifies the design.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["document", "footprints"], "default": "document" },
+        "includeData": { "type": "boolean", "default": false, "description": "Include complete source text only when it fits the response budget." },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304, "description": "Maximum source bytes returned as complete data; footprint sources share this budget." },
+        "previewBytes": { "type": "integer", "minimum": 0, "maximum": 65536, "default": 16384 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "document" },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "previewBytes": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "const": "footprints" },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "previewBytes": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "project_info",
+    "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and optional bounded project-document inventories.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "includePages": { "type": "boolean", "default": true },
+        "includeSchematics": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project schematics." },
+        "includePcbs": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project PCBs." },
+        "includeBoards": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project boards." },
+        "includePanels": { "type": "boolean", "default": false, "description": "Include a bounded inventory of project panels." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "manufacture_export",
+    "description": "Generate a whitelisted PCB or schematic manufacturing artifact and return metadata, text preview, or optional Base64 data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string", "enum": ["pcb", "schematic"] },
+        "kind": {
+          "type": "string",
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+        },
+        "fileName": { "type": "string", "minLength": 1 },
+        "fileType": { "type": "string" },
+        "template": { "type": "string", "minLength": 1 },
+        "assemblyVariantsConfig": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string", "minLength": 1 },
+            "value": { "type": "string", "minLength": 1 }
+          },
+          "required": ["text", "value"],
+          "additionalProperties": false
+        },
+        "netlistType": { "type": "string" },
+        "unit": { "type": "string", "enum": ["mm", "inch", "mil"] },
+        "documentScope": { "type": "string", "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] },
+        "includeData": { "type": "boolean", "default": false },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
+      },
+      "required": ["domain", "kind"],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "enum": ["flying_probe_test", "dxf", "pdf", "ipc_d356a", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx"] }, "fileName": { "type": "string", "minLength": 1 }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "manufacture_data" }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "bom" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["xlsx", "csv"] }, "template": { "type": "string", "minLength": 1 }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "netlist" }, "fileName": { "type": "string", "minLength": 1 }, "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "gerber" }, "fileName": { "type": "string", "minLength": 1 }, "unit": { "enum": ["mm", "inch"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "pick_and_place" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["xlsx", "csv"] }, "unit": { "enum": ["mm", "mil"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "3d" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["step", "obj"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "3d_shell" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["stl", "step", "obj"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "test_point" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["xlsx", "csv"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "pcb" }, "kind": { "const": "open_database" }, "fileName": { "type": "string", "minLength": 1 }, "unit": { "enum": ["mm", "inch"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "schematic" }, "kind": { "const": "bom" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["xlsx", "csv"] }, "template": { "type": "string", "minLength": 1 }, "assemblyVariantsConfig": { "type": "object", "properties": { "text": { "type": "string", "minLength": 1 }, "value": { "type": "string", "minLength": 1 } }, "required": ["text", "value"], "additionalProperties": false }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "schematic" }, "kind": { "const": "netlist" }, "fileName": { "type": "string", "minLength": 1 }, "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "schematic" }, "kind": { "const": "simulation_netlist" }, "fileName": { "type": "string", "minLength": 1 }, "netlistType": { "const": "Ngspice" }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "domain": { "const": "schematic" }, "kind": { "const": "document" }, "fileName": { "type": "string", "minLength": 1 }, "fileType": { "enum": ["PDF", "PNG", "SVG"] }, "documentScope": { "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
+          "required": ["domain", "kind"], "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "manufacture_templates_query",
+    "description": "List current PCB BOM templates or current schematic assembly variants supported by the official EDA APIs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string", "enum": ["pcb", "schematic"] }
+      },
+      "required": ["domain"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_classification_query",
+    "description": "Read a bounded classification tree for an EasyEDA library before searching that library. This tool never changes library contents.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["device", "symbol", "footprint", "model_3d", "cbb", "panel_library"] },
+        "libraryUuid": { "type": "string", "minLength": 1 },
+        "maxNodes": { "type": "integer", "minimum": 1, "maximum": 2000, "default": 500 },
+        "maxDepth": { "type": "integer", "minimum": 1, "maximum": 20, "default": 8 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "required": ["kind", "libraryUuid"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_preview",
+    "description": "Render a symbol or footprint library asset for visual inspection without modifying the library or active design.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["symbol", "footprint"] },
+        "uuid": { "type": "string", "minLength": 1 },
+        "libraryUuid": { "type": "string", "minLength": 1 },
+        "subPartName": { "type": "string", "minLength": 1, "description": "Optional symbol sub-part name." },
+        "includeData": { "type": "boolean", "default": false, "description": "Return MCP image data only when explicitly requested." },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "required": ["kind", "uuid", "libraryUuid"],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "symbol" },
+            "uuid": { "type": "string", "minLength": 1 },
+            "libraryUuid": { "type": "string", "minLength": 1 },
+            "subPartName": { "type": "string", "minLength": 1 },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["kind", "uuid", "libraryUuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "footprint" },
+            "uuid": { "type": "string", "minLength": 1 },
+            "libraryUuid": { "type": "string", "minLength": 1 },
+            "includeData": { "type": "boolean" },
+            "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["kind", "uuid", "libraryUuid"],
+          "additionalProperties": false
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_sources",
+    "description": "List available EasyEDA library sources and their known system, personal, project, and favorite library UUIDs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "library_search",
+    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets, and search simulation models. Device searches also support exact properties and official LCSC C-number mapping. SDK keyword/property searches return one page and do not expose a complete hit count.",
+    "inputSchema": {
+      "$defs": {
+        "keyword": { "type": "string", "minLength": 1 },
+        "uuid": { "type": "string", "minLength": 1, "description": "Exact library asset UUID for retrieval." },
+        "lcscIds": { "type": "array", "items": { "type": "string", "pattern": "^[Cc][0-9]+$" }, "minItems": 1, "maxItems": 50, "uniqueItems": true },
+        "allowMultiMatch": { "type": "boolean", "default": false, "description": "Only for lcscIds device lookup; return all matches for duplicate catalog IDs." },
+        "deviceProperties": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "value": { "type": "string", "minLength": 1 },
+            "symbolName": { "type": "string", "minLength": 1 },
+            "footprintName": { "type": "string", "minLength": 1 },
+            "supplierFootprint": { "type": "string", "minLength": 1 },
+            "supplierId": { "type": "string", "minLength": 1 },
+            "partNumber": { "type": "string", "minLength": 1 },
+            "partCode": { "type": "string", "minLength": 1 }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
+        "libraryUuid": { "type": "string", "minLength": 1 },
+		"simulationModelType": { "type": "string", "enum": ["Ngspice", "SimulIDE"], "description": "Optional filter for simulation_model keyword searches." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        "page": { "type": "integer", "minimum": 1, "maximum": 9999, "default": 1 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "properties": { "$ref": "#/$defs/deviceProperties" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "properties"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "lcscIds": { "$ref": "#/$defs/lcscIds" },
+            "allowMultiMatch": { "$ref": "#/$defs/allowMultiMatch" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" }
+          },
+          "required": ["kind", "lcscIds"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "symbol" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "symbol" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "footprint" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "footprint" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "model_3d" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "model_3d" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "cbb" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "cbb" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "panel_library" },
+            "uuid": { "$ref": "#/$defs/uuid" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" }
+          },
+          "required": ["kind", "uuid"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "panel_library" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+		},
+		{
+		  "type": "object",
+		  "properties": {
+			"kind": { "const": "simulation_model" },
+			"keyword": { "$ref": "#/$defs/keyword" },
+			"simulationModelType": { "$ref": "#/$defs/simulationModelType" },
+			"libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+			"limit": { "$ref": "#/$defs/limit" },
+			"page": { "$ref": "#/$defs/page" }
+		  },
+		  "required": ["kind", "keyword"],
+		  "additionalProperties": false
+		}
+      ]
     }
   }
 ]

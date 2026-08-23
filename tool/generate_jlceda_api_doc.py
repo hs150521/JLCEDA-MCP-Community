@@ -36,6 +36,7 @@ class GeneratorConfig:
     sync_output_paths: tuple[Path, ...]
     typescript_module_path: Path
     indent: int
+    check: bool
 
 
 def parse_args() -> GeneratorConfig:
@@ -78,6 +79,11 @@ def parse_args() -> GeneratorConfig:
         default=2,
         help="JSON 缩进空格数，默认 2",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="验证输出文件是否与当前类型定义生成的文档一致，不写入文件",
+    )
 
     args = parser.parse_args()
     return GeneratorConfig(
@@ -86,6 +92,7 @@ def parse_args() -> GeneratorConfig:
         sync_output_paths=tuple(Path(item) for item in args.sync_output),
         typescript_module_path=Path(args.typescript_module),
         indent=args.indent,
+        check=args.check,
     )
 
 
@@ -996,8 +1003,8 @@ def run_ts_extractor(config: GeneratorConfig) -> dict[str, Any]:
             "node",
             "-e",
             script,
-            str(config.typescript_module_path),
-            str(config.input_path),
+            str(config.typescript_module_path.resolve()),
+            str(config.input_path.resolve()),
         ],
         capture_output=True,
         text=True,
@@ -1136,6 +1143,29 @@ def write_sync_outputs(
         write_json(output_path, data, indent)
 
 
+def assert_output_matches(output_path: Path, expected: dict[str, Any]) -> None:
+    """校验已提交文档与当前类型定义生成的结果完全一致。"""
+
+    if not output_path.exists():
+        raise FileNotFoundError(f"未找到待校验输出文件：{output_path}")
+
+    try:
+        actual = json.loads(output_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"输出 JSON 解析失败：{output_path}: {error}") from error
+
+    if actual == expected:
+        return
+
+    actual_callables = len((actual.get("projections") or {}).get("callableApis") or []) if isinstance(actual, dict) else 0
+    expected_callables = len((expected.get("projections") or {}).get("callableApis") or [])
+    raise RuntimeError(
+        "离线 API 文档已与类型定义漂移："
+        f"已提交 callable={actual_callables}，当前生成 callable={expected_callables}。"
+        "请运行生成器更新资源文件。"
+    )
+
+
 def validate_paths(config: GeneratorConfig) -> None:
     """校验输入路径与依赖路径，失败时抛出可读错误。"""
 
@@ -1165,6 +1195,10 @@ def main() -> int:
             config=config,
             ast_result=ast_result,
         )
+        if config.check:
+            assert_output_matches(config.output_path, document)
+            print(f"校验成功：{config.output_path}")
+            return 0
         write_json(config.output_path, document, config.indent)
         write_sync_outputs(
             output_paths=config.sync_output_paths,

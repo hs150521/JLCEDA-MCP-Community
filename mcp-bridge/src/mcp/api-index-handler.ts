@@ -10,6 +10,8 @@
  * ------------------------------------------------------------------------
  */
 
+import { preserveBoundedArray } from '../utils.ts';
+
 interface ApiIndexEntry {
 	fullName: string;
 	summary: string;
@@ -20,14 +22,35 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	// ── dmt_Schematic：原理图文档管理 ──────────────────────────────────────
 	{ fullName: 'eda.dmt_Schematic.createSchematic', summary: '创建原理图' },
 	{ fullName: 'eda.dmt_Schematic.createSchematicPage', summary: '创建原理图图页' },
+	{ fullName: 'eda.dmt_Schematic.copySchematicPage', summary: '复制原理图图页' },
 	{ fullName: 'eda.dmt_Schematic.modifySchematicName', summary: '修改原理图名称' },
 	{ fullName: 'eda.dmt_Schematic.modifySchematicPageName', summary: '修改原理图图页名称' },
+	{ fullName: 'eda.dmt_Schematic.reorderSchematicPages', summary: '重排原理图图页顺序' },
 	{ fullName: 'eda.dmt_Schematic.getCurrentSchematicInfo', summary: '获取当前原理图的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.getCurrentSchematicPageInfo', summary: '获取当前原理图图页的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.getAllSchematicsInfo', summary: '获取工程内所有原理图的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.getAllSchematicPagesInfo', summary: '获取工程内所有原理图图页的详细属性' },
 	{ fullName: 'eda.dmt_Schematic.deleteSchematicPage', summary: '删除原理图图页' },
 	{ fullName: 'eda.dmt_Schematic.deleteSchematic', summary: '删除原理图' },
+	{ fullName: 'eda.dmt_EditorControl.getCurrentRenderedAreaImage', summary: '获取当前画布渲染图像' },
+	{ fullName: 'eda.dmt_Workspace.getCurrentWorkspaceInfo', summary: '获取当前工作区' },
+	{ fullName: 'eda.dmt_Workspace.getAllWorkspacesInfo', summary: '获取所有工作区' },
+	{ fullName: 'eda.dmt_Team.getCurrentTeamInfo', summary: '获取当前团队' },
+	{ fullName: 'eda.dmt_Team.getAllTeamsInfo', summary: '获取直接团队' },
+	{ fullName: 'eda.dmt_Team.getAllInvolvedTeamInfo', summary: '获取参与的团队' },
+	{ fullName: 'eda.dmt_Project.getAllProjectsUuid', summary: '获取工程 UUID 列表' },
+	{ fullName: 'eda.dmt_Project.getProjectInfo', summary: '获取工程属性' },
+	{ fullName: 'eda.dmt_Board.getAllBoardsInfo', summary: '获取工程板卡清单' },
+	{ fullName: 'eda.dmt_Pcb.getAllPcbsInfo', summary: '获取工程 PCB 清单' },
+	{ fullName: 'eda.dmt_Panel.getAllPanelsInfo', summary: '获取工程拼板清单' },
+	{ fullName: 'eda.dmt_Folder.getAllFoldersUuid', summary: '获取文件夹 UUID 列表' },
+	{ fullName: 'eda.dmt_Folder.getFolderInfo', summary: '获取文件夹属性' },
+	{ fullName: 'eda.sys_FileManager.getDocumentSource', summary: '获取当前文档源代码' },
+	{ fullName: 'eda.sys_FileManager.getDocumentFootprintSources', summary: '获取当前文档封装源代码' },
+	{ fullName: 'eda.sys_FileManager.getProjectFile', summary: '导出当前工程原生归档' },
+	{ fullName: 'eda.sys_FileManager.getDocumentFile', summary: '导出当前文档原生归档' },
+	{ fullName: 'eda.sys_FileManager.getProjectFileByProjectUuid', summary: '按 UUID 导出工程原生归档' },
+	{ fullName: 'eda.sys_Unit.getFrontendDataUnit', summary: '获取当前画布数据单位' },
 
 	// ── sch_Document：画布文档操作 ─────────────────────────────────────────
 	{ fullName: 'eda.sch_Document.save', summary: '保存文档' },
@@ -137,12 +160,79 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.lib_LibrariesList.getSystemLibraryUuid', summary: '获取系统库的 UUID' },
 	{ fullName: 'eda.lib_LibrariesList.getPersonalLibraryUuid', summary: '获取个人库的 UUID' },
 	{ fullName: 'eda.lib_LibrariesList.getProjectLibraryUuid', summary: '获取工程库的 UUID' },
+	{ fullName: 'eda.lib_LibrariesList.getAllLibrariesList', summary: '获取所有库的列表' },
+	{ fullName: 'eda.lib_Classification.getAllClassificationTree', summary: '获取库分类树' },
+	{ fullName: 'eda.lib_3DModel.search', summary: '搜索 3D 模型库资产' },
+	{ fullName: 'eda.lib_3DModel.get', summary: '按 UUID 获取 3D 模型库资产' },
+	{ fullName: 'eda.lib_Cbb.search', summary: '搜索复用模块库资产' },
+	{ fullName: 'eda.lib_Cbb.get', summary: '按 UUID 获取复用模块库资产' },
+	{ fullName: 'eda.lib_PanelLibrary.search', summary: '搜索面板库资产' },
+	{ fullName: 'eda.lib_PanelLibrary.get', summary: '按 UUID 获取面板库资产' },
 
 	// ── sch_Netlist：网表 ──────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Netlist.setNetlist', summary: '更新网表' },
 
 	// ── sch_Utils：工具 ────────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Utils.splitLines', summary: '拆分多段线' },
+
+	// PCB document inspection and analysis APIs exposed by the pinned 0.4.15 catalog.
+	{ fullName: 'eda.pcb_Document.getCanvasOrigin', summary: '获取 PCB 画布原点' },
+	{ fullName: 'eda.pcb_Document.convertCanvasOriginToDataOrigin', summary: '将画布坐标转换为数据坐标' },
+	{ fullName: 'eda.pcb_Document.convertDataOriginToCanvasOrigin', summary: '将数据坐标转换为画布坐标' },
+	{ fullName: 'eda.pcb_Document.getPrimitiveAtPoint', summary: '获取坐标点的 PCB 图元' },
+	{ fullName: 'eda.pcb_Document.getPrimitivesInRegion', summary: '获取 PCB 区域内的图元' },
+	{ fullName: 'eda.pcb_Document.navigateToCoordinates', summary: '定位 PCB 画布坐标' },
+	{ fullName: 'eda.pcb_Document.navigateToRegion', summary: '定位 PCB 画布区域' },
+	{ fullName: 'eda.pcb_Document.zoomToBoardOutline', summary: '缩放至 PCB 板框' },
+	{ fullName: 'eda.pcb_Document.getCurrentFilterConfiguration', summary: '获取 PCB 当前过滤器配置' },
+	{ fullName: 'eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId', summary: '获取 PCB 已选图元 ID' },
+	{ fullName: 'eda.pcb_SelectControl.getAllSelectedPrimitives', summary: '获取 PCB 已选图元对象' },
+	{ fullName: 'eda.pcb_Net.getNet', summary: '按名称获取 PCB 网络' },
+	{ fullName: 'eda.pcb_Net.getNetLength', summary: '获取 PCB 网络长度' },
+	{ fullName: 'eda.pcb_Net.getNetColor', summary: '获取 PCB 网络颜色' },
+	{ fullName: 'eda.pcb_Net.getAllPrimitivesByNet', summary: '获取 PCB 网络关联图元' },
+	{ fullName: 'eda.pcb_Drc.getCurrentRuleConfiguration', summary: '获取当前 PCB 规则配置' },
+	{ fullName: 'eda.pcb_Drc.getCurrentRuleConfigurationName', summary: '获取当前 PCB 规则配置名称' },
+	{ fullName: 'eda.pcb_Drc.getDefaultRuleConfigurationName', summary: '获取默认 PCB 规则配置名称' },
+	{ fullName: 'eda.pcb_Drc.getAllNetClasses', summary: '获取 PCB 网络类' },
+	{ fullName: 'eda.pcb_Drc.getAllDifferentialPairs', summary: '获取 PCB 差分对' },
+	{ fullName: 'eda.pcb_Drc.getAllEqualLengthNetGroups', summary: '获取 PCB 等长网络组' },
+	{ fullName: 'eda.pcb_Drc.getAllPadPairGroups', summary: '获取 PCB 焊盘对组' },
+	{ fullName: 'eda.pcb_Drc.createNetClass', summary: '创建 PCB 网络类' },
+	{ fullName: 'eda.pcb_Drc.deleteNetClass', summary: '删除 PCB 网络类' },
+	{ fullName: 'eda.pcb_Drc.modifyNetClassName', summary: '重命名 PCB 网络类' },
+	{ fullName: 'eda.pcb_Drc.addNetToNetClass', summary: '向 PCB 网络类添加网络' },
+	{ fullName: 'eda.pcb_Drc.removeNetFromNetClass', summary: '从 PCB 网络类移除网络' },
+	{ fullName: 'eda.pcb_Drc.createDifferentialPair', summary: '创建 PCB 差分对' },
+	{ fullName: 'eda.pcb_Drc.deleteDifferentialPair', summary: '删除 PCB 差分对' },
+	{ fullName: 'eda.pcb_Drc.modifyDifferentialPairName', summary: '重命名 PCB 差分对' },
+	{ fullName: 'eda.pcb_Drc.modifyDifferentialPairPositiveNet', summary: '设置差分对正网络' },
+	{ fullName: 'eda.pcb_Drc.modifyDifferentialPairNegativeNet', summary: '设置差分对负网络' },
+	{ fullName: 'eda.pcb_Drc.createEqualLengthNetGroup', summary: '创建 PCB 等长网络组' },
+	{ fullName: 'eda.pcb_Drc.deleteEqualLengthNetGroup', summary: '删除 PCB 等长网络组' },
+	{ fullName: 'eda.pcb_Drc.modifyEqualLengthNetGroupName', summary: '重命名 PCB 等长网络组' },
+	{ fullName: 'eda.pcb_Drc.addNetToEqualLengthNetGroup', summary: '向等长网络组添加网络' },
+	{ fullName: 'eda.pcb_Drc.removeNetFromEqualLengthNetGroup', summary: '从等长网络组移除网络' },
+	{ fullName: 'eda.pcb_Drc.createPadPairGroup', summary: '创建 PCB 焊盘对组' },
+	{ fullName: 'eda.pcb_Drc.deletePadPairGroup', summary: '删除 PCB 焊盘对组' },
+	{ fullName: 'eda.pcb_Drc.modifyPadPairGroupName', summary: '重命名 PCB 焊盘对组' },
+	{ fullName: 'eda.pcb_Drc.addPadPairToPadPairGroup', summary: '向焊盘对组添加焊盘对' },
+	{ fullName: 'eda.pcb_Drc.removePadPairFromPadPairGroup', summary: '从焊盘对组移除焊盘对' },
+	{ fullName: 'eda.pcb_Layer.getAllLayers', summary: '获取 PCB 图层' },
+	{ fullName: 'eda.pcb_ManufactureData.getFlyingProbeTestFile', summary: '导出 PCB 飞针测试文件' },
+	{ fullName: 'eda.lib_Symbol.get', summary: '按 UUID 获取符号库资产' },
+	{ fullName: 'eda.lib_Symbol.getRenderImage', summary: '渲染符号库预览图像' },
+	{ fullName: 'eda.lib_Footprint.get', summary: '按 UUID 获取封装库资产' },
+	{ fullName: 'eda.lib_Footprint.getRenderImage', summary: '渲染封装库预览图像' },
+	{ fullName: 'eda.pcb_SelectControl.getCurrentMousePosition', summary: 'PCB mouse position' },
+	{ fullName: 'eda.pcb_SelectControl.doSelectPrimitives', summary: 'Select PCB primitives' },
+	{ fullName: 'eda.pcb_SelectControl.clearSelected', summary: 'Clear PCB selection' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitiveTypeByPrimitiveId', summary: 'Get PCB primitive type' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitiveByPrimitiveId', summary: 'Get PCB primitive' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitivesByPrimitiveId', summary: 'Get PCB primitives' },
+	{ fullName: 'eda.pcb_Primitive.getPrimitivesBBox', summary: 'Get PCB primitive bounds' },
+	{ fullName: 'eda.sch_Document.getCurrentFilterConfiguration', summary: 'Get schematic filter configuration' },
+	{ fullName: 'eda.sch_SelectControl.getAllSelectedPrimitives_PrimitiveId', summary: 'Get selected schematic primitive IDs' },
 ];
 
 /**
@@ -163,6 +253,6 @@ export async function handleApiIndexTask(payload: unknown): Promise<unknown> {
 	return {
 		ok: true,
 		total: index.length,
-		index,
+		index: preserveBoundedArray(index),
 	};
 }

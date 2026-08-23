@@ -4,11 +4,11 @@ This document applies to the community `native-mcp-v2` branch.
 
 ## 1. Install the server
 
-Requires Node.js 20 or later. Download `jlceda-mcp-server-2.1.5.tgz` from the
+Requires Node.js 20 or later. Download `jlceda-mcp-server-2.2.0.tgz` from the
 matching GitHub Release and run:
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.1.5.tgz
+npm install --global .\jlceda-mcp-server-2.2.0.tgz
 Get-Command jlceda-mcp
 ```
 

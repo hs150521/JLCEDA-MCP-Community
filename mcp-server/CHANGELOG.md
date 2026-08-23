@@ -1,9 +1,43 @@
 # Changelog
 
+- Clean up pending bridge requests when their MCP WebSocket disconnects, so a stale caller cannot lock `bridge_select_client` until the queue timeout.
+- Reject requests tied to an EDA socket when the same page reconnects, preventing stale results from crossing connection generations.
+- Quarantine a reconnecting page for the previous EDA task's execution window before admitting new requests, preventing uncancellable mutations from overlapping.
+- Preserve that quarantine when EDA or MCP sockets disconnect, including tasks still queued before `bridge/task-started` and server-side execution timeouts.
+- Preserve affected constraint items when the EDA returns differential-pair read-backs as a name-keyed object.
+- Remove unsupported schematic-net and current-layer public routes, and synchronize PCB save with its required document UUID.
+
 ## 未发布
 
 - Bridge 会在心跳超时后释放挂起请求，避免失联页面永久占用活动租约；`bridge_select_client` 新增受限的 `force` 恢复选项，用于从已确认卡死的活动页面切换到新的就绪页面。
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
+## 2.1 development
+
+- Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
+- Add bounded official manufacturing exports, including flying-probe test and auto-route/layout JSON files.
+- Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
+- Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
+- Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
+- Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
+- Add `pcb_layer_query`, `pcb_realtime_drc`, exact `component_select.properties` search, and external route/layout import support.
+- Add `manufacture_templates_query` and `manufacture_export.template` for selecting official BOM templates.
+- Add `library_search` for official device, symbol, and footprint searches.
+- Expand PCB constraint schema for rule configurations and structured routing-rule data.
+- Add `pcb_document_action` for controlled PCB document save and external routing/layout imports.
+- Add `all`, `names`, and exact `getNet` modes to PCB network queries, with optional exact-net analysis.
+- Add schematic BOM assembly-variant selection to `manufacture_export`.
+- Add the read-only `pcb_drc_check` MCP tool with strict checking and structured violation results.
+- Add `pcb_net_query` tool definitions and synchronized routes.
+- Keep PCB auto-routing controls out of the public tool list because the pinned client does not expose the methods; external route files remain supported.
+- Expose official LCSC C-number mapping through `library_search`; simulation-model search is deferred because the pinned client does not expose `lib_SimulationModel`.
+- Extend `pcb_document_action` with bounded primitive/selection inspection, coordinate conversion, and canvas navigation.
+- Add exact UUID retrieval for device, symbol, and footprint library assets, plus bounded JSON export previews.
+- Reject mixed selectors, non-exact PCB analysis, unsupported primitive filters, and missing pad-pair group names at schema validation time.
+
+## 2.2.0 - 2026-08-23
+
+- Add schematic DRC, PCB constraints, project info, netlist comparison, and manufacturing export tools.
+
 ## 2.1.5 - 2026-08-23
 
 - Keep the Bridge client quarantined after an uncancellable EDA mutation times out, so later tasks cannot overlap the pending API call.

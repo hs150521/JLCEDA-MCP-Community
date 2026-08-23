@@ -1,14 +1,16 @@
 const assert = require('node:assert/strict');
 const process = require('node:process');
 
-process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
+process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
 const { handleAutoLayoutTask } = require('../src/mcp/auto-layout-handler.ts');
 const { handleAutoRoutingTask } = require('../src/mcp/auto-routing-handler.ts');
 const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-auto-handler.ts');
+const { handlePcbNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
+const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
 
@@ -40,10 +42,44 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 });
 
 async function main() {
+	globalThis.eda = {
+		pcb_Net: { getAllNets: async () => [{ net: 'VCC', length: 10 }, { net: 'GND', length: 20 }] },
+		pcb_Drc: {
+			check: async (strict, showUi, verbose) => {
+				assert.equal(strict, true);
+				assert.equal(showUi, false);
+				assert.equal(verbose, true);
+				return [{ code: 'CLEARANCE', message: 'demo violation' }];
+			},
+		},
+	};
+	assert.equal((await handlePcbNetQueryTask({ query: 'vcc' })).returned, 1);
+	const detailedDrc = await handlePcbDrcCheckTask({});
+	assert.equal(detailedDrc.ok, false);
+	assert.equal(detailedDrc.resultType, 'detailed');
+	assert.equal(detailedDrc.errorCount, 1);
+	assert.equal(detailedDrc.errors[0].code, 'CLEARANCE');
+	globalThis.eda.pcb_Drc.check = async () => true;
+	const booleanDrc = await handlePcbDrcCheckTask({ strict: false, showUi: true });
+	assert.equal(booleanDrc.ok, true);
+	assert.equal(booleanDrc.resultType, 'boolean');
+	await assert.rejects(() => handlePcbDrcCheckTask({ showUi: 'yes' }), /booleans/);
+
 	assert.equal(shouldLogTransportMessage('bridge/heartbeat'), false);
 	assert.equal(shouldLogTransportMessage('bridge/result'), true);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', {}), 15000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/canvas/snapshot', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/sources', { timeoutMs: 42000 }), 42000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/preview', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/classification-query', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/workspace/query', { timeoutMs: 42000 }), 42000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/source-export', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/archive-export', {}), 60000);
+	assert.throws(
+		() => resolveBridgeTaskTimeoutMs('/bridge/jlceda/canvas/snapshot', { timeoutMs: 4999 }),
+		/timeoutMs/,
+	);
 	assert.throws(
 		() => resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', { timeoutMs: 999 }),
 		/timeoutMs/,

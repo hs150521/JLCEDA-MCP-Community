@@ -19,6 +19,27 @@
 - `component_select`：当用户要求搜索、筛选或确认具体器件型号时，必须调用此工具返回候选列表并等待用户确认。keyword 只写用户给出的型号或描述本身，禁止擅自追加封装、尺寸、引脚数或任何其他限定词；仅对电阻、电容、电感这类需要数值的器件才允许补充带单位的阻值/容值/感值参数，例如 `1kΩ`、`100nF`、`10uH`。用户确认后的结果即为最终结果，不得擅自改选或要求重新选择；用户取消或跳过时视为永久放弃该器件，必须立即停止针对该器件的所有选型动作，**禁止**以任何方式重试，包括但不限于：换关键词、换描述、换型号、拆分关键词、加宽或缩小筛选范围后再次调用 `component_select`；跳过后直接跳到下一步，不得就该器件再做任何动作。
 - `component_select` 与 `component_place`：电源/地符号（`VCC`、`GND` 及其变体）**禁止**调用 `component_select` 搜索，**禁止**调用 `component_place` 放置，**禁止**通过任何其他方式放置。电源/地符号只能由用户在 EDA 中手动放置。`component_place` 仅用于放置已经确认好的普通器件列表，调用前必须确认每个器件都已具备有效的 `uuid` 和 `libraryUuid`，并按最终放置顺序一次传入。
 
+## 2.1 PCB 工具约束
+
+- `pcb_drc_check`：只读检查当前 PCB 的设计规则。默认不打开 DRC UI；返回结构化违规列表。调用前确认当前页面是 PCB。
+- `pcb_net_query`：只读查询当前 PCB 网络，可用 `query` 和 `limit` 缩小结果范围；对单个网络使用 `mode: "exact"` 时，可按需请求 `analysis.length`、`analysis.color` 或 `analysis.primitives`。
+- 自动布局/布线可能运行较久。超时后 Bridge 会隔离当前客户端，直到底层 EDA Promise 结束；在此期间不得通过 `api_invoke` 重试写操作。
+- `schematic_drc_check`：只读检查当前原理图页；默认不打开 UI，返回结构化违规列表。
+- `pcb_constraints_query`：只读读取当前 PCB 的规则、网络类、差分对、等长组或焊盘对组。需要 PCB 页面。
+- `netlist_compare`：对比两个已知的原理图或 PCB 文档 UUID；必须先通过 `project_info` 或 `eda_context` 确认 UUID，不得猜测。
+- `design_compare`：按 `domain` 调用官方原理图、PCB 或网表对比 API。PCB 对比在 `0.4.15` 中标注为 EDA v4.2，旧客户端应返回版本能力错误；不得反复猜测参数。
+- `pcb_layer_query`：读取当前 PCB 图层、当前工作层和铜层数量。
+- `pcb_realtime_drc`：默认只查询实时 DRC 状态；只有用户明确要求时才执行 `start` 或 `stop`。
+- `component_select`：可使用 `properties.supplierId` 等 0.4.15 精确字段查询器件。`keyword` 与 `properties` 二选一，结果仍必须等待用户确认后才能放置。
+- `project_info`：读取工程、板子、原理图、PCB 和图页身份，适合在跨页面任务开始时建立上下文。
+- `manufacture_export`：仅生成白名单制造数据，不直接写入本地文件系统。默认返回文件元数据和文本预览；只有用户明确需要下载数据时才设置 `includeData: true`，并注意 Base64 结果可能很大。
+- `manufacture_templates_query`：在 PCB BOM 导出前读取当前可用模板；将返回的模板名原样传给 `manufacture_export` 的 `template` 参数，不要猜测模板名称。原理图查询只返回官方装配变体。
+- `manufacture_templates_query` 还会返回原理图装配变体；如需指定变体，必须将返回的完整 `{text, value}` 传给 schematic `manufacture_export` 的 `assemblyVariantsConfig`。
+- `library_search`：搜索或按 UUID 读取官方 device、symbol、footprint 库资产；device 可使用 `supplierId` 等精确字段，也可用官方 `lcscIds` 将 LCSC C 编号映射到 EasyEDA 器件（支持批量查询），symbol/footprint 使用各自支持的 `keyword` 搜索。device 的 `keyword`、`properties`、`lcscIds` 与 `uuid` 必须按 schema 选择其一；symbol/footprint 可使用 `keyword` 或 `uuid`。
+- `pcb_constraints_query`：按需读取当前规则、命名规则配置、网络规则、网络间规则、区域规则或约束组；查询命名规则配置时必须提供 `configurationName`，查询焊盘对最短线长时使用 `pad_pair_min_wire_length` 和 `padPairGroupName`。
+- `pcb_document_action`：读取 PCB 计算状态、画布/过滤器、选中图元或坐标区域图元，进行坐标转换和画布导航，或执行用户明确要求的保存、飞线计算启停、布线清除、原理图变更导入、JSON/SES 自动布线/布局导入。`clear_routing` 必须指定 `routingType` 并传入 `confirm: true`；导航动作也会改变 EDA 状态，必须先确认用户意图。区域查询必须提供有效边界并使用 `limit` 控制结果大小；导入文件必须使用 Base64，执行后应运行 DRC 并让用户确认结果。
+- `pcb_net_query`：默认返回网络详情；只需名称时使用 `mode: "names"`，查询单个官方网络时使用 `mode: "exact"` 与原始大小写的 `query`。
+
 ## 透传 API 工具约束
 
 **优先级规则**：`schematic_read`、`schematic_review`、`component_select`、`component_place` 四个基础工具**优先级高于**下方四个透传 API 工具。只有当基础工具无法完成所需操作时，才可使用透传 API 工具。**禁止**用 `api_invoke` 重复实现基础工具已能完成的功能。

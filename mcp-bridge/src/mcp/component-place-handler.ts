@@ -9,7 +9,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { isPlainObjectRecord, toSafeErrorMessage } from '../utils';
+import { getEdaRuntime, isPlainObjectRecord, toSafeErrorMessage } from '../utils';
 
 interface ComponentPlaceItem {
 	uuid: string;
@@ -117,7 +117,7 @@ function formatComponentTitle(component: ComponentPlaceItem): string {
 }
 
 function resolvePlaceComponentApi(): PlaceComponentApi {
-	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
+	const edaGlobal = getEdaRuntime();
 	if (!edaGlobal || typeof edaGlobal !== 'object') {
 		throw new Error('EDA 环境未就绪，无法访问 eda 全局对象。');
 	}
@@ -137,7 +137,7 @@ function resolvePlaceComponentApi(): PlaceComponentApi {
 }
 
 function resolveFollowMouseTipApi(): FollowMouseTipApi | null {
-	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
+	const edaGlobal = getEdaRuntime();
 	if (!edaGlobal || typeof edaGlobal !== 'object') {
 		return null;
 	}

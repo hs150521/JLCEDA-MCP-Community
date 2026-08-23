@@ -2,83 +2,69 @@
 
 ## Repository structure
 
-Dual-package monorepo for JLCEDA EDA integration via MCP protocol:
+Dual-package monorepo for JLCEDA EDA integration via the MCP protocol:
 
-- `mcp-hub/` — VS Code/Cursor extension, exposes MCP tools over stdio/http, hosts WebSocket bridge server
-- `mcp-bridge/` — JLCEDA EDA extension, connects to mcp-hub via WebSocket, executes EDA operations
-- `build/` — shared output directory for both `.vsix` and `.eext` packages
-- `tool/` — utility scripts for offline doc generation
+- `mcp-server/` - Node.js MCP server. It exposes MCP over stdio and hosts the localhost WebSocket bridge.
+- `mcp-bridge/` - JLCEDA EDA extension. It connects to `mcp-server` and executes EDA operations.
+- `build/` - packaged JLCEDA extension output (`.eext`).
+- `tool/` - utility scripts, including offline API-document generation.
 
-No root-level build orchestration. Each package builds independently.
+There is no root-level build orchestration. Build each package from its own directory.
 
 ## Build commands
 
-Must cd into each package directory first:
-
-```bash
-# mcp-hub
-cd mcp-hub
+```powershell
+# MCP server
+cd mcp-server
 npm install
-npm run build        # produces ../build/jlceda-mcp-hub-{version}.vsix
+npm run build
 
-# mcp-bridge  
-cd mcp-bridge
+# JLCEDA extension
+cd ../mcp-bridge
 npm install
-npm run build        # produces ../build/jlceda-mcp-bridge-{version}.eext
+npm run build  # produces ../build/mcp-bridge-community-{version}.eext
 ```
 
-Build outputs land in `../build/`, not within each package.
+`mcp-server` produces runtime files in `mcp-server/dist/`. `mcp-bridge` uses esbuild and ts-node, then writes its EDA extension package to `build/`.
 
-**mcp-hub** uses esbuild + inline vsce packaging (all in package.json script).  
-**mcp-bridge** uses esbuild + ts-node for build orchestration.
+## Test commands
 
-## Other commands
+```powershell
+cd mcp-server
+npm test
+node verify-multi-client.mjs
 
-**mcp-hub:**
-- `npm run watch` — rebuild on file changes
-- `npm run typecheck` — run tsc without emitting
-- `npm run lint` — eslint check
-- `npm run clean` — remove out/
+cd ../mcp-bridge
+npm run test:netlabel
+npm run test:2.1
+npm run typecheck
+npm run lint
+```
 
-**mcp-bridge:**
-- `npm run compile` — esbuild only (no packaging)
-- `npm run lint` — eslint check
-- `npm run fix` — eslint auto-fix
-
-Pre-commit hooks with lint-staged are configured in mcp-bridge only.
+The multi-client entry points run the maintained bridge protocol integration test. It requires a built `mcp-server/dist/` tree.
 
 ## Cross-package coordination
 
-When adding or changing MCP tools:
+When adding or changing an MCP tool:
 
-1. Update tool schema in `mcp-hub/resources/mcp-tool-definitions.json`
-2. Update bridge task handler in both `mcp-hub/src/` and `mcp-bridge/src/`
-3. Update README.md in both packages + root
-4. Update CHANGELOG.md in both packages
+1. Update `mcp-server/src/resources/mcp-tool-definitions.json`.
+2. Update the server route/dispatcher in `mcp-server/src/`.
+3. Update the corresponding handler and runtime route in `mcp-bridge/src/`.
+4. Update relevant READMEs and CHANGELOGs in both packages and the root README.
+5. Add focused schema and handler tests.
 
-Tool definitions and bridge task paths must stay in sync across both packages.
+Tool definitions, dispatcher routes, bridge runtime routes, and handler behavior must stay synchronized.
 
-## Testing and verification
+## Manual verification
 
-No automated test suite exists. Manual verification requires:
+- Install the built `.eext` in JLCEDA EDA Professional.
+- Start the built MCP server with `node mcp-server/dist/index.js` or the packaged `jlceda-mcp` command.
+- Open a schematic or PCB page and confirm it connects to `ws://127.0.0.1:8765/bridge/ws`.
+- Invoke the tool through an MCP client and verify the active bridge client executes it.
 
-- Installing both extensions (mcp-hub in VS Code/Cursor, mcp-bridge in JLCEDA EDA Professional)
-- Opening an EDA schematic/PCB project
-- Confirming WebSocket bridge connection (default: `ws://127.0.0.1:8765/bridge/ws`)
-- Invoking MCP tools from Copilot/Cursor Chat
-
-## Architecture notes
-
-```
-JLCEDA EDA (mcp-bridge) ←→ WebSocket ←→ mcp-hub (VS Code/Cursor) ←→ stdio/http MCP ←→ AI client
-```
-
-mcp-hub acts as both MCP server and WebSocket bridge host. mcp-bridge is a client that connects to the bridge and executes operations in EDA.
-
-Only schematic and PCB pages can establish bridge connections. Multiple EDA pages may connect, but only the active role executes tasks.
+Only schematic and PCB pages establish bridge connections. Multiple pages can connect, but the active bridge client executes tasks.
 
 ## Requirements
 
 - Node.js 20+
-- VS Code 1.105+ (for mcp-hub development/debugging)
-- JLCEDA EDA Professional (for mcp-bridge installation and testing)
+- JLCEDA EDA Professional

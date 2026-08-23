@@ -1,4 +1,50 @@
-## 未发布
+## [2.1.0] - 2026-08-23
+
+### Added
+
+- Fix runtime EDA binding resolution so dedicated PCB, layer, network, and DRC handlers use the same SDK object as `api_invoke` on EDA Pro 3.2.181.
+- Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
+- Add bounded official manufacturing exports, including flying-probe test and auto-route/layout JSON files.
+- Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
+- Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
+- Add read-only active-canvas snapshots, library-source discovery, and 3D-model/reusable-module/panel-library search and retrieval.
+- Add read-only workspace, team, project, and folder discovery through `workspace_query`.
+- Add bounded read-only document and footprint source export through `design_source_export`, plus optional Board and Panel inventories in `project_info`.
+- Add bounded symbol/footprint `library_preview` images and official `library_classification_query` trees; extend `project_info` with schematic and PCB inventories.
+- Add `design_archive_export` for bounded, explicit native project/document archive retrieval without filesystem writes.
+- Include active canvas data unit in `eda_context`, and expose current/default PCB rule-configuration names through `pcb_constraints_query`.
+- Add confirmation-gated `pcb_constraints_manage` for bounded net-class, differential-pair, equal-length-group, and pad-pair-group changes with read-back verification.
+- Remove the unsupported `schematic_net_query` and `pcb_layer_query.current` routes from the 0.4.15 public surface.
+- Resolve the current PCB UUID before calling the required-argument `pcb_Document.save(uuid)` API.
+- Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
+- Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
+- Add structured PCB and schematic DRC tools with non-UI defaults.
+- Defer PCB auto-layout and auto-routing MCP tools until the pinned API surface exposes those methods; external route/layout files remain available through `pcb_document_action`.
+- Extend `library_search` with official batch LCSC C-number mapping; unsupported simulation-model search is not advertised on the 0.4.15 client surface.
+- Add PCB/schematic network queries, PCB constraints, project information, netlist comparison, and whitelisted manufacturing exports.
+- Add exact device-property search, PCB layer queries, real-time DRC control, external route/layout imports, and flying-probe manufacturing export.
+- Add read-only BOM template discovery and template selection for PCB/schematic BOM exports.
+- Add `library_search` for exact device, symbol, and footprint library searches.
+- Extend `pcb_document_action` with bounded primitive/selection inspection, coordinate conversion, and canvas navigation.
+- Add exact UUID retrieval for device, symbol, and footprint library assets.
+- Expand `pcb_constraints_query` with rule configurations, net rules, net-to-net rules, and region rules.
+- Add `pcb_document_action` for PCB save, schematic-change import, and Base64 auto-layout/route file imports.
+- Include schematic BOM assembly-variant configurations in template discovery and export.
+- Include bounded JSON/SES text previews for manufacturing exports.
+
+### Fixes
+
+- Return canvas snapshots as MCP image content, and pass the public snapshot/library/workspace timeout controls through the server and Bridge.
+- Keep long-running EDA mutations quarantined after timeout until their uncancellable Promise settles.
+- Propagate net-label handler timeouts to the runtime quarantine mechanism.
+- Align selector and analysis schemas with handler exclusivity and official primitive enums; preserve full LCSC match counts before bounded serialization.
+- Normalize object-shaped differential-pair read-backs returned by some 0.4.15 EDA builds.
+
+### Changes
+
+- Upgrade `@jlceda/pro-api-types` from `0.2.15` to `0.4.15` for current EDA Pro API declarations. This is a compile-time type update and does not change the EDA client's runtime implementation.
+
+---
 
 ## [2.0.9] - 2026-08-23
 
@@ -15,11 +61,6 @@
 
 ## Unreleased
 
-### Fixes
-
-- Release the Bridge task queue after an EDA write API times out, so a permanently pending API call cannot block later read or write tasks.
-
----
 
 ## [2.0.8] - 2026-08-23
 
