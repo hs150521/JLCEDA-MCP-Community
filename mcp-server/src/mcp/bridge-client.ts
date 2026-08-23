@@ -35,6 +35,7 @@ interface PendingRequest {
   leaseTerm?: number;
   mcpSocket?: WebSocket;
   edaSocket?: WebSocket;
+  path?: string;
 }
 
 interface BridgeTask {
@@ -112,6 +113,7 @@ export class EdaBridgeServer {
   private readonly clientIdBySocket = new Map<WebSocket, string>();
   private readonly mcpClients = new Set<WebSocket>();
   private readonly pendingRequests = new Map<string, PendingRequest>();
+  private readonly reconnectBarriers = new Map<string, { path: string; until: number }>();
   private readonly instanceId = randomUUID();
   private requestIdCounter = 0;
   private activeClientId = '';
@@ -383,6 +385,7 @@ export class EdaBridgeServer {
   ): BridgePeer {
     const previous = this.peers.get(clientId);
     if (previous && previous.socket !== socket) {
+      this.enterReconnectBarrier(clientId);
       this.rejectPendingForClient(clientId, 'EDA client reconnected before the pending request completed');
       this.clientIdBySocket.delete(previous.socket);
       previous.socket.close(4001, 'Replaced by a newer connection');
@@ -621,6 +624,11 @@ export class EdaBridgeServer {
     if (!peer || !peer.isReady || peer.socket.readyState !== WebSocket.OPEN) {
       throw new Error('No ready EDA client connected');
     }
+    const reconnectBarrier = this.getReconnectBarrier(peer.clientId);
+    if (reconnectBarrier) {
+      const remainingMs = Math.max(1, reconnectBarrier.until - Date.now());
+      throw new Error(`EDA client is quarantined after reconnect while ${reconnectBarrier.path} may still be settling; retry in ${String(remainingMs)}ms`);
+    }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -636,6 +644,7 @@ export class EdaBridgeServer {
         leaseTerm: this.leaseTerm,
         mcpSocket,
         edaSocket: peer.socket,
+        path,
       });
       try {
         sendJson(peer.socket, {
@@ -696,6 +705,29 @@ export class EdaBridgeServer {
     }
   }
 
+  private enterReconnectBarrier(clientId: string): void {
+    const pending = [...this.pendingRequests.values()]
+      .filter(request => request.clientId === clientId && request.path?.startsWith('/bridge/jlceda/'));
+    if (pending.length === 0) {
+      return;
+    }
+    const longestTimeout = Math.max(...pending.map(request => request.executionTimeoutMs ?? 30000));
+    const path = pending[0].path ?? '/bridge/jlceda/unknown';
+    this.reconnectBarriers.set(clientId, { path, until: Date.now() + longestTimeout });
+  }
+
+  private getReconnectBarrier(clientId: string): { path: string; until: number } | undefined {
+    const barrier = this.reconnectBarriers.get(clientId);
+    if (!barrier) {
+      return undefined;
+    }
+    if (barrier.until <= Date.now()) {
+      this.reconnectBarriers.delete(clientId);
+      return undefined;
+    }
+    return barrier;
+  }
+
   private rejectPendingForMcpSocket(socket: WebSocket, reason: string): void {
     for (const [requestId, pending] of this.pendingRequests) {
       if (pending.mcpSocket !== socket) {
@@ -731,6 +763,7 @@ export class EdaBridgeServer {
       client.close(1001, 'Bridge server closed');
     }
     this.peers.clear();
+    this.reconnectBarriers.clear();
     this.clientIdBySocket.clear();
     this.mcpClients.clear();
     this.wss?.close();

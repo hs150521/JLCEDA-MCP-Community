@@ -354,18 +354,32 @@ try {
     source: 'reconnect-target',
     path: message.path,
   }));
-  const reconnectPending = reconnectServer.request('/bridge/test/reconnect-pending', {}, 2000);
+  const reconnectPending = reconnectServer.request('/bridge/jlceda/api/invoke', {}, 1000);
   const reconnectPendingAssertion = assert.rejects(reconnectPending, /reconnected/);
   await waitUntil(() => receivedReconnectTask);
   reconnectNew = await registerEda(
     `ws://127.0.0.1:${reconnectPort}/bridge/ws${tokenQuery}`,
     'reconnect-page',
   );
+  attachTaskResponder(reconnectNew.socket, 'reconnect-page', (message) => ({
+    source: 'reconnect-page-new',
+    path: message.path,
+  }));
   await reconnectPendingAssertion;
   await reconnectServer.request('/bridge/admin/select-client', { clientId: 'reconnect-target' }, 2000);
   assert.deepEqual(
     await reconnectServer.request('/bridge/test/reconnect-recovered', {}, 2000),
     { source: 'reconnect-target', path: '/bridge/test/reconnect-recovered' },
+  );
+  await reconnectServer.request('/bridge/admin/select-client', { clientId: 'reconnect-page' }, 2000);
+  await assert.rejects(
+    reconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    /quarantined after reconnect/,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 1050));
+  assert.deepEqual(
+    await reconnectServer.request('/bridge/jlceda/api/invoke', {}, 2000),
+    { source: 'reconnect-page-new', path: '/bridge/jlceda/api/invoke' },
   );
   reconnectOld.socket.close();
   reconnectOld = undefined;

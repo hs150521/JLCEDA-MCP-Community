@@ -2,6 +2,7 @@
 
 - Clean up pending bridge requests when their MCP WebSocket disconnects, so a stale caller cannot lock `bridge_select_client` until the queue timeout.
 - Reject requests tied to an EDA socket when the same page reconnects, preventing stale results from crossing connection generations.
+- Quarantine a reconnecting page for the previous EDA task's execution window before admitting new requests, preventing uncancellable mutations from overlapping.
 - Preserve affected constraint items when the EDA returns differential-pair read-backs as a name-keyed object.
 
 ## 未发布
