@@ -6,6 +6,8 @@
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
 ## 2.1 development
 
+- Add `pcb_layer_query`, `pcb_realtime_drc`, exact `component_select.properties` search, and JRouter auto-route output.
+- Add `manufacture_templates_query` and `manufacture_export.template` for selecting official BOM templates.
 - Add the read-only `pcb_drc_check` MCP tool with strict checking and structured violation results.
 - Add `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query` tool definitions and synchronized routes.
 - Expose supported PCB auto-routing controls from `@jlceda/pro-api-types@0.4.15`.

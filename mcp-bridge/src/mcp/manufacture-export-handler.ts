@@ -20,6 +20,7 @@ const PCB_METHODS = new Set([
 	'interactive_bom',
 	'dsn',
 	'auto_route_json',
+	'auto_route_jrouter',
 	'auto_layout_json',
 	'altium',
 	'pads',
@@ -81,13 +82,14 @@ async function encodeBlob(blob: unknown, includeData: boolean): Promise<Record<s
 function resolveCall(domain: ExportDomain, kind: string, input: Record<string, unknown>): { method: string; args: unknown[] } {
 	const fileName = optionalString(input, 'fileName');
 	const fileType = optionalString(input, 'fileType');
+	const template = optionalString(input, 'template');
 	const unit = optionalString(input, 'unit');
 	if (domain === 'pcb') {
 		if (!PCB_METHODS.has(kind))
 			throw new TypeError(`Unsupported PCB export kind: ${kind}.`);
 		const calls: Record<string, { method: string; args: unknown[] }> = {
 			'gerber': { method: 'getGerberFile', args: [fileName, undefined, unit] },
-			'bom': { method: 'getBomFile', args: [fileName, fileType] },
+			'bom': { method: 'getBomFile', args: [fileName, fileType, template] },
 			'netlist': { method: 'getNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
 			'pick_and_place': { method: 'getPickAndPlaceFile', args: [fileName, fileType, unit] },
 			'3d': { method: 'get3DFile', args: [fileName, fileType] },
@@ -101,6 +103,7 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 			'interactive_bom': { method: 'getInteractiveBomFile', args: [fileName] },
 			'dsn': { method: 'getDsnFile', args: [fileName] },
 			'auto_route_json': { method: 'getAutoRouteJsonFile', args: [fileName] },
+			'auto_route_jrouter': { method: 'getAutoRouteJsonFileForJRouter', args: [fileName] },
 			'auto_layout_json': { method: 'getAutoLayoutJsonFile', args: [fileName] },
 			'altium': { method: 'getAltiumDesignerFile', args: [fileName] },
 			'pads': { method: 'getPadsFile', args: [fileName] },
@@ -113,7 +116,7 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 	if (!SCHEMATIC_METHODS.has(kind))
 		throw new TypeError(`Unsupported schematic export kind: ${kind}.`);
 	const calls: Record<string, { method: string; args: unknown[] }> = {
-		bom: { method: 'getBomFile', args: [fileName, fileType] },
+		bom: { method: 'getBomFile', args: [fileName, fileType, template] },
 		netlist: { method: 'getNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
 		simulation_netlist: { method: 'getSimulationNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
 		document: { method: 'getExportDocumentFile', args: [fileName, fileType, undefined, optionalString(input, 'documentScope')] },

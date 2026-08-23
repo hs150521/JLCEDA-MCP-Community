@@ -45,6 +45,14 @@ interface LibDeviceApi {
 		itemsOfPage?: number,
 		page?: number,
 	) => Promise<unknown[]>;
+	searchByProperties?: (
+		properties: Record<string, string>,
+		libraryUuid?: string,
+		classification?: string[],
+		symbolType?: unknown,
+		itemsOfPage?: number,
+		page?: number,
+	) => Promise<unknown[]>;
 	getByLcscIds?: (
 		lcscIds: string,
 		libraryUuid?: string,
@@ -147,8 +155,31 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 	}
 
 	const keyword = String(payload.keyword ?? '').trim();
+	const rawProperties = payload.properties;
+	let properties: Record<string, string> | undefined;
+	if (rawProperties !== undefined) {
+		if (!isPlainObjectRecord(rawProperties)) {
+			throw new TypeError('properties must be an object.');
+		}
+		const allowedProperties = ['name', 'value', 'symbolName', 'footprintName', 'supplierFootprint', 'supplierId', 'partNumber', 'partCode'];
+		properties = {};
+		for (const key of allowedProperties) {
+			if (rawProperties[key] !== undefined) {
+				if (typeof rawProperties[key] !== 'string' || rawProperties[key].trim().length === 0) {
+					throw new TypeError(`properties.${key} must be a non-empty string.`);
+				}
+				properties[key] = rawProperties[key].trim();
+			}
+		}
+		if (Object.keys(properties).length === 0) {
+			throw new TypeError('properties must contain at least one supported field.');
+		}
+	}
+	if (keyword.length > 0 && properties) {
+		throw new TypeError('Provide either keyword or properties, not both.');
+	}
 	debugLog('[DEBUG] component-select keyword:', keyword);
-	if (keyword.length === 0) {
+	if (keyword.length === 0 && !properties) {
 		throw new Error('component_select 缺少 keyword 参数。');
 	}
 
@@ -165,7 +196,15 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 
 	let rawResults: unknown[];
 	try {
-		rawResults = await libDevice.search(keyword, undefined, undefined, undefined, limit, page);
+		if (properties) {
+			if (typeof libDevice.searchByProperties !== 'function') {
+				throw new TypeError('EDA lib_Device.searchByProperties API is unavailable in this client version.');
+			}
+			rawResults = await libDevice.searchByProperties(properties, undefined, undefined, undefined, limit, page);
+		}
+		else {
+			rawResults = await libDevice.search(keyword, undefined, undefined, undefined, limit, page);
+		}
 		debugLog('[DEBUG] component-select search returned:', Array.isArray(rawResults) ? rawResults.length : 'not-array', 'items');
 	}
 	catch (error: unknown) {
@@ -175,6 +214,14 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 
 	let usedLcscPartNumberLookup = false;
 	let fallbackLibraryUuid = '';
+	if (properties && rawResults.length > 0 && rawResults.some(item => !isPlainObjectRecord(item) || typeof item.libraryUuid !== 'string' || item.libraryUuid.trim().length === 0)) {
+		try {
+			fallbackLibraryUuid = String(await getSystemLibraryUuidApi().getSystemLibraryUuid() ?? '').trim();
+		}
+		catch (error: unknown) {
+			debugLog('[DEBUG] component-select system library lookup failed:', error);
+		}
+	}
 	if (rawResults.length === 0 && LCSC_PART_NUMBER_PATTERN.test(keyword) && typeof libDevice.getByLcscIds === 'function') {
 		usedLcscPartNumberLookup = true;
 		try {
@@ -223,6 +270,7 @@ export async function handleComponentSelectTask(payload: unknown): Promise<unkno
 	return {
 		ok: true,
 		status: usedLcscPartNumberLookup ? 'lcsc_part_match' : 'indexed_match',
+		searchMode: properties ? 'properties' : 'keyword',
 		selection,
 	};
 }

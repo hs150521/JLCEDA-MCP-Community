@@ -154,6 +154,22 @@
           "type": "string",
           "description": "器件搜索关键词或 LCSC C 编号。对于电阻/电容/电感，必须带单位（如 1kΩ、100nF、10uH）。"
         },
+        "properties": {
+          "type": "object",
+          "description": "Exact 0.4.15 device search fields. supplierId accepts an LCSC C number.",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "value": { "type": "string", "minLength": 1 },
+            "symbolName": { "type": "string", "minLength": 1 },
+            "footprintName": { "type": "string", "minLength": 1 },
+            "supplierFootprint": { "type": "string", "minLength": 1 },
+            "supplierId": { "type": "string", "minLength": 1 },
+            "partNumber": { "type": "string", "minLength": 1 },
+            "partCode": { "type": "string", "minLength": 1 }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
         "limit": {
           "type": "integer",
           "minimum": 2,
@@ -162,8 +178,9 @@
           "description": "返回候选数量，默认 5。"
         }
       },
-      "required": [
-        "keyword"
+      "anyOf": [
+        { "required": ["keyword"] },
+        { "required": ["properties"] }
       ]
     }
   },
@@ -714,6 +731,37 @@
     }
   },
   {
+    "name": "pcb_layer_query",
+    "description": "Read PCB layers, current layer, copper count, or EDA v4.2 physical stacking configurations.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["layers", "current", "physical_stacking"], "default": "layers" },
+        "configurationName": { "type": "string", "minLength": 1 },
+        "physicalProps": {
+          "type": "object",
+          "properties": {
+            "numberOfLayers": { "type": "integer", "minimum": 2, "maximum": 32, "multipleOf": 2 },
+            "substrateMaterial": { "type": "string", "enum": ["Common", "FPC Flexible"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "pcb_realtime_drc",
+    "description": "Read or explicitly control the PCB real-time DRC state exposed by EDA v4.2.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["status", "start", "stop"], "default": "status" }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "design_compare",
     "description": "Compare schematic, PCB, or netlist sources through the official EDA comparison APIs.",
     "inputSchema": {
@@ -771,10 +819,11 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] },
         "kind": {
           "type": "string",
-          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "dxf", "pdf", "ipc_d356a", "ipc_2581c", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "dxf", "pdf", "ipc_d356a", "ipc_2581c", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_route_jrouter", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
         },
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string" },
+        "template": { "type": "string", "minLength": 1 },
         "netlistType": { "type": "string", "enum": ["Allegro", "PADS", "Protel2", "JLCEDA", "Ngspice"] },
         "unit": { "type": "string", "enum": ["mm", "in", "mil"] },
         "documentScope": { "type": "string", "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] },
@@ -782,6 +831,18 @@
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
       "required": ["domain", "kind"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "manufacture_templates_query",
+    "description": "List the BOM templates available in the current PCB or schematic document.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "domain": { "type": "string", "enum": ["pcb", "schematic"] }
+      },
+      "required": ["domain"],
       "additionalProperties": false
     }
   }
