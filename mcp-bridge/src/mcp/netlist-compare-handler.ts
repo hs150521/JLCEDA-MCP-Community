@@ -24,14 +24,14 @@ export async function handleNetlistCompareTask(payload: unknown): Promise<unknow
 	if (!isPlainObjectRecord(api) || typeof api.netlistComparison !== 'function') {
 		throw new TypeError('EDA sys_Tool.netlistComparison API is unavailable in this client version.');
 	}
-	const differences = await toSerializableAsync(await (api.netlistComparison as (a: NetlistSource, b: NetlistSource) => Promise<unknown>).call(api, sourceA, sourceB));
-	if (!Array.isArray(differences)) {
-		return { ok: true, sourceA, sourceB, differenceCount: 0, differences };
+	const rawDifferences = await (api.netlistComparison as (a: NetlistSource, b: NetlistSource) => Promise<unknown>).call(api, sourceA, sourceB);
+	if (!Array.isArray(rawDifferences)) {
+		return { ok: true, sourceA, sourceB, differenceCount: 0, differences: await toSerializableAsync(rawDifferences) };
 	}
-	const byType = differences.reduce<Record<string, number>>((counts, difference) => {
+	const byType = rawDifferences.reduce<Record<string, number>>((counts, difference) => {
 		const type = isPlainObjectRecord(difference) && typeof difference.type === 'string' ? difference.type : 'Unknown';
 		counts[type] = (counts[type] ?? 0) + 1;
 		return counts;
 	}, {});
-	return { ok: differences.length === 0, sourceA, sourceB, differenceCount: differences.length, byType, differences };
+	return { ok: rawDifferences.length === 0, sourceA, sourceB, differenceCount: rawDifferences.length, byType, differences: await toSerializableAsync(rawDifferences), truncated: rawDifferences.length > 120 };
 }

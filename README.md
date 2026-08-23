@@ -3,9 +3,7 @@
 ## 2.1 development tools
 
 - `pcb_drc_check`: read-only PCB design-rule checking with structured violations.
-- `pcb_auto_layout`: run the EDA PCB auto-layout operation.
-- `pcb_auto_routing`: run PCB auto-routing with network, layer, corner-style, and optimization options.
-- `pcb_net_query` and `schematic_net_query`: query active PCB or project schematic networks with filtering and limits.
+- `pcb_net_query`: query active PCB networks with filtering and limits.
 - `schematic_drc_check`, `pcb_constraints_query`, `project_info`, and `netlist_compare`: read-only design review and project identity tools.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
 - `pcb_layer_query`: inspect PCB layers and EDA v4.2 physical stacking configurations.

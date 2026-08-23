@@ -14,7 +14,7 @@
 - Add `all`, `names`, and exact `getNet` modes to schematic/PCB network queries.
 - Add schematic BOM assembly-variant selection to `manufacture_export`.
 - Add the read-only `pcb_drc_check` MCP tool with strict checking and structured violation results.
-- Add `pcb_auto_layout`, `pcb_auto_routing`, `pcb_net_query`, and `schematic_net_query` tool definitions and synchronized routes.
+- Add `pcb_net_query` tool definitions and synchronized routes.
 - Expose supported PCB auto-routing controls from `@jlceda/pro-api-types@0.4.15`.
 - Expose official LCSC C-number mapping and simulation-model search through `library_search`.
 

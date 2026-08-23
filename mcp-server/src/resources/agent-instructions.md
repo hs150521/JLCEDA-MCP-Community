@@ -23,9 +23,6 @@
 
 - `pcb_drc_check`：只读检查当前 PCB 的设计规则。默认不打开 DRC UI；返回结构化违规列表。调用前确认当前页面是 PCB。
 - `pcb_net_query`：只读查询当前 PCB 网络，可用 `query` 和 `limit` 缩小结果范围。
-- `schematic_net_query`：只读查询当前工程原理图网络；若当前客户端不支持该 API，应使用 `schematic_review` 或报告明确的版本限制，不得用猜测参数重试。
-- `pcb_auto_layout`：写操作，可能移动整张 PCB 的器件。执行前保存工程，执行后重新读取或由用户检查结果。
-- `pcb_auto_routing`：写操作，可能新增或修改导线/过孔。执行前保存工程；只传入已确认的网络、层和策略参数，完成后运行 `pcb_drc_check`。
 - 自动布局/布线可能运行较久。超时后 Bridge 会隔离当前客户端，直到底层 EDA Promise 结束；在此期间不得通过 `api_invoke` 重试写操作。
 - `schematic_drc_check`：只读检查当前原理图页；默认不打开 UI，返回结构化违规列表。
 - `pcb_constraints_query`：只读读取当前 PCB 的规则、网络类、差分对、等长组或焊盘对组。需要 PCB 页面。
@@ -41,7 +38,7 @@
 - `library_search`：搜索官方 device、symbol、footprint 或 simulation model 库；device 可使用 `supplierId` 等精确字段，也可用官方 `lcscIds` 将 LCSC C 编号映射到 EasyEDA 器件（支持批量查询），symbol/footprint 使用 `properties.name`，`keyword`、`properties` 与 `lcscIds` 必须三选一。
 - `pcb_constraints_query`：按需读取当前规则、命名规则配置、网络规则、网络间规则、区域规则或约束组；查询命名规则配置时必须提供 `configurationName`。
 - `pcb_document_action`：读取 PCB 计算状态或执行用户明确要求的保存、原理图变更导入、JSON/SES 自动布线/布局导入；导入文件必须使用 Base64，执行后应运行 DRC 并让用户确认结果。
-- `pcb_net_query` / `schematic_net_query`：默认返回网络详情；只需名称时使用 `mode: "names"`，查询单个官方网络时使用 `mode: "exact"` 与原始大小写的 `query`。
+- `pcb_net_query`：默认返回网络详情；只需名称时使用 `mode: "names"`，查询单个官方网络时使用 `mode: "exact"` 与原始大小写的 `query`。
 
 ## 透传 API 工具约束
 

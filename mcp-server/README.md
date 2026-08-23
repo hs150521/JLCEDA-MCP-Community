@@ -2,7 +2,7 @@
 
 ## 2.1 development tools
 
-The server exposes read-only PCB DRC, network-query, library-search, and manufacturing-query tools plus guarded PCB auto-layout and auto-routing tools. `library_search` supports exact 0.4.15 device properties, official single/batch LCSC C-number mapping, and simulation-model lookup. Auto-routing accepts the supported `0.4.15` API options (`routingNets`, `ignoreNets`, `cornerStyle`, `existingPrimitiveMode`, `optimization`, and `layers`).
+The server exposes read-only PCB DRC, network-query, library-search, and manufacturing-query tools plus guarded document import tools. `library_search` supports exact 0.4.15 device properties, official single/batch LCSC C-number mapping, and simulation-model lookup. PCB auto-layout and auto-routing are not advertised because those methods are absent from the pinned 0.4.15 PCB API surface.
 
 公开的 `timeoutMs` 参数会传递到 WebSocket 请求。EDA 修改超时后，Bridge 仍会
 保持串行队列锁定，直到底层 API 真正结束；请求排队时间不计入 API 执行超时。

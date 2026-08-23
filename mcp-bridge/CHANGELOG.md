@@ -3,7 +3,7 @@
 ### Added
 
 - Add structured PCB and schematic DRC tools with non-UI defaults.
-- Add PCB auto-layout and auto-routing tools, including supported `0.4.15` routing options.
+- Defer PCB auto-layout and auto-routing MCP tools until the pinned API surface exposes those methods; external route/layout files remain available through `pcb_document_action`.
 - Extend `library_search` with official batch LCSC C-number mapping and simulation-model search.
 - Add PCB/schematic network queries, PCB constraints, project information, netlist comparison, and whitelisted manufacturing exports.
 - Add exact device-property search, PCB layer/physical stacking queries, real-time DRC control, and JRouter auto-route export.

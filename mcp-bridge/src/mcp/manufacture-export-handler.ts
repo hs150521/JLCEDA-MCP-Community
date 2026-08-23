@@ -15,7 +15,6 @@ const PCB_METHODS = new Set([
 	'dxf',
 	'pdf',
 	'ipc_d356a',
-	'ipc_2581c',
 	'open_database',
 	'interactive_bom',
 	'dsn',
@@ -74,9 +73,9 @@ async function encodeBlob(blob: unknown, includeData: boolean): Promise<Record<s
 	const output: Record<string, unknown> = { kind: 'file', name: file.name ?? '', type: file.type, size: file.size };
 	const isText = file.type.startsWith('text/') || file.type.includes('csv') || file.name?.endsWith('.net') === true;
 	if (isText) {
-		const text = await file.text();
-		output.preview = text.slice(0, MAX_TEXT_PREVIEW);
-		if (text.length > MAX_TEXT_PREVIEW)
+		const previewText = await file.slice(0, MAX_TEXT_PREVIEW).text();
+		output.preview = previewText;
+		if (file.size > MAX_TEXT_PREVIEW)
 			output.previewTruncated = true;
 	}
 	if (includeData) {
@@ -111,7 +110,6 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 			'dxf': { method: 'getDxfFile', args: [fileName] },
 			'pdf': { method: 'getPdfFile', args: [fileName] },
 			'ipc_d356a': { method: 'getIpcD356AFile', args: [fileName] },
-			'ipc_2581c': { method: 'getIpc2581CFile', args: [fileName, fileType] },
 			'open_database': { method: 'getOpenDatabaseDoublePlusFile', args: [fileName, unit] },
 			'interactive_bom': { method: 'getInteractiveBomFile', args: [fileName] },
 			'dsn': { method: 'getDsnFile', args: [fileName] },

@@ -19,20 +19,21 @@ export async function handleSchematicDrcCheckTask(payload: unknown): Promise<unk
 	if (!isPlainObjectRecord(api) || typeof api.check !== 'function') {
 		throw new TypeError('EDA sch_Drc.check API is unavailable in this client version.');
 	}
-	const result = await toSerializableAsync(await (api.check as SchematicDrcApi['check']).call(api, strict, showUi, true));
-	const errors = Array.isArray(result) ? result : [];
-	const errorCount = errors.reduce((total, error) => {
+	const rawResult = await (api.check as SchematicDrcApi['check']).call(api, strict, showUi, true);
+	const rawErrors = Array.isArray(rawResult) ? rawResult : [];
+	const errorCount = rawErrors.reduce((total, error) => {
 		if (isPlainObjectRecord(error) && typeof error.count === 'number' && Number.isFinite(error.count)) {
 			return total + Math.max(0, Math.trunc(error.count));
 		}
 		return total + 1;
 	}, 0);
 	return {
-		ok: Array.isArray(result) ? errors.length === 0 : result === true,
+		ok: Array.isArray(rawResult) ? rawErrors.length === 0 : rawResult === true,
 		strict,
 		showUi,
-		resultType: Array.isArray(result) ? 'detailed' : typeof result,
+		resultType: Array.isArray(rawResult) ? 'detailed' : typeof rawResult,
 		errorCount,
-		errors,
+		errors: await toSerializableAsync(rawErrors),
+		truncated: rawErrors.length > 120,
 	};
 }

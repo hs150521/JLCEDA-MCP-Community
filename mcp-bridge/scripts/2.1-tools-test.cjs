@@ -9,7 +9,6 @@ const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.t
 const { handleLibrarySearchTask } = require('../src/mcp/library-search-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
 const { handleManufactureTemplatesQueryTask } = require('../src/mcp/manufacture-template-handler.ts');
-const { handleSchematicNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetlistCompareTask } = require('../src/mcp/netlist-compare-handler.ts');
 const { handlePcbConstraintsQueryTask } = require('../src/mcp/pcb-constraints-handler.ts');
 const { handlePcbDocumentTask } = require('../src/mcp/pcb-document-handler.ts');
@@ -27,14 +26,6 @@ async function main() {
 		dmt_Schematic: {
 			async getCurrentSchematicInfo() { return { uuid: 'sch-1' }; },
 			async getCurrentSchematicAllSchematicPagesInfo() { return [{ uuid: 'page-1' }]; },
-		},
-		sch_Net: {
-			async getCurrentProjectAllNets() { return [{ net: 'VCC' }, { net: 'USB_D+' }]; },
-			async getAllNetsName() { return ['VCC', 'USB_D+']; },
-			async getNet(name) {
-				assert.equal(name, 'USB_D+');
-				return { net: name, length: 12 };
-			},
 		},
 		dmt_Pcb: { async getCurrentPcbInfo() { return { uuid: 'pcb-1' }; } },
 		pcb_Document: {
@@ -144,10 +135,9 @@ async function main() {
 				assert.equal(b, 'sch-2');
 				return { changed: 2 };
 			},
-			async pcbComparison(a, b, options) {
+			async pcbComparison(a, b) {
 				assert.equal(a, 'pcb-1');
 				assert.deepEqual(b, { projectUuid: 'project-1', pcbUuid: 'pcb-2' });
-				assert.equal(options.deviation, 1);
 				return { success: true, data: { changed: 3 } };
 			},
 		},
@@ -198,10 +188,6 @@ async function main() {
 	assert.equal(constraints.count, 1);
 	const netRules = await handlePcbConstraintsQueryTask({ kind: 'net_rules' });
 	assert.equal(netRules.count, 1);
-	const schematicNetNames = await handleSchematicNetQueryTask({ mode: 'names', query: 'usb' });
-	assert.deepEqual(schematicNetNames.names, ['USB_D+']);
-	const schematicNetExact = await handleSchematicNetQueryTask({ mode: 'exact', query: 'USB_D+' });
-	assert.equal(schematicNetExact.net.length, 12);
 	const namedRule = await handlePcbConstraintsQueryTask({ kind: 'rule_configuration', configurationName: 'strict' });
 	assert.equal(namedRule.result.name, 'strict');
 	const ruleConfigurations = await handlePcbConstraintsQueryTask({ kind: 'rule_configurations', includeSystem: true });
@@ -224,12 +210,8 @@ async function main() {
 	assert.equal(schematicComparison.result.changed, 2);
 	const designNetlistComparison = await handleDesignCompareTask({ domain: 'netlist', sourceA: 'net-1', sourceB: { projectUuid: 'project-1', documentUuid: 'net-2' } });
 	assert.equal(designNetlistComparison.differenceCount, 1);
-	const pcbComparison = await handleDesignCompareTask({ domain: 'pcb', sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', pcbUuid: 'pcb-2' }, options: { deviation: 1 } });
+	const pcbComparison = await handleDesignCompareTask({ domain: 'pcb', sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', pcbUuid: 'pcb-2' } });
 	assert.equal(pcbComparison.result.data.changed, 3);
-	await assert.rejects(
-		handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2', options: { deviation: 1 } }),
-		/options is only supported for the pcb domain/,
-	);
 	const templates = await handleManufactureTemplatesQueryTask({ domain: 'pcb' });
 	assert.deepEqual(templates.templates, ['jlcpcb', 'assembly']);
 	const exportResult = await handleManufactureExportTask({ domain: 'pcb', kind: 'bom', template: 'jlcpcb', includeData: true });

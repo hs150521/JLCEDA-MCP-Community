@@ -26,11 +26,10 @@ import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleLibrarySearchTask } from '../mcp/library-search-handler.ts';
 import { handleManufactureExportTask } from '../mcp/manufacture-export-handler.ts';
 import { handleManufactureTemplatesQueryTask } from '../mcp/manufacture-template-handler.ts';
-import { handlePcbNetQueryTask, handleSchematicNetQueryTask } from '../mcp/net-query-handler.ts';
+import { handlePcbNetQueryTask } from '../mcp/net-query-handler.ts';
 import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
 import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleNetlistCompareTask } from '../mcp/netlist-compare-handler.ts';
-import { handlePcbAutoLayoutTask, handlePcbAutoRoutingTask } from '../mcp/pcb-auto-handler.ts';
 import { handlePcbConstraintsQueryTask } from '../mcp/pcb-constraints-handler.ts';
 import { handlePcbDocumentTask } from '../mcp/pcb-document-handler.ts';
 import { handlePcbDrcCheckTask } from '../mcp/pcb-drc-handler.ts';
@@ -78,10 +77,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/manufacture/export': handleManufactureExportTask,
 	'/bridge/jlceda/manufacture/templates-query': handleManufactureTemplatesQueryTask,
 	'/bridge/jlceda/library/search': handleLibrarySearchTask,
-	'/bridge/jlceda/pcb/auto-layout': handlePcbAutoLayoutTask,
-	'/bridge/jlceda/pcb/auto-routing': handlePcbAutoRoutingTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,
-	'/bridge/jlceda/net/query-schematic': handleSchematicNetQueryTask,
 };
 
 let transport: BridgeTransport | undefined;

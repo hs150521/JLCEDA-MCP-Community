@@ -33,11 +33,11 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 		? api.getCurrentProjectAllNets
 		: api.getAllNets;
 	if (mode === 'names' && typeof api.getAllNetsName === 'function') {
-		const names = await toSerializableAsync(await (api.getAllNetsName as () => Promise<unknown>).call(api));
-		if (!Array.isArray(names))
+		const rawNames = await (api.getAllNetsName as () => Promise<unknown>).call(api);
+		if (!Array.isArray(rawNames))
 			throw new TypeError(`EDA ${moduleName}.getAllNetsName returned an invalid result.`);
-		const filteredNames = names.filter(name => !query || String(name).toLowerCase().includes(query)).slice(0, limit);
-		return { ok: true, domain, mode: mode as NetQueryMode, query, total: names.length, returned: filteredNames.length, names: filteredNames };
+		const filteredNames = rawNames.filter(name => !query || String(name).toLowerCase().includes(query)).slice(0, limit);
+		return { ok: true, domain, mode: mode as NetQueryMode, query, total: rawNames.length, returned: Math.min(filteredNames.length, 120), names: await toSerializableAsync(filteredNames), truncated: filteredNames.length > 120 || rawNames.length > filteredNames.length };
 	}
 	if (mode === 'exact' && typeof api.getNet === 'function') {
 		const net = await toSerializableAsync(await (api.getNet as (name: string) => Promise<unknown>).call(api, queryText));
@@ -46,14 +46,14 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 	if (typeof getNets !== 'function') {
 		throw new TypeError(`EDA ${moduleName} network query API is unavailable in this client version.`);
 	}
-	const allNets = await toSerializableAsync(await (getNets as () => Promise<unknown>).call(api));
-	if (!Array.isArray(allNets)) {
+	const rawNets = await (getNets as () => Promise<unknown>).call(api);
+	if (!Array.isArray(rawNets)) {
 		throw new TypeError(`EDA ${moduleName}.getAllNets returned an invalid result.`);
 	}
-	const nets = allNets
+	const filteredNets = rawNets
 		.filter(net => !query || JSON.stringify(net).toLowerCase().includes(query))
 		.slice(0, limit);
-	return { ok: true, domain, mode: mode as NetQueryMode, query, total: allNets.length, returned: nets.length, nets };
+	return { ok: true, domain, mode: mode as NetQueryMode, query, total: rawNets.length, returned: Math.min(filteredNets.length, 120), nets: await toSerializableAsync(filteredNets), truncated: filteredNets.length > 120 || rawNets.length > filteredNets.length };
 }
 
 export const handleSchematicNetQueryTask = (payload: unknown) => handleNetQueryTask(payload, 'schematic');
