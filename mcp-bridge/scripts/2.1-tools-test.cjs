@@ -9,6 +9,7 @@ const { handleDesignCompareTask } = require('../src/mcp/design-compare-handler.t
 const { handleLibrarySearchTask } = require('../src/mcp/library-search-handler.ts');
 const { handleManufactureExportTask } = require('../src/mcp/manufacture-export-handler.ts');
 const { handleManufactureTemplatesQueryTask } = require('../src/mcp/manufacture-template-handler.ts');
+const { handlePcbNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetlistCompareTask } = require('../src/mcp/netlist-compare-handler.ts');
 const { handlePcbConstraintsQueryTask } = require('../src/mcp/pcb-constraints-handler.ts');
 const { handlePcbDocumentTask } = require('../src/mcp/pcb-document-handler.ts');
@@ -28,8 +29,33 @@ async function main() {
 			async getCurrentSchematicAllSchematicPagesInfo() { return [{ uuid: 'page-1' }]; },
 		},
 		dmt_Pcb: { async getCurrentPcbInfo() { return { uuid: 'pcb-1' }; } },
+		pcb_Net: {
+			async getNet(name) {
+				assert.equal(name, 'USB_D+');
+				return { name, color: '#00ff00' };
+			},
+			async getNetLength(name) {
+				assert.equal(name, 'USB_D+');
+				return 42.5;
+			},
+			async getNetColor(name) {
+				assert.equal(name, 'USB_D+');
+				return '#00ff00';
+			},
+			async getAllPrimitivesByNet(name, primitiveTypes) {
+				assert.equal(name, 'USB_D+');
+				assert.deepEqual(primitiveTypes, ['TRACK', 'VIA']);
+				return [{ uuid: 'track-1', type: 'TRACK' }];
+			},
+		},
 		pcb_Document: {
 			async getCalculatingRatlineStatus() { return 'active'; },
+			async startCalculatingRatline() { return true; },
+			async stopCalculatingRatline() { return true; },
+			async clearRouting(type) {
+				assert.equal(type, 'connection');
+				return true;
+			},
 			async getCanvasUpdateCalculationStatus() { return 'idle'; },
 			async getCurrentFilterConfiguration() { return { tracks: true }; },
 			async save() { return true; },
@@ -61,26 +87,18 @@ async function main() {
 				return [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }];
 			},
 			async getByLcscIds(ids, libraryUuid, allowMultiMatch) {
-				assert.deepEqual(ids, ['C1523', 'C17168']);
+				assert.ok(Array.isArray(ids));
 				assert.equal(libraryUuid, undefined);
 				assert.equal(allowMultiMatch, true);
-				return [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-2', name: 'C17168', supplierId: 'C17168' }];
-			},
-		},
-		lib_SimulationModel: {
-			async search(keyword, libraryUuid, classification, modelType, limit, page) {
-				assert.equal(keyword, 'LM358');
-				assert.equal(libraryUuid, undefined);
-				assert.equal(modelType, 'Ngspice');
-				assert.equal(limit, 5);
-				assert.equal(page, 1);
-				return [{ uuid: 'model-1', name: 'LM358', type: 'Ngspice' }];
+				return ids.includes('C17168')
+					? [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-2', name: 'C17168', supplierId: 'C17168' }]
+					: [{ uuid: 'device-1', name: 'R0402', supplierId: 'C1523' }, { uuid: 'device-duplicate', name: 'R0402-alt', supplierId: 'C1523' }];
 			},
 		},
 		lib_LibrariesList: { async getSystemLibraryUuid() { return 'system-library-1'; } },
 		lib_Symbol: {
-			async searchByProperties(properties) {
-				assert.deepEqual(properties, { name: 'LM358' });
+			async search(keyword) {
+				assert.equal(keyword, 'LM358');
 				return [{ uuid: 'symbol-1', libraryUuid: 'system-library-1', name: 'LM358' }];
 			},
 		},
@@ -105,6 +123,10 @@ async function main() {
 			async getNetByNetRules() { return { 'USB_D+|USB_D-': { clearance: 0.15 } }; },
 			async getRegionRules() { return [{ region: 'power', clearance: 0.3 }]; },
 			async getAllDifferentialPairs() { return [{ name: 'USB_P', positiveNet: 'D+', negativeNet: 'D-' }]; },
+			async getPadPairGroupMinWireLength(name) {
+				assert.equal(name, 'USB_PADS');
+				return [{ minLength: 12.5 }];
+			},
 			async getRealTimeDrcStatus() { return false; },
 			async startRealTimeDrc() { return true; },
 			async stopRealTimeDrc() { return true; },
@@ -149,7 +171,7 @@ async function main() {
 				return new Blob(['ref,value\nR1,1k\n'], { type: 'text/csv' });
 			},
 			async getBomTemplates() { return ['jlcpcb', 'assembly']; },
-			async getAutoRouteJsonFileForJRouter() { return new Blob(['{"routes":[]}'], { type: 'application/json' }); },
+			async getFlyingProbeTestFile() { return new Blob(['probe,data\nP1,ok\n'], { type: 'text/csv' }); },
 		},
 		sch_ManufactureData: {
 			async getBomTemplates() { return ['schematic-default']; },
@@ -178,16 +200,25 @@ async function main() {
 	const pcbDocumentStatus = await handlePcbDocumentTask({ action: 'status' });
 	assert.equal(pcbDocumentStatus.canvasUpdate, 'idle');
 	assert.equal((await handlePcbDocumentTask({ action: 'save' })).saved, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'start_ratline' })).changed, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'stop_ratline' })).changed, true);
+	assert.equal((await handlePcbDocumentTask({ action: 'clear_routing', routingType: 'connection' })).cleared, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_changes', uuid: 'sch-1' })).imported, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_route_json', fileName: 'route.json', dataBase64: 'e30=' })).bytes, 2);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_route_ses', fileName: 'route.ses', dataBase64: 'e30=' })).imported, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'import_auto_layout_json', fileName: 'layout.json', dataBase64: 'e30=' })).imported, true);
+	const pcbNetAnalysis = await handlePcbNetQueryTask({ mode: 'exact', query: 'USB_D+', analysis: { length: true, color: true, primitiveTypes: ['TRACK', 'VIA'] } });
+	assert.equal(pcbNetAnalysis.length, 42.5);
+	assert.equal(pcbNetAnalysis.color, '#00ff00');
+	assert.equal(pcbNetAnalysis.primitiveCount, 1);
 	const schDrc = await handleSchematicDrcCheckTask({});
 	assert.equal(schDrc.ok, true);
 	const constraints = await handlePcbConstraintsQueryTask({ kind: 'differential_pairs' });
 	assert.equal(constraints.count, 1);
 	const netRules = await handlePcbConstraintsQueryTask({ kind: 'net_rules' });
 	assert.equal(netRules.count, 1);
+	const padPairMinimum = await handlePcbConstraintsQueryTask({ kind: 'pad_pair_min_wire_length', padPairGroupName: 'USB_PADS' });
+	assert.equal(padPairMinimum.count, 1);
 	const namedRule = await handlePcbConstraintsQueryTask({ kind: 'rule_configuration', configurationName: 'strict' });
 	assert.equal(namedRule.result.name, 'strict');
 	const ruleConfigurations = await handlePcbConstraintsQueryTask({ kind: 'rule_configurations', includeSystem: true });
@@ -195,15 +226,15 @@ async function main() {
 	const exactComponent = await handleComponentSelectTask({ properties: { supplierId: 'C1523' }, limit: 2 });
 	assert.equal(exactComponent.searchMode, 'properties');
 	assert.equal(exactComponent.selection.candidates[0].libraryUuid, 'system-library-1');
-	const symbolSearch = await handleLibrarySearchTask({ kind: 'symbol', properties: { name: 'LM358' } });
+	const symbolSearch = await handleLibrarySearchTask({ kind: 'symbol', keyword: 'LM358' });
 	assert.equal(symbolSearch.items[0].uuid, 'symbol-1');
 	const footprintSearch = await handleLibrarySearchTask({ kind: 'footprint', keyword: 'SOIC-8' });
 	assert.equal(footprintSearch.items[0].name, 'SOIC-8');
 	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
 	assert.equal(lcscSearch.searchMode, 'lcsc_ids');
 	assert.equal(lcscSearch.items.length, 2);
-	const simulationSearch = await handleLibrarySearchTask({ kind: 'simulation_model', keyword: 'LM358', simulationModelType: 'Ngspice', limit: 5 });
-	assert.equal(simulationSearch.items[0].uuid, 'model-1');
+	const singleLcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523'], allowMultiMatch: true });
+	assert.equal(singleLcscSearch.items.length, 2);
 	const comparison = await handleNetlistCompareTask({ sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', documentUuid: 'pcb-2' } });
 	assert.equal(comparison.differenceCount, 1);
 	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });
@@ -223,8 +254,8 @@ async function main() {
 	assert.deepEqual(schematicTemplates.assemblyVariants, [{ text: 'Prototype', value: 'prototype' }]);
 	const schematicBom = await handleManufactureExportTask({ domain: 'schematic', kind: 'bom', template: 'schematic-default', assemblyVariantsConfig: { text: 'Prototype', value: 'prototype' } });
 	assert.equal(schematicBom.ok, true);
-	const jrouterExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'auto_route_jrouter' });
-	assert.equal(jrouterExport.ok, true);
+	const flyingProbeExport = await handleManufactureExportTask({ domain: 'pcb', kind: 'flying_probe_test' });
+	assert.equal(flyingProbeExport.ok, true);
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');
 }

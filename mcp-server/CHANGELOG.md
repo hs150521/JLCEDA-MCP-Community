@@ -6,17 +6,17 @@
 - `component_select` 支持直接传入 LCSC C 编号，并明确区分未关联 EasyEDA 器件库的商品与普通搜索未命中。
 ## 2.1 development
 
-- Add `pcb_layer_query`, `pcb_realtime_drc`, exact `component_select.properties` search, and JRouter auto-route output.
+- Add `pcb_layer_query`, `pcb_realtime_drc`, exact `component_select.properties` search, and external route/layout import support.
 - Add `manufacture_templates_query` and `manufacture_export.template` for selecting official BOM templates.
 - Add `library_search` for official device, symbol, and footprint searches.
 - Expand PCB constraint schema for rule configurations and structured routing-rule data.
 - Add `pcb_document_action` for controlled PCB document save and external routing/layout imports.
-- Add `all`, `names`, and exact `getNet` modes to schematic/PCB network queries.
+- Add `all`, `names`, and exact `getNet` modes to PCB network queries, with optional exact-net analysis.
 - Add schematic BOM assembly-variant selection to `manufacture_export`.
 - Add the read-only `pcb_drc_check` MCP tool with strict checking and structured violation results.
 - Add `pcb_net_query` tool definitions and synchronized routes.
-- Expose supported PCB auto-routing controls from `@jlceda/pro-api-types@0.4.15`.
-- Expose official LCSC C-number mapping and simulation-model search through `library_search`.
+- Keep PCB auto-routing controls out of the public tool list because the pinned client does not expose the methods; external route files remain supported.
+- Expose official LCSC C-number mapping through `library_search`; simulation-model search is deferred because the pinned client does not expose `lib_SimulationModel`.
 
 ## 2.2.0 - 2026-08-23
 

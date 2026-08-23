@@ -2,6 +2,37 @@ import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 type NetDomain = 'schematic' | 'pcb';
 type NetQueryMode = 'all' | 'names' | 'exact';
+interface PcbNetAnalysis {
+	length?: boolean;
+	color?: boolean;
+	primitives?: boolean;
+	primitiveTypes?: string[];
+}
+
+function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryMode, domain: NetDomain): PcbNetAnalysis | undefined {
+	if (input.analysis === undefined || input.analysis === null)
+		return undefined;
+	if (domain !== 'pcb' || mode !== 'exact' || !isPlainObjectRecord(input.analysis))
+		throw new TypeError('analysis is only supported as an object for exact PCB net queries.');
+	const analysis = input.analysis;
+	const output: PcbNetAnalysis = {};
+	for (const key of ['length', 'color', 'primitives']) {
+		if (analysis[key] !== undefined) {
+			if (typeof analysis[key] !== 'boolean')
+				throw new TypeError(`analysis.${key} must be a boolean.`);
+			(output as Record<string, unknown>)[key] = analysis[key];
+		}
+	}
+	if (analysis.primitiveTypes !== undefined) {
+		if (!Array.isArray(analysis.primitiveTypes) || analysis.primitiveTypes.some(value => typeof value !== 'string' || value.trim().length === 0))
+			throw new TypeError('analysis.primitiveTypes must be an array of non-empty strings.');
+		output.primitiveTypes = analysis.primitiveTypes.map(value => value.trim());
+		output.primitives = true;
+	}
+	if (Object.keys(output).length === 0)
+		throw new TypeError('analysis must request length, color, primitives, or primitiveTypes.');
+	return output;
+}
 
 export async function handleNetQueryTask(payload: unknown, domain: NetDomain): Promise<unknown> {
 	if (payload !== undefined && payload !== null && !isPlainObjectRecord(payload)) {
@@ -19,6 +50,7 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 	if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
 		throw new RangeError('limit must be an integer between 1 and 1000.');
 	}
+	const analysis = normalizePcbNetAnalysis(input, mode as NetQueryMode, domain);
 
 	const edaGlobal = (globalThis as unknown as { eda?: unknown }).eda;
 	if (!isPlainObjectRecord(edaGlobal)) {
@@ -41,7 +73,30 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 	}
 	if (mode === 'exact' && typeof api.getNet === 'function') {
 		const net = await toSerializableAsync(await (api.getNet as (name: string) => Promise<unknown>).call(api, queryText));
-		return { ok: true, domain, mode: mode as NetQueryMode, query, total: net === undefined || net === null ? 0 : 1, returned: net === undefined || net === null ? 0 : 1, net };
+		const result: Record<string, unknown> = { ok: true, domain, mode: mode as NetQueryMode, query, total: net === undefined || net === null ? 0 : 1, returned: net === undefined || net === null ? 0 : 1, net, ...(analysis ? { analysis } : {}) };
+		if (analysis && net !== undefined && net !== null) {
+			const rawApi = api as Record<string, unknown>;
+			if (analysis.length) {
+				if (typeof rawApi.getNetLength !== 'function')
+					throw new TypeError('EDA pcb_Net.getNetLength API is unavailable in this client version.');
+				result.length = await (rawApi.getNetLength as (name: string) => Promise<unknown>).call(api, queryText);
+			}
+			if (analysis.color) {
+				if (typeof rawApi.getNetColor !== 'function')
+					throw new TypeError('EDA pcb_Net.getNetColor API is unavailable in this client version.');
+				result.color = await toSerializableAsync(await (rawApi.getNetColor as (name: string) => Promise<unknown>).call(api, queryText));
+			}
+			if (analysis.primitives) {
+				if (typeof rawApi.getAllPrimitivesByNet !== 'function')
+					throw new TypeError('EDA pcb_Net.getAllPrimitivesByNet API is unavailable in this client version.');
+				const rawPrimitives = await (rawApi.getAllPrimitivesByNet as (name: string, types?: string[]) => Promise<unknown>).call(api, queryText, analysis.primitiveTypes);
+				const primitives = Array.isArray(rawPrimitives) ? rawPrimitives : [];
+				result.primitiveCount = primitives.length;
+				result.primitives = await toSerializableAsync(primitives);
+				result.primitivesTruncated = primitives.length > 120;
+			}
+		}
+		return result;
 	}
 	if (typeof getNets !== 'function') {
 		throw new TypeError(`EDA ${moduleName} network query API is unavailable in this client version.`);

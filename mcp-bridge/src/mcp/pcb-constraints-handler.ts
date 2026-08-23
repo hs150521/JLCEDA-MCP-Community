@@ -1,6 +1,6 @@
 import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
-type ConstraintKind = 'current_rules' | 'rule_configuration' | 'rule_configurations' | 'net_rules' | 'net_to_net_rules' | 'region_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups';
+type ConstraintKind = 'current_rules' | 'rule_configuration' | 'rule_configurations' | 'net_rules' | 'net_to_net_rules' | 'region_rules' | 'net_classes' | 'differential_pairs' | 'equal_length_groups' | 'pad_pair_groups' | 'pad_pair_min_wire_length';
 
 const METHOD_BY_KIND: Record<ConstraintKind, string> = {
 	current_rules: 'getCurrentRuleConfiguration',
@@ -13,6 +13,7 @@ const METHOD_BY_KIND: Record<ConstraintKind, string> = {
 	differential_pairs: 'getAllDifferentialPairs',
 	equal_length_groups: 'getAllEqualLengthNetGroups',
 	pad_pair_groups: 'getAllPadPairGroups',
+	pad_pair_min_wire_length: 'getPadPairGroupMinWireLength',
 };
 
 export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<unknown> {
@@ -34,17 +35,25 @@ export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<u
 		if (typeof input.configurationName !== 'string' || input.configurationName.trim().length === 0)
 			throw new TypeError('configurationName is required for rule_configuration.');
 	}
+	if (kind === 'pad_pair_min_wire_length') {
+		if (typeof input.padPairGroupName !== 'string' || input.padPairGroupName.trim().length === 0)
+			throw new TypeError('padPairGroupName is required for pad_pair_min_wire_length.');
+	}
 	if (kind !== 'rule_configuration' && input.configurationName !== undefined)
 		throw new TypeError('configurationName is only supported for rule_configuration.');
+	if (kind !== 'pad_pair_min_wire_length' && input.padPairGroupName !== undefined)
+		throw new TypeError('padPairGroupName is only supported for pad_pair_min_wire_length.');
 	if (kind !== 'rule_configurations' && input.includeSystem !== undefined)
 		throw new TypeError('includeSystem is only supported for rule_configurations.');
 	if (input.includeSystem !== undefined && typeof input.includeSystem !== 'boolean')
 		throw new TypeError('includeSystem must be a boolean.');
 	const args = kind === 'rule_configuration'
 		? [input.configurationName.trim()]
-		: kind === 'rule_configurations'
-			? [input.includeSystem === undefined ? false : input.includeSystem]
-			: [];
+		: kind === 'pad_pair_min_wire_length'
+			? [input.padPairGroupName.trim()]
+			: kind === 'rule_configurations'
+				? [input.includeSystem === undefined ? false : input.includeSystem]
+				: [];
 	const result = await toSerializableAsync(await (api[methodName] as (...args: unknown[]) => Promise<unknown>).call(api, ...args));
 	const items = Array.isArray(result) ? result : undefined;
 	return {

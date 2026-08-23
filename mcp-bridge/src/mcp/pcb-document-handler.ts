@@ -1,11 +1,14 @@
 import { isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
-type PcbDocumentAction = 'status' | 'save' | 'import_changes' | 'import_auto_route_json' | 'import_auto_route_ses' | 'import_auto_layout_json';
+type PcbDocumentAction = 'status' | 'save' | 'start_ratline' | 'stop_ratline' | 'clear_routing' | 'import_changes' | 'import_auto_route_json' | 'import_auto_route_ses' | 'import_auto_layout_json';
 
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 
 interface PcbDocumentApi {
 	getCalculatingRatlineStatus?: () => Promise<unknown>;
+	startCalculatingRatline?: () => Promise<unknown>;
+	stopCalculatingRatline?: () => Promise<unknown>;
+	clearRouting?: (type?: 'all' | 'net' | 'connection') => Promise<unknown>;
 	getCanvasUpdateCalculationStatus?: () => Promise<unknown>;
 	getCurrentFilterConfiguration?: () => Promise<unknown>;
 	save?: () => Promise<unknown>;
@@ -24,8 +27,8 @@ function getApi(): PcbDocumentApi {
 }
 
 function requiredAction(value: unknown): PcbDocumentAction {
-	if (value !== 'status' && value !== 'save' && value !== 'import_changes' && value !== 'import_auto_route_json' && value !== 'import_auto_route_ses' && value !== 'import_auto_layout_json')
-		throw new TypeError('action must be status, save, import_changes, import_auto_route_json, import_auto_route_ses, or import_auto_layout_json.');
+	if (value !== 'status' && value !== 'save' && value !== 'start_ratline' && value !== 'stop_ratline' && value !== 'clear_routing' && value !== 'import_changes' && value !== 'import_auto_route_json' && value !== 'import_auto_route_ses' && value !== 'import_auto_layout_json')
+		throw new TypeError('action must be status, save, start_ratline, stop_ratline, clear_routing, import_changes, import_auto_route_json, import_auto_route_ses, or import_auto_layout_json.');
 	return value;
 }
 
@@ -86,6 +89,21 @@ export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> 
 		if (typeof api.save !== 'function')
 			throw new TypeError('EDA pcb_Document.save API is unavailable in this client version.');
 		return { ok: true, action, saved: await toSerializableAsync(await api.save()) };
+	}
+	if (action === 'start_ratline' || action === 'stop_ratline') {
+		const methodName = action === 'start_ratline' ? 'startCalculatingRatline' : 'stopCalculatingRatline';
+		const method = api[methodName];
+		if (typeof method !== 'function')
+			throw new TypeError(`EDA pcb_Document.${methodName} API is unavailable in this client version.`);
+		return { ok: true, action, changed: await toSerializableAsync(await method.call(api)) };
+	}
+	if (action === 'clear_routing') {
+		if (typeof api.clearRouting !== 'function')
+			throw new TypeError('EDA pcb_Document.clearRouting API is unavailable in this client version.');
+		const routingType = payload.routingType === undefined ? 'all' : payload.routingType;
+		if (routingType !== 'all' && routingType !== 'net' && routingType !== 'connection')
+			throw new TypeError('routingType must be all, net, or connection.');
+		return { ok: true, action, routingType, cleared: await toSerializableAsync(await api.clearRouting(routingType)) };
 	}
 	if (action === 'import_changes') {
 		if (typeof api.importChanges !== 'function')

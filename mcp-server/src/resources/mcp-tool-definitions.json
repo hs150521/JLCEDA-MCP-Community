@@ -604,7 +604,19 @@
       "properties": {
         "query": { "type": "string", "default": "" },
         "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all", "description": "all returns details, names returns only names, exact uses the official getNet API." },
-        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+        "analysis": {
+          "type": "object",
+          "description": "Optional exact PCB-net analysis using getNetLength, getNetColor, and getAllPrimitivesByNet.",
+          "properties": {
+            "length": { "type": "boolean", "default": false },
+            "color": { "type": "boolean", "default": false },
+            "primitives": { "type": "boolean", "default": false },
+            "primitiveTypes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     }
@@ -630,10 +642,11 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["current_rules", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"],
+          "enum": ["current_rules", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups", "pad_pair_min_wire_length"],
           "default": "current_rules"
         },
         "configurationName": { "type": "string", "minLength": 1 },
+        "padPairGroupName": { "type": "string", "minLength": 1 },
         "includeSystem": { "type": "boolean", "default": false }
       },
       "additionalProperties": false
@@ -700,7 +713,8 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["status", "save", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
+        "action": { "type": "string", "enum": ["status", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"], "default": "status" },
+        "routingType": { "type": "string", "enum": ["all", "net", "connection"], "default": "all", "description": "Required for clear_routing semantics; all clears all tracks/vias, net or connection limits the scope." },
         "uuid": { "type": "string", "minLength": 1, "description": "Optional schematic UUID for import_changes." },
         "fileName": { "type": "string", "minLength": 1 },
         "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
@@ -767,7 +781,7 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] },
         "kind": {
           "type": "string",
-          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_route_jrouter", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
         },
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string" },
@@ -805,16 +819,13 @@
   },
   {
     "name": "library_search",
-    "description": "Search official EasyEDA device, symbol, footprint, or simulation-model libraries by keyword, exact properties, or official LCSC C-number mapping.",
+    "description": "Search official EasyEDA device, symbol, or footprint libraries. Device searches also support exact properties and official LCSC C-number mapping.",
     "inputSchema": {
-      "type": "object",
-      "properties": {
-        "kind": { "type": "string", "enum": ["device", "symbol", "footprint", "simulation_model"] },
+      "$defs": {
         "keyword": { "type": "string", "minLength": 1 },
         "lcscIds": { "type": "array", "items": { "type": "string", "pattern": "^[Cc][0-9]+$" }, "minItems": 1, "maxItems": 50, "uniqueItems": true },
         "allowMultiMatch": { "type": "boolean", "default": false, "description": "Only for lcscIds device lookup; return all matches for duplicate catalog IDs." },
-        "simulationModelType": { "type": "string", "enum": ["Ngspice", "SimulIDE"] },
-        "properties": {
+        "deviceProperties": {
           "type": "object",
           "properties": {
             "name": { "type": "string", "minLength": 1 },
@@ -833,13 +844,69 @@
         "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
         "page": { "type": "integer", "minimum": 1, "maximum": 9999, "default": 1 }
       },
-      "required": ["kind"],
       "oneOf": [
-        { "required": ["keyword"] },
-        { "required": ["properties"] },
-        { "required": ["lcscIds"] }
-      ],
-      "additionalProperties": false
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "properties": { "$ref": "#/$defs/deviceProperties" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "properties"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "device" },
+            "lcscIds": { "$ref": "#/$defs/lcscIds" },
+            "allowMultiMatch": { "$ref": "#/$defs/allowMultiMatch" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "lcscIds"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "symbol" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "footprint" },
+            "keyword": { "$ref": "#/$defs/keyword" },
+            "libraryUuid": { "$ref": "#/$defs/libraryUuid" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "page": { "$ref": "#/$defs/page" }
+          },
+          "required": ["kind", "keyword"],
+          "additionalProperties": false
+        }
+      ]
     }
   }
 ]

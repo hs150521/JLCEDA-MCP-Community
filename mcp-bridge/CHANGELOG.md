@@ -4,9 +4,9 @@
 
 - Add structured PCB and schematic DRC tools with non-UI defaults.
 - Defer PCB auto-layout and auto-routing MCP tools until the pinned API surface exposes those methods; external route/layout files remain available through `pcb_document_action`.
-- Extend `library_search` with official batch LCSC C-number mapping and simulation-model search.
+- Extend `library_search` with official batch LCSC C-number mapping; unsupported simulation-model search is not advertised on the 0.4.15 client surface.
 - Add PCB/schematic network queries, PCB constraints, project information, netlist comparison, and whitelisted manufacturing exports.
-- Add exact device-property search, PCB layer/physical stacking queries, real-time DRC control, and JRouter auto-route export.
+- Add exact device-property search, PCB layer/physical stacking queries, real-time DRC control, external route/layout imports, and flying-probe manufacturing export.
 - Add read-only BOM template discovery and template selection for PCB/schematic BOM exports.
 - Add `library_search` for exact device, symbol, and footprint library searches.
 - Expand `pcb_constraints_query` with rule configurations, net rules, net-to-net rules, and region rules.
