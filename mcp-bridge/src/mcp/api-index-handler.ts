@@ -29,6 +29,15 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.dmt_Schematic.deleteSchematicPage', summary: '删除原理图图页' },
 	{ fullName: 'eda.dmt_Schematic.deleteSchematic', summary: '删除原理图' },
 	{ fullName: 'eda.dmt_EditorControl.getCurrentRenderedAreaImage', summary: '获取当前画布渲染图像' },
+	{ fullName: 'eda.dmt_Workspace.getCurrentWorkspaceInfo', summary: '获取当前工作区' },
+	{ fullName: 'eda.dmt_Workspace.getAllWorkspacesInfo', summary: '获取所有工作区' },
+	{ fullName: 'eda.dmt_Team.getCurrentTeamInfo', summary: '获取当前团队' },
+	{ fullName: 'eda.dmt_Team.getAllTeamsInfo', summary: '获取直接团队' },
+	{ fullName: 'eda.dmt_Team.getAllInvolvedTeamInfo', summary: '获取参与的团队' },
+	{ fullName: 'eda.dmt_Project.getAllProjectsUuid', summary: '获取工程 UUID 列表' },
+	{ fullName: 'eda.dmt_Project.getProjectInfo', summary: '获取工程属性' },
+	{ fullName: 'eda.dmt_Folder.getAllFoldersUuid', summary: '获取文件夹 UUID 列表' },
+	{ fullName: 'eda.dmt_Folder.getFolderInfo', summary: '获取文件夹属性' },
 
 	// ── sch_Document：画布文档操作 ─────────────────────────────────────────
 	{ fullName: 'eda.sch_Document.save', summary: '保存文档' },

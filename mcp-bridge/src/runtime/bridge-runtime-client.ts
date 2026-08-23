@@ -42,6 +42,7 @@ import { handleSchematicDocumentTask } from '../mcp/schematic-document-handler.t
 import { handleSchematicDrcCheckTask } from '../mcp/schematic-drc-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
+import { handleWorkspaceQueryTask } from '../mcp/workspace-query-handler.ts';
 import { connectionStatusManager } from '../state/connection-status.ts';
 import { toSafeErrorMessage } from '../utils.ts';
 import { debugLog } from '../utils/debug-log.ts';
@@ -67,6 +68,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/context': handleEdaContextTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,
+	'/bridge/jlceda/workspace/query': handleWorkspaceQueryTask,
 	'/bridge/jlceda/netlabel/place': handleNetLabelPlaceTask,
 	'/bridge/jlceda/netlabel/modify': handleNetLabelModifyTask,
 	'/bridge/jlceda/pcb/drc-check': handlePcbDrcCheckTask,

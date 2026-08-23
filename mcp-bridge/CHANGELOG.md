@@ -4,6 +4,7 @@
 
 - Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
 - Add read-only active-canvas snapshots, library-source discovery, and 3D-model/reusable-module/panel-library search and retrieval.
+- Add read-only workspace, team, project, and folder discovery through `workspace_query`.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add structured PCB and schematic DRC tools with non-UI defaults.

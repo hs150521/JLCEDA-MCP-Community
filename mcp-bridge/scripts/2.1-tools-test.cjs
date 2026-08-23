@@ -22,12 +22,39 @@ const { handlePcbRealtimeDrcTask } = require('../src/mcp/pcb-realtime-drc-handle
 const { handleProjectInfoTask } = require('../src/mcp/project-info-handler.ts');
 const { handleSchematicDocumentTask } = require('../src/mcp/schematic-document-handler.ts');
 const { handleSchematicDrcCheckTask } = require('../src/mcp/schematic-drc-handler.ts');
+const { handleWorkspaceQueryTask } = require('../src/mcp/workspace-query-handler.ts');
 const { toSerializableAsync } = require('../src/utils.ts');
 
 async function main() {
 	const routingCalls = 0;
 	globalThis.eda = {
-		dmt_Project: { async getCurrentProjectInfo() { return { uuid: 'project-1', name: '2026' }; } },
+		dmt_Project: {
+			async getCurrentProjectInfo() { return { uuid: 'project-1', name: '2026' }; },
+			async getAllProjectsUuid(teamUuid, folderUuid, workspaceUuid) {
+				assert.deepEqual([teamUuid, folderUuid, workspaceUuid], ['team-1', undefined, undefined]);
+				return ['project-1', 'project-2'];
+			},
+			async getProjectInfo(uuid) { return { uuid, name: `Project ${uuid}` }; },
+		},
+		dmt_Workspace: {
+			async getCurrentWorkspaceInfo() { return { uuid: 'workspace-1', name: 'Local' }; },
+			async getAllWorkspacesInfo() { return [{ uuid: 'workspace-1', name: 'Local' }, { uuid: 'workspace-2', name: 'Cloud' }]; },
+		},
+		dmt_Team: {
+			async getCurrentTeamInfo() { return { uuid: 'team-1', name: 'Personal' }; },
+			async getAllTeamsInfo() { return [{ uuid: 'team-1', name: 'Personal' }]; },
+			async getAllInvolvedTeamInfo() { return [{ uuid: 'team-2', name: 'Shared' }]; },
+		},
+		dmt_Folder: {
+			async getAllFoldersUuid(teamUuid) {
+				assert.equal(teamUuid, 'team-1');
+				return ['folder-1'];
+			},
+			async getFolderInfo(teamUuid, uuid) {
+				assert.equal(teamUuid, 'team-1');
+				return { uuid, name: 'Robot' };
+			},
+		},
 		dmt_Board: { async getCurrentBoardInfo() { return { uuid: 'board-1' }; } },
 		dmt_Schematic: {
 			async getCurrentSchematicInfo() { return { uuid: 'sch-1' }; },
@@ -360,6 +387,22 @@ async function main() {
 	assert.ok(typeof canvasSnapshot.image.dataBase64 === 'string');
 	const omittedCanvasSnapshot = await handleCanvasSnapshotTask({ maxBytes: 65536, includeData: false });
 	assert.equal(omittedCanvasSnapshot.image.dataBase64, undefined);
+	const workspaceCurrent = await handleWorkspaceQueryTask({});
+	assert.equal(workspaceCurrent.workspace.uuid, 'workspace-1');
+	const workspaceList = await handleWorkspaceQueryTask({ action: 'workspaces' });
+	assert.equal(workspaceList.workspaces.length, 2);
+	const teams = await handleWorkspaceQueryTask({ action: 'teams' });
+	assert.equal(teams.involved.teams[0].uuid, 'team-2');
+	globalThis.eda.dmt_Team.getAllInvolvedTeamInfo = async () => {
+		throw new Error('Client team service is unavailable');
+	};
+	const teamsWithoutInvolved = await handleWorkspaceQueryTask({ action: 'teams' });
+	assert.equal(teamsWithoutInvolved.direct.teams[0].uuid, 'team-1');
+	assert.equal(teamsWithoutInvolved.involved.available, false);
+	const projects = await handleWorkspaceQueryTask({ action: 'projects', teamUuid: 'team-1' });
+	assert.equal(projects.projects[1].uuid, 'project-2');
+	const folders = await handleWorkspaceQueryTask({ action: 'folders', teamUuid: 'team-1' });
+	assert.equal(folders.folders[0].name, 'Robot');
 	const pcbDrc = await handlePcbDrcCheckTask({});
 	assert.equal(pcbDrc.errorCount, 2);
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });

@@ -957,6 +957,33 @@
     }
   },
   {
+    "name": "workspace_query",
+    "description": "Read the current workspace/team or discover accessible workspaces, teams, projects, and folders without changing any EDA data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["current", "workspaces", "teams", "projects", "folders"], "default": "current" },
+        "teamUuid": { "type": "string", "minLength": 1, "description": "Optional project filter; required for folders." },
+        "folderUuid": { "type": "string", "minLength": 1, "description": "Optional project filter." },
+        "workspaceUuid": { "type": "string", "minLength": 1, "description": "Optional project filter." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "action": { "const": "folders" }, "teamUuid": { "type": "string", "minLength": 1 }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 } },
+          "required": ["action", "teamUuid"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "enum": ["current", "workspaces", "teams", "projects"] }, "teamUuid": { "type": "string", "minLength": 1 }, "folderUuid": { "type": "string", "minLength": 1 }, "workspaceUuid": { "type": "string", "minLength": 1 }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 } }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "project_info",
     "description": "Read a concise snapshot of the current project, board, schematic, PCB, document, and schematic pages.",
     "inputSchema": {

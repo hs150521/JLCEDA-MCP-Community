@@ -152,6 +152,7 @@ export class ToolDispatcher {
       'pcb_document_action': '/bridge/jlceda/pcb/document',
       'schematic_document_action': '/bridge/jlceda/schematic/document',
       'project_info': '/bridge/jlceda/project/info',
+		'workspace_query': '/bridge/jlceda/workspace/query',
       'manufacture_export': '/bridge/jlceda/manufacture/export',
       'manufacture_templates_query': '/bridge/jlceda/manufacture/templates-query',
       'library_search': '/bridge/jlceda/library/search',
