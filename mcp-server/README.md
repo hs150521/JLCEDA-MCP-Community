@@ -28,7 +28,6 @@ The server exposes read-only PCB DRC, network-query, library-source/search, and 
 
 `pcb_constraints_manage` provides a deliberately narrow, confirmation-gated interface for net classes, differential pairs, equal-length groups, and pad-pair groups. It validates operation-specific fields and returns a bounded read-back of the affected item; bulk rule-configuration replacement remains unavailable.
 
-`schematic_net_query` uses the official `SCH_Net` project-network APIs for bounded all, names, and exact lookups.
 
 公开的 `timeoutMs` 参数会传递到 WebSocket 请求。EDA 修改超时后，Bridge 仍会
 保持串行队列锁定，直到底层 API 真正结束；请求排队时间不计入 API 执行超时。

@@ -28,8 +28,6 @@ The 2.1 release adds `pcb_drc_check`, `schematic_drc_check`, `pcb_net_query`, `p
 
 `pcb_constraints_manage` is the confirmation-gated write companion for constraint groups: it supports individual net class, differential-pair, equal-length-group, and pad-pair-group changes, validates only fields relevant to the requested operation, and reads back the affected item. Bulk rule-configuration replacement is intentionally excluded.
 
-`schematic_net_query` exposes the official `SCH_Net` project-network APIs with bounded all, names, and exact lookup modes.
-
 当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
 直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。
 

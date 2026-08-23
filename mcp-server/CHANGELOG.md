@@ -5,6 +5,7 @@
 - Quarantine a reconnecting page for the previous EDA task's execution window before admitting new requests, preventing uncancellable mutations from overlapping.
 - Preserve that quarantine when EDA or MCP sockets disconnect, including tasks still queued before `bridge/task-started` and server-side execution timeouts.
 - Preserve affected constraint items when the EDA returns differential-pair read-backs as a name-keyed object.
+- Remove unsupported schematic-net and current-layer public routes, and synchronize PCB save with its required document UUID.
 
 ## 未发布
 

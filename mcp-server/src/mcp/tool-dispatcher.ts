@@ -168,7 +168,6 @@ export class ToolDispatcher {
 		'library_preview': '/bridge/jlceda/library/preview',
 		'library_sources': '/bridge/jlceda/library/sources',
       'pcb_net_query': '/bridge/jlceda/net/query-pcb',
-		'schematic_net_query': '/bridge/jlceda/net/query-schematic',
       'schematic_auto_layout': '/bridge/jlceda/auto/layout',
       'schematic_auto_routing': '/bridge/jlceda/auto/routing',
       'api_index': '/bridge/jlceda/api/index',

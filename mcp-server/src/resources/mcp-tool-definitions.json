@@ -671,30 +671,6 @@
     }
   },
   {
-    "name": "schematic_net_query",
-    "description": "Read schematic project networks from the active schematic using the official SCH_Net APIs.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "query": { "type": "string", "default": "" },
-        "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all" },
-        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
-      },
-      "oneOf": [
-        {
-          "properties": { "query": { "type": "string", "default": "" }, "mode": { "enum": ["all", "names"] }, "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 } },
-          "additionalProperties": false
-        },
-        {
-          "properties": { "query": { "type": "string", "minLength": 1 }, "mode": { "const": "exact" }, "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 } },
-          "required": ["query", "mode"],
-          "additionalProperties": false
-        }
-      ],
-      "additionalProperties": false
-    }
-  },
-  {
     "name": "schematic_drc_check",
     "description": "Run a read-only schematic design-rule check and return structured violations.",
     "inputSchema": {
@@ -892,11 +868,11 @@
   },
   {
     "name": "pcb_layer_query",
-    "description": "Read PCB layers, current layer, and copper-layer count.",
+    "description": "Read PCB layers and copper-layer count.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "kind": { "type": "string", "enum": ["layers", "current"], "default": "layers" }
+        "kind": { "type": "string", "enum": ["layers"], "default": "layers" }
       },
       "additionalProperties": false
     }
@@ -931,7 +907,7 @@
         "leftToRight": { "type": "boolean", "default": true, "description": "Region selection direction passed to getPrimitivesInRegion." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "Maximum selected/region primitives returned." },
         "includeObjects": { "type": "boolean", "default": false, "description": "For selection, include serialized selected primitive objects in addition to IDs." },
-        "uuid": { "type": "string", "minLength": 1, "description": "Optional schematic UUID for import_changes." },
+        "uuid": { "type": "string", "minLength": 1, "description": "Optional PCB document UUID for save or schematic UUID for import_changes." },
         "fileName": { "type": "string", "minLength": 1 },
         "dataBase64": { "type": "string", "minLength": 4, "description": "Base64 encoded JSON or SES file for import actions." },
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }

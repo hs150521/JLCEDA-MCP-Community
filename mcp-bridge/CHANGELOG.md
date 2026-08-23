@@ -14,7 +14,8 @@
 - Add `design_archive_export` for bounded, explicit native project/document archive retrieval without filesystem writes.
 - Include active canvas data unit in `eda_context`, and expose current/default PCB rule-configuration names through `pcb_constraints_query`.
 - Add confirmation-gated `pcb_constraints_manage` for bounded net-class, differential-pair, equal-length-group, and pad-pair-group changes with read-back verification.
-- Add `schematic_net_query` using the official 0.4.15 `SCH_Net` project-network APIs.
+- Remove the unsupported `schematic_net_query` and `pcb_layer_query.current` routes from the 0.4.15 public surface.
+- Resolve the current PCB UUID before calling the required-argument `pcb_Document.save(uuid)` API.
 - Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
 - Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
 - Add structured PCB and schematic DRC tools with non-UI defaults.

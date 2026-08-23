@@ -33,7 +33,7 @@ import { handleLibrarySearchTask } from '../mcp/library-search-handler.ts';
 import { handleLibrarySourcesTask } from '../mcp/library-sources-handler.ts';
 import { handleManufactureExportTask } from '../mcp/manufacture-export-handler.ts';
 import { handleManufactureTemplatesQueryTask } from '../mcp/manufacture-template-handler.ts';
-import { handlePcbNetQueryTask, handleSchematicNetQueryTask } from '../mcp/net-query-handler.ts';
+import { handlePcbNetQueryTask } from '../mcp/net-query-handler.ts';
 import { handleNetLabelModifyTask } from '../mcp/netlabel-modify-handler.ts';
 import { handleNetLabelPlaceTask } from '../mcp/netlabel-place-handler.ts';
 import { handleNetlistCompareTask } from '../mcp/netlist-compare-handler.ts';
@@ -95,7 +95,6 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/library/classification-query': handleLibraryClassificationTask,
 	'/bridge/jlceda/library/sources': handleLibrarySourcesTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,
-	'/bridge/jlceda/net/query-schematic': handleSchematicNetQueryTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,
 	'/bridge/jlceda/workspace/query': handleWorkspaceQueryTask,

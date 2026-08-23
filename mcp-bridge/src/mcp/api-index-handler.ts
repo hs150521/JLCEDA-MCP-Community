@@ -172,10 +172,6 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 
 	// ── sch_Netlist：网表 ──────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Netlist.setNetlist', summary: '更新网表' },
-	{ fullName: 'eda.sch_Net.getCurrentProjectAllNets', summary: '获取原理图工程网络' },
-	{ fullName: 'eda.sch_Net.getAllNets', summary: '获取原理图网络' },
-	{ fullName: 'eda.sch_Net.getNet', summary: '按名称获取原理图网络' },
-	{ fullName: 'eda.sch_Net.getAllNetsName', summary: '获取原理图网络名称' },
 
 	// ── sch_Utils：工具 ────────────────────────────────────────────────────
 	{ fullName: 'eda.sch_Utils.splitLines', summary: '拆分多段线' },

@@ -165,7 +165,10 @@ async function main() {
 				return true;
 			},
 			async zoomToBoardOutline() { return true; },
-			async save() { return true; },
+			async save(uuid) {
+				assert.equal(uuid, 'pcb-1');
+				return true;
+			},
 			async importChanges(uuid) {
 				assert.equal(uuid, 'sch-1');
 				return true;
@@ -462,7 +465,6 @@ async function main() {
 		},
 		pcb_Layer: {
 			async getAllLayers() { return [{ id: 1, name: 'TOP', type: 'SIGNAL' }]; },
-			async getCurrentLayer() { return { id: 1, name: 'TOP' }; },
 			async getTheNumberOfCopperLayers() { return 2; },
 			async getCurrentPhysicalStackingConfigurationName() { return '2 Layer'; },
 			async getCurrentPhysicalStackingConfiguration() { return { name: '2 Layer', layerCount: 2 }; },
@@ -488,7 +490,9 @@ async function main() {
 				assert.deepEqual([left, right, top, bottom], [0, 100, 0, 100]);
 				return [{ uuid: 'sch-pin-1', type: 'PIN' }];
 			},
-			async save() { return true; },
+			async save() {
+				return true;
+			},
 			async importChanges() { return true; },
 		},
 		sch_SelectControl: {
@@ -658,7 +662,7 @@ async function main() {
 	assert.equal(pcbDrc.errorCount, 2);
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });
 	assert.equal(layers.copperLayerCount, 2);
-	await assert.rejects(() => handlePcbLayerQueryTask({ kind: 'physical_stacking' }), /kind must be layers or current/);
+	await assert.rejects(() => handlePcbLayerQueryTask({ kind: 'physical_stacking' }), /kind must be layers when provided/);
 	const realtimeDrc = await handlePcbRealtimeDrcTask({ action: 'status' });
 	assert.equal(realtimeDrc.enabled, false);
 	const realtimeDrcStart = await handlePcbRealtimeDrcTask({ action: 'start' });
@@ -688,7 +692,9 @@ async function main() {
 	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_coordinates', x: 25, y: 35 })).navigated, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'navigate_to_region', left: 0, right: 100, top: 0, bottom: 100 })).navigated, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'zoom_to_board_outline' })).zoomed, true);
-	assert.equal((await handlePcbDocumentTask({ action: 'save' })).saved, true);
+	const savedPcb = await handlePcbDocumentTask({ action: 'save' });
+	assert.equal(savedPcb.saved, true);
+	assert.equal(savedPcb.uuid, 'pcb-1');
 	assert.equal((await handlePcbDocumentTask({ action: 'start_ratline' })).changed, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'stop_ratline' })).changed, true);
 	assert.equal((await handlePcbDocumentTask({ action: 'clear_routing', routingType: 'connection' })).cleared, true);

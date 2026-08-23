@@ -17,7 +17,7 @@
 - `library_preview` and `library_classification_query`: visually inspect symbol/footprint assets and navigate bounded official library classification trees before searching or placing parts.
 - `workspace_query`: read the current workspace/team and discover accessible workspaces, teams, projects, and folders.
 - `design_compare`: use official schematic/PCB/netlist comparison APIs, with version-aware errors.
-- `pcb_layer_query`: inspect PCB layers, the current layer, and copper-layer count.
+- `pcb_layer_query`: inspect PCB layers and copper-layer count.
 - `pcb_realtime_drc`: inspect or explicitly start/stop real-time PCB DRC.
 - `pcb_document_action`: inspect PCB coordinates, selected/region primitives, filters, and canvas state; navigate the view; save the active board, import schematic changes, or import Base64 auto-layout/route files.
 - `pcb_document_action` also supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.

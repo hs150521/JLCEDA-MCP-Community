@@ -1,6 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
-type NetDomain = 'schematic' | 'pcb';
 type NetQueryMode = 'all' | 'names' | 'exact';
 interface PcbNetAnalysis {
 	length?: boolean;
@@ -11,10 +10,10 @@ interface PcbNetAnalysis {
 
 const PCB_PRIMITIVE_TYPES = new Set(['ARC', 'COMPONENT', 'PAD', 'COMPONENT_PAD', 'POLYLINE', 'POUR', 'FILL', 'REGION', 'LINE', 'VIA', 'DIMENSION', 'IMAGE', 'OBJECT', 'POURED', 'STRING', 'ATTRIBUTE']);
 
-function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryMode, domain: NetDomain): PcbNetAnalysis | undefined {
+function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryMode): PcbNetAnalysis | undefined {
 	if (input.analysis === undefined || input.analysis === null)
 		return undefined;
-	if (domain !== 'pcb' || mode !== 'exact' || !isPlainObjectRecord(input.analysis))
+	if (mode !== 'exact' || !isPlainObjectRecord(input.analysis))
 		throw new TypeError('analysis is only supported as an object for exact PCB net queries.');
 	const analysis = input.analysis;
 	const output: PcbNetAnalysis = {};
@@ -36,9 +35,9 @@ function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryM
 	return output;
 }
 
-export async function handleNetQueryTask(payload: unknown, domain: NetDomain): Promise<unknown> {
+export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> {
 	if (payload !== undefined && payload !== null && !isPlainObjectRecord(payload)) {
-		throw new TypeError(`net_query_${domain} payload must be an object.`);
+		throw new TypeError('net_query_pcb payload must be an object.');
 	}
 	const input = isPlainObjectRecord(payload) ? payload : {};
 	const queryText = input.query === undefined ? '' : String(input.query).trim();
@@ -52,30 +51,28 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 	if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
 		throw new RangeError('limit must be an integer between 1 and 1000.');
 	}
-	const analysis = normalizePcbNetAnalysis(input, mode as NetQueryMode, domain);
+	const analysis = normalizePcbNetAnalysis(input, mode as NetQueryMode);
 
 	const edaGlobal = getEdaRuntime();
 	if (!isPlainObjectRecord(edaGlobal)) {
 		throw new TypeError('EDA runtime is unavailable.');
 	}
-	const moduleName = domain === 'schematic' ? 'sch_Net' : 'pcb_Net';
-	const api = edaGlobal[moduleName];
+	const moduleName = 'pcb_Net';
+	const api = edaGlobal.pcb_Net;
 	if (!isPlainObjectRecord(api)) {
 		throw new TypeError(`EDA ${moduleName} API is unavailable in this client version.`);
 	}
-	const getNets = domain === 'schematic' && typeof api.getCurrentProjectAllNets === 'function'
-		? api.getCurrentProjectAllNets
-		: api.getAllNets;
+	const getNets = api.getAllNets;
 	if (mode === 'names' && typeof api.getAllNetsName === 'function') {
 		const rawNames = await (api.getAllNetsName as () => Promise<unknown>).call(api);
 		if (!Array.isArray(rawNames))
 			throw new TypeError(`EDA ${moduleName}.getAllNetsName returned an invalid result.`);
 		const filteredNames = rawNames.filter(name => !query || String(name).toLowerCase().includes(query)).slice(0, limit);
-		return { ok: true, domain, mode: mode as NetQueryMode, query, total: rawNames.length, returned: Math.min(filteredNames.length, 120), names: await toSerializableAsync(filteredNames), truncated: filteredNames.length > 120 || rawNames.length > filteredNames.length };
+		return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: rawNames.length, returned: Math.min(filteredNames.length, 120), names: await toSerializableAsync(filteredNames), truncated: filteredNames.length > 120 || rawNames.length > filteredNames.length };
 	}
 	if (mode === 'exact' && typeof api.getNet === 'function') {
 		const net = await toSerializableAsync(await (api.getNet as (name: string) => Promise<unknown>).call(api, queryText));
-		const result: Record<string, unknown> = { ok: true, domain, mode: mode as NetQueryMode, query, total: net === undefined || net === null ? 0 : 1, returned: net === undefined || net === null ? 0 : 1, net, ...(analysis ? { analysis } : {}) };
+		const result: Record<string, unknown> = { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: net === undefined || net === null ? 0 : 1, returned: net === undefined || net === null ? 0 : 1, net, ...(analysis ? { analysis } : {}) };
 		if (analysis && net !== undefined && net !== null) {
 			const rawApi = api as Record<string, unknown>;
 			if (analysis.length) {
@@ -110,8 +107,5 @@ export async function handleNetQueryTask(payload: unknown, domain: NetDomain): P
 	const filteredNets = rawNets
 		.filter(net => !query || JSON.stringify(net).toLowerCase().includes(query))
 		.slice(0, limit);
-	return { ok: true, domain, mode: mode as NetQueryMode, query, total: rawNets.length, returned: Math.min(filteredNets.length, 120), nets: await toSerializableAsync(filteredNets), truncated: filteredNets.length > 120 || rawNets.length > filteredNets.length };
+	return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: rawNets.length, returned: Math.min(filteredNets.length, 120), nets: await toSerializableAsync(filteredNets), truncated: filteredNets.length > 120 || rawNets.length > filteredNets.length };
 }
-
-export const handleSchematicNetQueryTask = (payload: unknown) => handleNetQueryTask(payload, 'schematic');
-export const handlePcbNetQueryTask = (payload: unknown) => handleNetQueryTask(payload, 'pcb');
