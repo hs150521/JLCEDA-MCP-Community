@@ -33,7 +33,7 @@ export async function handleSchematicDrcCheckTask(payload: unknown): Promise<unk
 		showUi,
 		resultType: Array.isArray(rawResult) ? 'detailed' : typeof rawResult,
 		errorCount,
-		errors: await toSerializableAsync(rawErrors),
+		errors: await toSerializableAsync(rawErrors.slice(0, 120)),
 		truncated: rawErrors.length > 120,
 	};
 }

@@ -669,6 +669,16 @@ async function main() {
 	assert.equal(folders.folders[0].name, 'Robot');
 	const pcbDrc = await handlePcbDrcCheckTask({});
 	assert.equal(pcbDrc.errorCount, 2);
+	const originalPcbDrcCheck = globalThis.eda.pcb_Drc.check;
+	globalThis.eda.pcb_Drc.check = async function () {
+		assert.equal(this.receiver, 'pcb-drc');
+		return Array.from({ length: 130 }, (_value, index) => ({ code: `bulk-${index + 1}`, count: 1 }));
+	};
+	const truncatedPcbDrc = await handlePcbDrcCheckTask({});
+	assert.equal(truncatedPcbDrc.errorCount, 130);
+	assert.equal(truncatedPcbDrc.errors.length, 120);
+	assert.equal(truncatedPcbDrc.truncated, true);
+	globalThis.eda.pcb_Drc.check = originalPcbDrcCheck;
 	const layers = await handlePcbLayerQueryTask({ kind: 'layers' });
 	assert.equal(layers.copperLayerCount, 2);
 	await assert.rejects(() => handlePcbLayerQueryTask({ kind: 'physical_stacking' }), /kind must be layers when provided/);
@@ -748,6 +758,17 @@ async function main() {
 	assert.equal(pcbNetAnalysis.length, 42.5);
 	assert.equal(pcbNetAnalysis.color, '#00ff00');
 	assert.equal(pcbNetAnalysis.primitiveCount, 1);
+	const originalGetAllPrimitivesByNet = globalThis.eda.pcb_Net.getAllPrimitivesByNet;
+	globalThis.eda.pcb_Net.getAllPrimitivesByNet = async (name, primitiveTypes) => {
+		assert.equal(name, 'USB_D+');
+		assert.equal(primitiveTypes, undefined);
+		return Array.from({ length: 130 }, (_value, index) => ({ uuid: `primitive-${index + 1}` }));
+	};
+	const truncatedPcbNetAnalysis = await handlePcbNetQueryTask({ mode: 'exact', query: 'USB_D+', analysis: { primitives: true } });
+	assert.equal(truncatedPcbNetAnalysis.primitiveCount, 130);
+	assert.equal(truncatedPcbNetAnalysis.primitives.length, 120);
+	assert.equal(truncatedPcbNetAnalysis.primitivesTruncated, true);
+	globalThis.eda.pcb_Net.getAllPrimitivesByNet = originalGetAllPrimitivesByNet;
 	await assert.rejects(() => handlePcbNetQueryTask({ mode: 'exact', query: 'USB_D+', analysis: { primitiveTypes: [] } }), /analysis\.primitiveTypes/);
 	const filteredPcbNets = await handlePcbNetQueryTask({ query: 'USB' });
 	assert.equal(filteredPcbNets.total, 1);
@@ -769,6 +790,13 @@ async function main() {
 	globalThis.eda.pcb_Drc.getAllDifferentialPairs = async () => differentialPairs;
 	const schDrc = await handleSchematicDrcCheckTask({});
 	assert.equal(schDrc.ok, true);
+	const originalSchematicDrcCheck = globalThis.eda.sch_Drc.check;
+	globalThis.eda.sch_Drc.check = async () => Array.from({ length: 130 }, (_value, index) => ({ code: `bulk-${index + 1}`, count: 1 }));
+	const truncatedSchematicDrc = await handleSchematicDrcCheckTask({});
+	assert.equal(truncatedSchematicDrc.errorCount, 130);
+	assert.equal(truncatedSchematicDrc.errors.length, 120);
+	assert.equal(truncatedSchematicDrc.truncated, true);
+	globalThis.eda.sch_Drc.check = originalSchematicDrcCheck;
 	assert.deepEqual((await handleSchematicDocumentTask({ action: 'status' })).filterConfiguration, { wires: true });
 	const schSelection = await handleSchematicDocumentTask({ action: 'selection', includeObjects: true });
 	assert.equal(schSelection.selectedCount, 1);
@@ -906,6 +934,11 @@ async function main() {
 	await assert.rejects(() => handleLibrarySearchTask({ kind: 'device', lcscIds: ['C99999'], page: 2 }), /page is not supported for lcscIds/);
 	const comparison = await handleNetlistCompareTask({ sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', documentUuid: 'pcb-2' } });
 	assert.equal(comparison.differenceCount, 1);
+	const truncatedNetlistComparison = await handleNetlistCompareTask({ sourceA: 'net-many', sourceB: 'net-many-other' });
+	assert.equal(truncatedNetlistComparison.differenceCount, 130);
+	assert.equal(truncatedNetlistComparison.byType.Net, 130);
+	assert.equal(truncatedNetlistComparison.differences.length, 120);
+	assert.equal(truncatedNetlistComparison.truncated, true);
 	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });
 	assert.equal(schematicComparison.result.changed, 2);
 	const designNetlistComparison = await handleDesignCompareTask({ domain: 'netlist', sourceA: 'net-1', sourceB: { projectUuid: 'project-1', documentUuid: 'net-2' } });

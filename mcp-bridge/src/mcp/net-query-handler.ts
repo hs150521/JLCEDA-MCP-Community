@@ -119,7 +119,7 @@ export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> 
 				const rawPrimitives = await (rawApi.getAllPrimitivesByNet as (name: string, types?: string[]) => Promise<unknown>).call(api, queryText, toEdaPrimitiveTypes(analysis.primitiveTypes));
 				const primitives = Array.isArray(rawPrimitives) ? rawPrimitives : [];
 				result.primitiveCount = primitives.length;
-				result.primitives = await toSerializableAsync(primitives);
+				result.primitives = await toSerializableAsync(primitives.slice(0, 120));
 				result.primitivesTruncated = primitives.length > 120;
 			}
 		}

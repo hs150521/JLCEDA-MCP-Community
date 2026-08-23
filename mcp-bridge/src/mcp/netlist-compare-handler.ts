@@ -33,5 +33,5 @@ export async function handleNetlistCompareTask(payload: unknown): Promise<unknow
 		counts[type] = (counts[type] ?? 0) + 1;
 		return counts;
 	}, {});
-	return { ok: rawDifferences.length === 0, sourceA, sourceB, differenceCount: rawDifferences.length, byType, differences: await toSerializableAsync(rawDifferences), truncated: rawDifferences.length > 120 };
+	return { ok: rawDifferences.length === 0, sourceA, sourceB, differenceCount: rawDifferences.length, byType, differences: await toSerializableAsync(rawDifferences.slice(0, 120)), truncated: rawDifferences.length > 120 };
 }

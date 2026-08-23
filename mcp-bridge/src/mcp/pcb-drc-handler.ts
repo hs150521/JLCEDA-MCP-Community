@@ -46,7 +46,7 @@ export async function handlePcbDrcCheckTask(payload: unknown): Promise<unknown> 
 		showUi,
 		resultType: Array.isArray(rawResult) ? 'detailed' : typeof rawResult,
 		errorCount,
-		errors: await toSerializableAsync(rawErrors),
+		errors: await toSerializableAsync(rawErrors.slice(0, 120)),
 		truncated: rawErrors.length > 120,
 	};
 }
