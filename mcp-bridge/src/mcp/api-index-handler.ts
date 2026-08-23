@@ -190,8 +190,6 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.pcb_Document.navigateToRegion', summary: '定位 PCB 画布区域' },
 	{ fullName: 'eda.pcb_Document.zoomToBoardOutline', summary: '缩放至 PCB 板框' },
 	{ fullName: 'eda.pcb_Document.getCurrentFilterConfiguration', summary: '获取 PCB 当前过滤器配置' },
-	{ fullName: 'eda.pcb_Document.autoLayout', summary: '对当前 PCB 执行自动布局' },
-	{ fullName: 'eda.pcb_Document.autoRouting', summary: '对当前 PCB 执行自动布线' },
 	{ fullName: 'eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId', summary: '获取 PCB 已选图元 ID' },
 	{ fullName: 'eda.pcb_SelectControl.getAllSelectedPrimitives', summary: '获取 PCB 已选图元对象' },
 	{ fullName: 'eda.pcb_Net.getNet', summary: '按名称获取 PCB 网络' },

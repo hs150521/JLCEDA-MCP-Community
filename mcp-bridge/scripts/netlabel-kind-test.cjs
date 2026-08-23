@@ -10,7 +10,6 @@ const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-aut
 const { handlePcbNetQueryTask, handleSchematicNetQueryTask } = require('../src/mcp/net-query-handler.ts');
 const { handleNetLabelModifyTask } = require('../src/mcp/netlabel-modify-handler.ts');
 const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPlaceTask } = require('../src/mcp/netlabel-place-handler.ts');
-const { handlePcbAutoLayoutTask, handlePcbAutoRoutingTask } = require('../src/mcp/pcb-auto-handler.ts');
 const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
@@ -44,17 +43,6 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 
 async function main() {
 	globalThis.eda = {
-		pcb_Document: {
-			async autoLayout() {
-				assert.equal(this, globalThis.eda.pcb_Document);
-				return { moved: 2 };
-			},
-			async autoRouting(props) {
-				assert.equal(this, globalThis.eda.pcb_Document);
-				assert.deepEqual(props, { RoutingNets: ['VCC'], existingPrimitiveMode: 'keep', ignoreNets: ['GND'], cornerStyle: 0 });
-				return { routed: 3 };
-			},
-		},
 		pcb_Net: { getAllNets: async () => [{ net: 'VCC', length: 10 }, { net: 'GND', length: 20 }] },
 		sch_Net: { getCurrentProjectAllNets: async () => [{ net: 'DATA', pins: 2 }] },
 		pcb_Drc: {
@@ -66,8 +54,6 @@ async function main() {
 			},
 		},
 	};
-	assert.equal((await handlePcbAutoLayoutTask({ confirm: true })).result.moved, 2);
-	assert.equal((await handlePcbAutoRoutingTask({ confirm: true, routingNets: ['VCC'], ignoreNets: ['GND'], cornerStyle: 0 })).result.routed, 3);
 	assert.equal((await handlePcbNetQueryTask({ query: 'vcc' })).returned, 1);
 	assert.equal((await handleSchematicNetQueryTask({})).total, 1);
 	const detailedDrc = await handlePcbDrcCheckTask({});
@@ -89,8 +75,6 @@ async function main() {
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/sources', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/preview', {}), 30000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/classification-query', {}), 30000);
-	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/pcb/auto-layout', {}), 60000);
-	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/pcb/auto-routing', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/workspace/query', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/source-export', {}), 30000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/design/archive-export', {}), 60000);

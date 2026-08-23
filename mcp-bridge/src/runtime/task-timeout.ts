@@ -30,16 +30,11 @@ const STANDARD_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/workspace/query',
 	'/bridge/jlceda/design/source-export',
 ]);
-const LONG_RUNNING_WRITE_TIMEOUT_PATHS = new Set([
-	'/bridge/jlceda/pcb/auto-layout',
-	'/bridge/jlceda/pcb/auto-routing',
-]);
 const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/api/invoke',
 	'/bridge/jlceda/context',
 	...EXTENDED_READ_TIMEOUT_PATHS,
 	...STANDARD_READ_TIMEOUT_PATHS,
-	...LONG_RUNNING_WRITE_TIMEOUT_PATHS,
 ]);
 
 export class BridgeTaskTimeoutError extends Error {
@@ -87,15 +82,11 @@ export function resolveBridgeTaskTimeoutMs(path: string, payload: unknown): numb
 			return STANDARD_READ_TASK_DEFAULT_TIMEOUT_MS;
 		if (EXTENDED_READ_TIMEOUT_PATHS.has(path))
 			return EXTENDED_READ_TASK_DEFAULT_TIMEOUT_MS;
-		if (LONG_RUNNING_WRITE_TIMEOUT_PATHS.has(path))
-			return EXTENDED_READ_TASK_DEFAULT_TIMEOUT_MS;
 		return API_TASK_DEFAULT_TIMEOUT_MS;
 	}
 
 	const timeoutMs = Number(payload.timeoutMs);
-	const minimum = EXTENDED_READ_TIMEOUT_PATHS.has(path) || LONG_RUNNING_WRITE_TIMEOUT_PATHS.has(path)
-		? EXTENDED_READ_TASK_MIN_TIMEOUT_MS
-		: API_TASK_MIN_TIMEOUT_MS;
+	const minimum = EXTENDED_READ_TIMEOUT_PATHS.has(path) ? EXTENDED_READ_TASK_MIN_TIMEOUT_MS : API_TASK_MIN_TIMEOUT_MS;
 	if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > API_TASK_MAX_TIMEOUT_MS) {
 		throw new RangeError(`timeoutMs 必须是 ${String(minimum)} 到 ${String(API_TASK_MAX_TIMEOUT_MS)} 之间的整数。`);
 	}
