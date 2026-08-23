@@ -180,6 +180,47 @@ assert.deepEqual(snapshotResult.structuredContent, {
 });
 
 const definitions = JSON.parse(readFileSync(new URL('../dist/resources/mcp-tool-definitions.json', import.meta.url), 'utf8'));
+
+function assertStrictParentDeclaresBranchProperties(schema, path) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return;
+  }
+
+  if (schema.additionalProperties === false) {
+    const parentProperties = new Set(Object.keys(schema.properties ?? {}));
+    for (const keyword of ['oneOf', 'anyOf']) {
+      for (const [index, branch] of (schema[keyword] ?? []).entries()) {
+        if (!branch || typeof branch !== 'object' || Array.isArray(branch)) {
+          continue;
+        }
+        for (const property of Object.keys(branch.properties ?? {})) {
+          assert.ok(
+            parentProperties.has(property),
+            `${path}.${keyword}[${index}].properties.${property} must also be declared by its strict parent`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === '$ref' || typeof value !== 'object' || value === null) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const [index, child] of value.entries()) {
+        assertStrictParentDeclaresBranchProperties(child, `${path}.${key}[${index}]`);
+      }
+      continue;
+    }
+    assertStrictParentDeclaresBranchProperties(value, `${path}.${key}`);
+  }
+}
+
+for (const definition of definitions) {
+  assertStrictParentDeclaresBranchProperties(definition.inputSchema, `tool:${definition.name}.inputSchema`);
+}
+
 const workspaceDefinition = definitions.find((definition) => definition.name === 'workspace_query');
 assert.ok(workspaceDefinition);
 const workspaceSchema = z.fromJSONSchema(workspaceDefinition.inputSchema);
@@ -206,6 +247,12 @@ const sourceExportSchema = z.fromJSONSchema(sourceExportDefinition.inputSchema);
 assert.equal(sourceExportSchema.safeParse({}).success, true);
 assert.equal(sourceExportSchema.safeParse({ action: 'footprints', limit: 1 }).success, true);
 assert.equal(sourceExportSchema.safeParse({ action: 'document', limit: 1 }).success, false);
+
+const pcbNetQueryDefinition = definitions.find((definition) => definition.name === 'pcb_net_query');
+assert.ok(pcbNetQueryDefinition);
+const pcbNetQuerySchema = z.fromJSONSchema(pcbNetQueryDefinition.inputSchema);
+assert.equal(pcbNetQuerySchema.safeParse({ mode: 'all', timeoutMs: 6000 }).success, true);
+assert.equal(pcbNetQuerySchema.safeParse({ mode: 'exact', query: 'USB_D+', timeoutMs: 6000 }).success, true);
 
 const schematicPagesDefinition = definitions.find((definition) => definition.name === 'schematic_pages_manage');
 assert.ok(schematicPagesDefinition);

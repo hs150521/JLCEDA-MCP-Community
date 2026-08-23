@@ -619,6 +619,7 @@
         "query": { "type": "string", "default": "" },
         "mode": { "type": "string", "enum": ["all", "names", "exact"], "default": "all", "description": "all returns details, names returns only names, exact uses the official getNet API." },
         "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 },
         "analysis": {
           "type": "object",
           "description": "Optional exact PCB-net analysis using getNetLength, getNetColor, and getAllPrimitivesByNet.",
