@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { z } from 'zod';
 import { formatInternalClientEndpoint } from '../dist/mcp/bridge-client.js';
 import { ToolDispatcher } from '../dist/mcp/tool-dispatcher.js';
 
@@ -25,9 +27,9 @@ const fakeBridge = {
     if (path === '/bridge/jlceda/component/place/close') {
       return { ok: true };
     }
-    if (path === '/bridge/jlceda/api/invoke') {
-      return { ok: true };
-    }
+    if (path === '/bridge/jlceda/api/invoke' || path === '/bridge/jlceda/library/sources' || path === '/bridge/jlceda/workspace/query') {
+	  return { ok: true };
+	}
     if (path === '/bridge/jlceda/canvas/snapshot') {
       return {
         ok: true,
@@ -77,6 +79,30 @@ assert.equal(invokeResult.structuredContent.ok, true);
 const invokeCall = calls.find(call => call.path === '/bridge/jlceda/api/invoke');
 assert.equal(invokeCall.timeoutMs, 44000);
 
+const snapshotTimeoutResult = await dispatcher.dispatch({
+  name: 'eda_canvas_snapshot',
+  arguments: { timeoutMs: 42000 },
+});
+assert.equal(snapshotTimeoutResult.structuredContent.ok, true);
+const snapshotCall = calls.find(call => call.path === '/bridge/jlceda/canvas/snapshot');
+assert.equal(snapshotCall.timeoutMs, 44000);
+
+const sourcesResult = await dispatcher.dispatch({
+  name: 'library_sources',
+  arguments: { timeoutMs: 42000 },
+});
+assert.equal(sourcesResult.structuredContent.ok, true);
+const sourcesCall = calls.find(call => call.path === '/bridge/jlceda/library/sources');
+assert.equal(sourcesCall.timeoutMs, 44000);
+
+const workspaceResult = await dispatcher.dispatch({
+  name: 'workspace_query',
+  arguments: { timeoutMs: 42000 },
+});
+assert.equal(workspaceResult.structuredContent.ok, true);
+const workspaceCall = calls.find(call => call.path === '/bridge/jlceda/workspace/query');
+assert.equal(workspaceCall.timeoutMs, 44000);
+
 const snapshotResult = await dispatcher.dispatch({
   name: 'eda_canvas_snapshot',
   arguments: {},
@@ -99,16 +125,36 @@ assert.deepEqual(JSON.parse(snapshotResult.content[1].text), {
   },
 });
 assert.deepEqual(snapshotResult.structuredContent, {
-  ok: true,
-  image: {
-    type: 'image/png',
-    encoding: 'base64',
-    dataBase64: 'iVBORw0KGgoAAAANSUhEUg==',
-    width: 640,
+	 ok: true,
+	 image: {
+		 type: 'image/png',
+		 encoding: 'base64',
+		 width: 640,
     height: 480,
     byteLength: 16,
   },
 });
+
+const definitions = JSON.parse(readFileSync(new URL('../dist/resources/mcp-tool-definitions.json', import.meta.url), 'utf8'));
+const workspaceDefinition = definitions.find((definition) => definition.name === 'workspace_query');
+assert.ok(workspaceDefinition);
+const workspaceSchema = z.fromJSONSchema(workspaceDefinition.inputSchema);
+for (const input of [
+  {},
+  { action: 'teams' },
+  { action: 'projects', teamUuid: 'team-1', folderUuid: 'folder-1', workspaceUuid: 'workspace-1' },
+  { action: 'folders', teamUuid: 'team-1' },
+]) {
+  assert.equal(workspaceSchema.safeParse(input).success, true, `workspace_query should accept ${JSON.stringify(input)}`);
+}
+for (const input of [
+  { action: 'teams', folderUuid: 'folder-1' },
+  { action: 'current', teamUuid: 'team-1' },
+  { action: 'folders' },
+  { action: 'folders', teamUuid: 'team-1', workspaceUuid: 'workspace-1' },
+]) {
+  assert.equal(workspaceSchema.safeParse(input).success, false, `workspace_query should reject ${JSON.stringify(input)}`);
+}
 
 await assert.rejects(
   dispatcher.dispatch({

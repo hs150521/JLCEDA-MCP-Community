@@ -116,7 +116,8 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    if (!['api_invoke', 'eda_context', 'pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_document_action', 'schematic_document_action'].includes(toolName)) {
+    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'eda_canvas_snapshot', 'library_sources', 'workspace_query'];
+    if (!['api_invoke', 'eda_context', ...extendedReadTools].includes(toolName)) {
       return undefined;
     }
     if (args.timeoutMs === undefined) {
@@ -124,7 +125,7 @@ export class ToolDispatcher {
     }
 
     const timeoutMs = Number(args.timeoutMs);
-    const extendedReadTool = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'manufacture_export', 'pcb_document_action', 'schematic_document_action'].includes(toolName);
+    const extendedReadTool = extendedReadTools.includes(toolName);
     const minimum = extendedReadTool ? 5_000 : 1_000;
     if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
       throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
@@ -203,7 +204,7 @@ export class ToolDispatcher {
             text: JSON.stringify(metadata, null, 2),
           },
         ],
-        structuredContent: result,
+        structuredContent: metadata,
       };
     }
 

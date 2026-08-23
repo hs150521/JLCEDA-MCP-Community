@@ -82,6 +82,13 @@ async function main() {
 	assert.equal(shouldLogTransportMessage('bridge/result'), true);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', { timeoutMs: 42000 }), 42000);
 	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', {}), 15000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/canvas/snapshot', {}), 30000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/library/sources', { timeoutMs: 42000 }), 42000);
+	assert.equal(resolveBridgeTaskTimeoutMs('/bridge/jlceda/workspace/query', { timeoutMs: 42000 }), 42000);
+	assert.throws(
+		() => resolveBridgeTaskTimeoutMs('/bridge/jlceda/canvas/snapshot', { timeoutMs: 4999 }),
+		/timeoutMs/,
+	);
 	assert.throws(
 		() => resolveBridgeTaskTimeoutMs('/bridge/jlceda/api/invoke', { timeoutMs: 999 }),
 		/timeoutMs/,

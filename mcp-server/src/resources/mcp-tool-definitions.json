@@ -972,12 +972,36 @@
       "oneOf": [
         {
           "type": "object",
-          "properties": { "action": { "const": "folders" }, "teamUuid": { "type": "string", "minLength": 1 }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 } },
-          "required": ["action", "teamUuid"]
+          "properties": {
+            "action": { "const": "folders" },
+            "teamUuid": { "type": "string", "minLength": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action", "teamUuid"],
+          "additionalProperties": false
         },
         {
           "type": "object",
-          "properties": { "action": { "enum": ["current", "workspaces", "teams", "projects"] }, "teamUuid": { "type": "string", "minLength": 1 }, "folderUuid": { "type": "string", "minLength": 1 }, "workspaceUuid": { "type": "string", "minLength": 1 }, "limit": { "type": "integer", "minimum": 1, "maximum": 500 } }
+          "properties": {
+            "action": { "const": "projects" },
+            "teamUuid": { "type": "string", "minLength": 1 },
+            "folderUuid": { "type": "string", "minLength": 1 },
+            "workspaceUuid": { "type": "string", "minLength": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": { "enum": ["current", "workspaces", "teams"] },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000 }
+          },
+          "additionalProperties": false
         }
       ],
       "additionalProperties": false
