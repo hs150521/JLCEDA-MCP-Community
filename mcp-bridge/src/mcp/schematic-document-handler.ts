@@ -206,13 +206,19 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 	}
 
 	const primitive = getApi<SchematicPrimitiveApi>(eda, 'sch_Primitive');
-	if (action === 'primitive_type_by_id' || action === 'primitive_by_id') {
-		if (typeof (action === 'primitive_type_by_id' ? primitive.getPrimitiveTypeByPrimitiveId : primitive.getPrimitiveByPrimitiveId) !== 'function')
-			throw new TypeError(`EDA sch_Primitive.${action === 'primitive_type_by_id' ? 'getPrimitiveTypeByPrimitiveId' : 'getPrimitiveByPrimitiveId'} API is unavailable in this client version.`);
+	if (action === 'primitive_type_by_id') {
+		if (typeof primitive.getPrimitiveTypeByPrimitiveId !== 'function')
+			throw new TypeError('EDA sch_Primitive.getPrimitiveTypeByPrimitiveId API is unavailable in this client version.');
 		const id = requiredId(payload, 'id');
-		const method = action === 'primitive_type_by_id' ? primitive.getPrimitiveTypeByPrimitiveId : primitive.getPrimitiveByPrimitiveId;
-		const value = await method.call(primitive, id);
-		return action === 'primitive_type_by_id' ? { ok: true, action, id, primitiveType: await toSerializableAsync(value) } : { ok: true, action, id, primitive: await toSerializableAsync(value) };
+		const value = await primitive.getPrimitiveTypeByPrimitiveId(id);
+		return { ok: true, action, id, primitiveType: await toSerializableAsync(value) };
+	}
+	if (action === 'primitive_by_id') {
+		if (typeof primitive.getPrimitiveByPrimitiveId !== 'function')
+			throw new TypeError('EDA sch_Primitive.getPrimitiveByPrimitiveId API is unavailable in this client version.');
+		const id = requiredId(payload, 'id');
+		const value = await primitive.getPrimitiveByPrimitiveId(id);
+		return { ok: true, action, id, primitive: await toSerializableAsync(value) };
 	}
 	if (action === 'primitives_by_id') {
 		if (typeof primitive.getPrimitivesByPrimitiveId !== 'function')

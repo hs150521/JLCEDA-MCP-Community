@@ -10,6 +10,14 @@
 let logBuffer: string[] = [];
 const MAX_BUFFER_SIZE = 100;
 
+function persistDebugLog(value: unknown): void {
+	void Promise.resolve()
+		.then(() => eda.sys_Storage.setExtensionUserConfig('mcp_bridge_debug_log', value))
+		.catch((error: unknown) => {
+			console.error('Failed to write debug log to storage:', error);
+		});
+}
+
 /**
  * 写入调试日志
  */
@@ -37,18 +45,10 @@ export function debugLog(message: string, ...args: unknown[]): void {
 	}
 
 	// 尝试写入EDA存储
-	try {
-		const storageKey = 'mcp_bridge_debug_log';
-		const currentLog = logBuffer.join('\n');
-		eda.sys_Storage.setExtensionUserConfig(storageKey, {
-			timestamp: Date.now(),
-			log: currentLog,
-		});
-	}
-	catch (error) {
-		// 忽略存储错误
-		console.error('Failed to write debug log to storage:', error);
-	}
+	persistDebugLog({
+		timestamp: Date.now(),
+		log: logBuffer.join('\n'),
+	});
 }
 
 /**
@@ -75,10 +75,5 @@ export function getDebugLog(): string {
  */
 export function clearDebugLog(): void {
 	logBuffer = [];
-	try {
-		eda.sys_Storage.setExtensionUserConfig('mcp_bridge_debug_log', null);
-	}
-	catch {
-		// 忽略
-	}
+	persistDebugLog(null);
 }

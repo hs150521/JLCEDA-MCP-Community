@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const process = require('node:process');
 
-process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
+process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
 const { handleAutoLayoutTask } = require('../src/mcp/auto-layout-handler.ts');

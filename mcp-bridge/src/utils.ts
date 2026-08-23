@@ -258,7 +258,7 @@ export async function toSerializableAsync(value: unknown, depth = 0, seen?: Weak
  * @param executor 异步函数。
  * @returns 成功结果或 undefined。
  */
-export async function safeCall<T>(executor: () => Promise<T>): Promise<T | undefined> {
+export async function safeCall<T>(executor: () => T | Promise<T>): Promise<T | undefined> {
 	try {
 		return await executor();
 	}

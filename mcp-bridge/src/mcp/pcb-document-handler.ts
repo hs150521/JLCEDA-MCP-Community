@@ -133,7 +133,7 @@ function buildImportFile(input: Record<string, unknown>, action: PcbDocumentActi
 	const defaultName = action === 'import_auto_route_ses' ? 'auto-route.ses' : action === 'import_auto_layout_json' ? 'auto-layout.json' : 'auto-route.json';
 	const fileName = optionalString(input, 'fileName') ?? defaultName;
 	const type = action === 'import_auto_route_ses' ? 'application/octet-stream' : 'application/json';
-	return new File([bytes], fileName, { type });
+	return new File([bytes as unknown as BlobPart], fileName, { type });
 }
 
 export async function handlePcbDocumentTask(payload: unknown): Promise<unknown> {

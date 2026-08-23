@@ -15,7 +15,7 @@ function resolvePcbDrcApi(): PcbDrcApi {
 		throw new TypeError('EDA pcb_Drc.check API is unavailable in this client version.');
 	}
 
-	return api as PcbDrcApi;
+	return api as unknown as PcbDrcApi;
 }
 
 export async function handlePcbDrcCheckTask(payload: unknown): Promise<unknown> {

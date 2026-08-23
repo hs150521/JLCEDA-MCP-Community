@@ -34,6 +34,8 @@ interface AutoLayoutProps {
 	};
 }
 
+type AutoLayoutDeviceType = NonNullable<AutoLayoutProps['designatorDeviceTypeMap']>[string];
+
 interface SchDocumentApi {
 	context: unknown;
 	autoLayout: (props?: AutoLayoutProps) => Promise<unknown>;
@@ -104,16 +106,16 @@ function normalizeDesignatorDeviceTypeMap(raw: unknown): AutoLayoutProps['design
 		throw new TypeError('designatorDeviceTypeMap 必须为对象。');
 	}
 
-	const validTypes = new Set(['resistor', 'capacitor', 'inductive', 'diode', 'triode', 'oscillator', 'chip', 'otherDevice']);
-	const result: { [designator: string]: string } = {};
+	const validTypes = new Set<AutoLayoutDeviceType>(['resistor', 'capacitor', 'inductive', 'diode', 'triode', 'oscillator', 'chip', 'otherDevice']);
+	const result: NonNullable<AutoLayoutProps['designatorDeviceTypeMap']> = {};
 
 	for (const key in raw) {
 		if (Object.prototype.hasOwnProperty.call(raw, key)) {
 			const value = String(raw[key] ?? '').trim();
-			if (!validTypes.has(value)) {
+			if (!validTypes.has(value as AutoLayoutDeviceType)) {
 				throw new Error(`designatorDeviceTypeMap["${key}"] 的值 "${value}" 不是有效的器件类型。有效类型：resistor, capacitor, inductive, diode, triode, oscillator, chip, otherDevice。`);
 			}
-			result[key] = value;
+			result[key] = value as AutoLayoutDeviceType;
 		}
 	}
 
@@ -153,7 +155,7 @@ export async function handleAutoLayoutTask(payload: unknown): Promise<unknown> {
 		const result = await Promise.resolve(schDocApi.autoLayout.call(schDocApi.context, props));
 
 		return {
-			ok: true,
+			ok: result !== false,
 			result,
 			message: props?.uuids
 				? `已对 ${String(props.uuids.length)} 个指定器件执行自动布局。`

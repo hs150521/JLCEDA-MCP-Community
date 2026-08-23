@@ -43,10 +43,12 @@ export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<u
 	}
 	if (input.includeSystem !== undefined && typeof input.includeSystem !== 'boolean')
 		throw new TypeError('includeSystem must be a boolean.');
+	const configurationName = typeof input.configurationName === 'string' ? input.configurationName.trim() : undefined;
+	const padPairGroupName = typeof input.padPairGroupName === 'string' ? input.padPairGroupName.trim() : undefined;
 	const args = kind === 'rule_configuration'
-		? [input.configurationName.trim()]
+		? [configurationName]
 		: kind === 'pad_pair_min_wire_length'
-			? [input.padPairGroupName.trim()]
+			? [padPairGroupName]
 			: kind === 'rule_configurations'
 				? [input.includeSystem === undefined ? false : input.includeSystem]
 				: [];

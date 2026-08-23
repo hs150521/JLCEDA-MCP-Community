@@ -92,7 +92,7 @@ export async function handleWorkspaceQueryTask(payload: unknown): Promise<unknow
 			action,
 			current: await toSerializableAsync(await call(team, 'dmt_Team', 'getCurrentTeamInfo')),
 			direct: { total: direct.length, returned: directTeams.length, truncated: direct.length > limit, teams: directTeams },
-			...(involvedTeams
+			...(involvedList && involvedTeams
 				? { involved: { available: true, total: involvedList.length, returned: involvedTeams.length, truncated: involvedList.length > limit, teams: involvedTeams } }
 				: { involved: { available: false } }),
 		};

@@ -1,10 +1,12 @@
 const assert = require('node:assert/strict');
 const process = require('node:process');
 
-process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ moduleResolution: 'node' });
+process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
 const { handleApiIndexTask } = require('../src/mcp/api-index-handler.ts');
+const { handleAutoLayoutTask } = require('../src/mcp/auto-layout-handler.ts');
+const { handleAutoRoutingTask } = require('../src/mcp/auto-routing-handler.ts');
 const { handleCanvasSnapshotTask } = require('../src/mcp/canvas-snapshot-handler.ts');
 const { handleComponentSelectTask } = require('../src/mcp/component-select-handler.ts');
 const { handleEdaContextTask } = require('../src/mcp/context-handler.ts');
@@ -31,6 +33,7 @@ const { handleSchematicDrcCheckTask } = require('../src/mcp/schematic-drc-handle
 const { handleSchematicPagesManageTask } = require('../src/mcp/schematic-pages-manage-handler.ts');
 const { handleWorkspaceQueryTask } = require('../src/mcp/workspace-query-handler.ts');
 const { toSerializableAsync } = require('../src/utils.ts');
+const { debugLog } = require('../src/utils/debug-log.ts');
 
 async function main() {
 	const routingCalls = 0;
@@ -478,6 +481,8 @@ async function main() {
 		},
 		sch_Drc: { async check() { return []; } },
 		sch_Document: {
+			async autoLayout() { return { placedComponents: 2 }; },
+			async autoRouting() { return { routedNets: 3 }; },
 			async getCurrentFilterConfiguration() { return { wires: true }; },
 			async navigateToCoordinates(x, y) {
 				assert.deepEqual([x, y], [25, 35]);
@@ -539,6 +544,10 @@ async function main() {
 		},
 		sys_Unit: {
 			async getFrontendDataUnit() { return 'mm'; },
+		},
+		sys_Storage: {
+			async setExtensionUserConfig() { return true; },
+			getExtensionUserConfig() { return undefined; },
 		},
 		sys_FileManager: {
 			async getProjectFile(fileName, password, fileType) {
@@ -612,6 +621,19 @@ async function main() {
 			},
 		},
 	};
+	const originalStorageWrite = globalThis.eda.sys_Storage.setExtensionUserConfig;
+	const originalConsoleError = console.error;
+	const storageErrors = [];
+	console.error = (...args) => storageErrors.push(args);
+	globalThis.eda.sys_Storage.setExtensionUserConfig = async () => {
+		throw new Error('storage unavailable');
+	};
+	debugLog('storage rejection test');
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(storageErrors.length, 1);
+	assert.match(String(storageErrors[0][1]), /storage unavailable/);
+	console.error = originalConsoleError;
+	globalThis.eda.sys_Storage.setExtensionUserConfig = originalStorageWrite;
 
 	const project = await handleProjectInfoTask({ includePages: true });
 	assert.equal(project.project.name, '2026');
@@ -790,6 +812,16 @@ async function main() {
 	globalThis.eda.pcb_Drc.getAllDifferentialPairs = async () => differentialPairs;
 	const schDrc = await handleSchematicDrcCheckTask({});
 	assert.equal(schDrc.ok, true);
+	assert.equal((await handleAutoLayoutTask({})).ok, true);
+	assert.equal((await handleAutoRoutingTask({})).ok, true);
+	const originalAutoLayout = globalThis.eda.sch_Document.autoLayout;
+	const originalAutoRouting = globalThis.eda.sch_Document.autoRouting;
+	globalThis.eda.sch_Document.autoLayout = async () => false;
+	globalThis.eda.sch_Document.autoRouting = async () => false;
+	assert.equal((await handleAutoLayoutTask({})).ok, false);
+	assert.equal((await handleAutoRoutingTask({})).ok, false);
+	globalThis.eda.sch_Document.autoLayout = originalAutoLayout;
+	globalThis.eda.sch_Document.autoRouting = originalAutoRouting;
 	const originalSchematicDrcCheck = globalThis.eda.sch_Drc.check;
 	globalThis.eda.sch_Drc.check = async () => Array.from({ length: 130 }, (_value, index) => ({ code: `bulk-${index + 1}`, count: 1 }));
 	const truncatedSchematicDrc = await handleSchematicDrcCheckTask({});

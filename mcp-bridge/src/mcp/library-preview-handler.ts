@@ -51,7 +51,7 @@ export async function handleLibraryPreviewTask(payload: unknown): Promise<unknow
 	const api = eda?.[moduleName];
 	if (!isPlainObjectRecord(api) || typeof api.getRenderImage !== 'function')
 		throw new TypeError(`EDA ${moduleName}.getRenderImage API is unavailable in this client version.`);
-	const request = kind === 'symbol'
+	const request: Record<string, string> = kind === 'symbol'
 		? { symbolUuid: uuid, libraryUuid, ...(subPartName ? { subPartName } : {}) }
 		: { footprintUuid: uuid, libraryUuid };
 	const image = await (api.getRenderImage as (input: Record<string, string>) => Promise<unknown>).call(api, request);
