@@ -30,6 +30,8 @@ const PCB_METHODS = new Set([
 	'manufacture_data',
 ]);
 const SCHEMATIC_METHODS = new Set(['bom', 'netlist', 'simulation_netlist', 'document']);
+const STANDARD_NETLIST_TYPES = ['Allegro', 'PADS', 'Protel2', 'JLCEDA'] as const;
+const SIMULATION_NETLIST_TYPES = ['Ngspice'] as const;
 
 function encodeBase64(bytes: Uint8Array): string {
 	let binary = '';
@@ -112,7 +114,7 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 		const calls: Record<string, { method: string; args: unknown[] }> = {
 			'gerber': { method: 'getGerberFile', args: [fileName, undefined, unit] },
 			'bom': { method: 'getBomFile', args: [fileName, fileType, template] },
-			'netlist': { method: 'getNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
+			'netlist': { method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] },
 			'pick_and_place': { method: 'getPickAndPlaceFile', args: [fileName, fileType, unit] },
 			'3d': { method: 'get3DFile', args: [fileName, fileType] },
 			'3d_shell': { method: 'get3DShellFile', args: [fileName, fileType] },
@@ -148,8 +150,8 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 		throw new TypeError(`Unsupported schematic export kind: ${kind}.`);
 	const calls: Record<string, { method: string; args: unknown[] }> = {
 		bom: { method: 'getBomFile', args: [fileName, fileType, template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] },
-		netlist: { method: 'getNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
-		simulation_netlist: { method: 'getSimulationNetlistFile', args: [fileName, optionalString(input, 'netlistType')] },
+		netlist: { method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] },
+		simulation_netlist: { method: 'getSimulationNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', SIMULATION_NETLIST_TYPES)] },
 		document: { method: 'getExportDocumentFile', args: [fileName, fileType, undefined, optionalString(input, 'documentScope')] },
 	};
 	return calls[kind];

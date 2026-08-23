@@ -1,4 +1,4 @@
-import { getEdaRuntime, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 
 type NetQueryMode = 'all' | 'names' | 'exact';
 interface PcbNetAnalysis {
@@ -9,6 +9,10 @@ interface PcbNetAnalysis {
 }
 
 const PCB_PRIMITIVE_TYPES = new Set(['ARC', 'COMPONENT', 'PAD', 'COMPONENT_PAD', 'POLYLINE', 'POUR', 'FILL', 'REGION', 'LINE', 'VIA', 'DIMENSION', 'IMAGE', 'OBJECT', 'POURED', 'STRING', 'ATTRIBUTE']);
+
+async function serializeBoundedNetArray(values: unknown[]): Promise<unknown[]> {
+	return preserveBoundedArray(await Promise.all(values.map(value => toSerializableAsync(value))));
+}
 
 function normalizePcbNetAnalysis(input: Record<string, unknown>, mode: NetQueryMode): PcbNetAnalysis | undefined {
 	if (input.analysis === undefined || input.analysis === null)
@@ -68,8 +72,8 @@ export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> 
 		if (!Array.isArray(rawNames))
 			throw new TypeError(`EDA ${moduleName}.getAllNetsName returned an invalid result.`);
 		const matchingNames = rawNames.filter(name => !query || String(name).toLowerCase().includes(query));
-		const returnedNames = matchingNames.slice(0, Math.min(limit, 120));
-		return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: matchingNames.length, returned: returnedNames.length, names: await toSerializableAsync(returnedNames), truncated: matchingNames.length > returnedNames.length };
+		const returnedNames = matchingNames.slice(0, limit);
+		return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: matchingNames.length, returned: returnedNames.length, names: await serializeBoundedNetArray(returnedNames), truncated: matchingNames.length > returnedNames.length };
 	}
 	if (mode === 'exact' && typeof api.getNet === 'function') {
 		const net = await toSerializableAsync(await (api.getNet as (name: string) => Promise<unknown>).call(api, queryText));
@@ -106,6 +110,6 @@ export async function handlePcbNetQueryTask(payload: unknown): Promise<unknown> 
 		throw new TypeError(`EDA ${moduleName}.getAllNets returned an invalid result.`);
 	}
 	const matchingNets = rawNets.filter(net => !query || JSON.stringify(net).toLowerCase().includes(query));
-	const returnedNets = matchingNets.slice(0, Math.min(limit, 120));
-	return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: matchingNets.length, returned: returnedNets.length, nets: await toSerializableAsync(returnedNets), truncated: matchingNets.length > returnedNets.length };
+	const returnedNets = matchingNets.slice(0, limit);
+	return { ok: true, domain: 'pcb', mode: mode as NetQueryMode, query, total: matchingNets.length, returned: returnedNets.length, nets: await serializeBoundedNetArray(returnedNets), truncated: matchingNets.length > returnedNets.length };
 }

@@ -1257,7 +1257,7 @@
           "required": ["text", "value"],
           "additionalProperties": false
         },
-        "netlistType": { "type": "string", "enum": ["Allegro", "PADS", "Protel2", "JLCEDA", "Ngspice"] },
+        "netlistType": { "type": "string" },
         "unit": { "type": "string", "enum": ["mm", "in", "mil"] },
         "documentScope": { "type": "string", "enum": ["All Schematic", "Current Schematic", "Current Schematic Page"] },
         "includeData": { "type": "boolean", "default": false },
@@ -1268,7 +1268,14 @@
         {
           "properties": {
             "domain": { "const": "pcb" },
-            "kind": { "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "jrouter_auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] }
+            "kind": { "enum": ["gerber", "bom", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "jrouter_auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data"] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "pcb" },
+            "kind": { "const": "netlist" },
+            "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] }
           }
         },
         {
@@ -1283,7 +1290,21 @@
         {
           "properties": {
             "domain": { "const": "schematic" },
-            "kind": { "enum": ["bom", "netlist", "simulation_netlist", "document"] }
+            "kind": { "enum": ["bom", "document"] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "schematic" },
+            "kind": { "const": "netlist" },
+            "netlistType": { "enum": ["Allegro", "PADS", "Protel2", "JLCEDA"] }
+          }
+        },
+        {
+          "properties": {
+            "domain": { "const": "schematic" },
+            "kind": { "const": "simulation_netlist" },
+            "netlistType": { "const": "Ngspice" }
           }
         }
       ],

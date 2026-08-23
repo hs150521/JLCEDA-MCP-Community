@@ -711,6 +711,14 @@ async function main() {
 	assert.equal(filteredPcbNets.total, 1);
 	assert.equal(filteredPcbNets.returned, 1);
 	assert.equal(filteredPcbNets.truncated, false);
+	globalThis.eda.pcb_Net.getAllNets = async () => Array.from({ length: 130 }, (_, index) => ({ name: `NET_${index + 1}` }));
+	const largePcbNetList = await toSerializableAsync(await handlePcbNetQueryTask({ limit: 130 }));
+	assert.equal(largePcbNetList.total, 130);
+	assert.equal(largePcbNetList.returned, 130);
+	assert.equal(largePcbNetList.nets.length, 130);
+	globalThis.eda.pcb_Net.getAllNets = async () => [{ name: 'USB_D+' }, { name: 'GND' }];
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'netlist', netlistType: 'Ngspice' }), /netlistType must be one of: Allegro, PADS, Protel2, JLCEDA/);
+	await assert.rejects(() => handleManufactureExportTask({ domain: 'schematic', kind: 'simulation_netlist', netlistType: 'Allegro' }), /netlistType must be one of: Ngspice/);
 	globalThis.eda.pcb_Drc.modifyDifferentialPairName = async () => true;
 	globalThis.eda.pcb_Drc.getAllDifferentialPairs = async () => ({ USB_PAIR_RENAMED: { name: 'USB_PAIR_RENAMED', positiveNet: 'USB_D+', negativeNet: 'USB_D-' } });
 	const objectReadback = await handlePcbConstraintsManageTask({ kind: 'differential_pair', operation: 'rename', name: 'USB_PAIR', newName: 'USB_PAIR_RENAMED', confirm: true });
