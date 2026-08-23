@@ -61,6 +61,13 @@ async function main() {
 	});
 	await new Promise(resolve => setTimeout(resolve, 0));
 	assert.equal(backgroundSettled, false, 'timed-out task must remain unsettled until its handler finishes');
+	let nextTaskRan = false;
+	const queueAfterTimeout = timedTask.result.catch(() => undefined).then(() => {
+		nextTaskRan = true;
+	});
+	await queueAfterTimeout;
+	assert.equal(nextTaskRan, true, 'a timed-out task must release the bridge queue before its handler settles');
+	assert.equal(backgroundSettled, false, 'the handler remains pending while the next task can run');
 	resolveBackgroundTask('late result');
 	await timedTask.settled;
 	assert.equal(backgroundSettled, true);

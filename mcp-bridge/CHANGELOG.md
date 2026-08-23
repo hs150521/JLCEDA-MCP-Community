@@ -1,5 +1,13 @@
 ## 未发布
 
+## Unreleased
+
+### Fixes
+
+- Release the Bridge task queue after an EDA write API times out, so a permanently pending API call cannot block later read or write tasks.
+
+---
+
 ## [2.0.8] - 2026-08-23
 
 ### Fixes

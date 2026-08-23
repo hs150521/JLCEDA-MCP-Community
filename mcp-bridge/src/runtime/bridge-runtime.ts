@@ -222,7 +222,6 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 
 		let result: unknown;
 		let taskError: { message: string; stack?: string } | undefined;
-		let handlerSettled: Promise<void> | undefined;
 		try {
 			debugLog('[DEBUG] calling handler for path:', task.path);
 			currentTransport.reportTaskStarted(task.requestId, task.leaseTerm);
@@ -234,7 +233,6 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 				task.path,
 				timeoutMs,
 			);
-			handlerSettled = timedTask.settled;
 			result = await timedTask.result;
 			// 任务完成后再次刷新，确保结果回传前连接不被断开
 			currentTransport.refreshServerActivity();
@@ -249,16 +247,10 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		}
 
 		debugLog('[DEBUG] completing task, hasError:', !!taskError);
-		try {
-			currentTransport.completeTask(task.requestId, task.leaseTerm, result, taskError);
-		}
-		finally {
-			// Promise 超时无法取消嘉立创 EDA API。保持任务链锁定直到后台调用真正结束，
-			// 防止调用方重试或后续写操作与仍在运行的修改重叠。
-			if (handlerSettled) {
-				await handlerSettled;
-			}
-		}
+		// A timed-out EDA beta API can remain pending forever. Do not let that
+		// background Promise block every later Bridge task; startTimedTask has
+		// already attached rejection handling to it.
+		currentTransport.completeTask(task.requestId, task.leaseTerm, result, taskError);
 	}).catch((error: unknown) => {
 		const message = toSafeErrorMessage(error);
 		writeRuntimeWarningLog('bridge.task.failed', BRIDGE_STATUS_TEXT.runtime.taskFailedSummary, message, message, 'bridge_task_failed');
