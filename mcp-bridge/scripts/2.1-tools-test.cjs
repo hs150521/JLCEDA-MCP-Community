@@ -73,6 +73,10 @@ async function main() {
 	assert.equal(designNetlistComparison.differenceCount, 1);
 	const pcbComparison = await handleDesignCompareTask({ domain: 'pcb', sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', pcbUuid: 'pcb-2' }, options: { deviation: 1 } });
 	assert.equal(pcbComparison.result.data.changed, 3);
+	await assert.rejects(
+		handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2', options: { deviation: 1 } }),
+		/options is only supported for the pcb domain/,
+	);
 	const exportResult = await handleManufactureExportTask({ domain: 'pcb', kind: 'bom', includeData: true });
 	assert.equal(exportResult.ok, true);
 	assert.equal(exportResult.file.type, 'text/csv');

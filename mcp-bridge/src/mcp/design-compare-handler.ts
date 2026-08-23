@@ -50,6 +50,9 @@ export async function handleDesignCompareTask(payload: unknown): Promise<unknown
 	}
 	const sourceA = normalizeSource(payload.sourceA, 'sourceA', domain);
 	const sourceB = normalizeSource(payload.sourceB, 'sourceB', domain);
+	if (domain !== 'pcb' && payload.options !== undefined) {
+		throw new TypeError('options is only supported for the pcb domain.');
+	}
 	const options = domain === 'pcb' ? normalizeOptions(payload.options) : undefined;
 	const eda = (globalThis as unknown as { eda?: Record<string, unknown> }).eda;
 	const api = eda?.sys_Tool;
@@ -57,8 +60,8 @@ export async function handleDesignCompareTask(payload: unknown): Promise<unknown
 	if (!isPlainObjectRecord(api) || typeof api[methodName] !== 'function') {
 		throw new TypeError(`EDA sys_Tool.${methodName} API is unavailable in this client version.`);
 	}
-	const result = domain === 'pcb'
-		? await (api[methodName] as (a: CompareSource, b: CompareSource, options?: Record<string, unknown>) => Promise<unknown>).call(api, sourceA, sourceB, options)
+	const result = domain === 'pcb' && options
+		? await (api[methodName] as (a: CompareSource, b: CompareSource, options: Record<string, unknown>) => Promise<unknown>).call(api, sourceA, sourceB, options)
 		: await (api[methodName] as (a: CompareSource, b: CompareSource) => Promise<unknown>).call(api, sourceA, sourceB);
 	const serialized = await toSerializableAsync(result);
 	if (domain === 'netlist' && Array.isArray(serialized)) {
