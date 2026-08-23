@@ -720,15 +720,33 @@
       },
       "oneOf": [
         {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "rule_configuration" },
+            "configurationName": { "type": "string", "minLength": 1 }
+          },
+          "required": ["kind", "configurationName"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "rule_configurations" },
+            "includeSystem": { "type": "boolean", "default": false }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
           "properties": {
             "kind": { "const": "pad_pair_min_wire_length" },
             "padPairGroupName": { "type": "string", "minLength": 1 }
           },
-          "required": ["padPairGroupName"]
+          "required": ["kind", "padPairGroupName"]
         },
         {
+          "type": "object",
           "properties": {
-            "kind": { "enum": ["current_rules", "rule_configuration", "rule_configurations", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"] }
+            "kind": { "enum": ["current_rules", "net_rules", "net_to_net_rules", "region_rules", "net_classes", "differential_pairs", "equal_length_groups", "pad_pair_groups"] }
           }
         }
       ],
@@ -817,6 +835,21 @@
       "oneOf": [
         {
           "type": "object",
+          "properties": { "action": { "const": "import_auto_route_json" }, "dataBase64": { "type": "string", "minLength": 4 } },
+          "required": ["action", "dataBase64"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_auto_route_ses" }, "dataBase64": { "type": "string", "minLength": 4 } },
+          "required": ["action", "dataBase64"]
+        },
+        {
+          "type": "object",
+          "properties": { "action": { "const": "import_auto_layout_json" }, "dataBase64": { "type": "string", "minLength": 4 } },
+          "required": ["action", "dataBase64"]
+        },
+        {
+          "type": "object",
           "properties": { "action": { "const": "select_primitives" }, "ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "maxItems": 500 } },
           "required": ["action", "ids"]
         },
@@ -873,7 +906,7 @@
         {
           "type": "object",
           "properties": {
-            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "clear_selection", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes", "import_auto_route_json", "import_auto_route_ses", "import_auto_layout_json"] }
+            "action": { "enum": ["status", "canvas_origin", "filter_configuration", "selection", "mouse_position", "clear_selection", "zoom_to_board_outline", "save", "start_ratline", "stop_ratline", "clear_routing", "import_changes"] }
           }
         }
       ],

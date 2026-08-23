@@ -39,12 +39,6 @@ export async function handlePcbConstraintsQueryTask(payload: unknown): Promise<u
 		if (typeof input.padPairGroupName !== 'string' || input.padPairGroupName.trim().length === 0)
 			throw new TypeError('padPairGroupName is required for pad_pair_min_wire_length.');
 	}
-	if (kind !== 'rule_configuration' && input.configurationName !== undefined)
-		throw new TypeError('configurationName is only supported for rule_configuration.');
-	if (kind !== 'pad_pair_min_wire_length' && input.padPairGroupName !== undefined)
-		throw new TypeError('padPairGroupName is only supported for pad_pair_min_wire_length.');
-	if (kind !== 'rule_configurations' && input.includeSystem !== undefined)
-		throw new TypeError('includeSystem is only supported for rule_configurations.');
 	if (input.includeSystem !== undefined && typeof input.includeSystem !== 'boolean')
 		throw new TypeError('includeSystem must be a boolean.');
 	const args = kind === 'rule_configuration'
