@@ -14,6 +14,24 @@ import { isPlainObjectRecord } from '../utils';
 // 固定连接状态存储键，与上下文无关，设置页直接轮询此键。
 const MCP_CONNECTION_STATUS_KEY = 'jlc_mcp_connection_status';
 
+interface ExtensionStorage {
+	getExtensionUserConfig?: (key: string) => unknown;
+	setExtensionUserConfig?: (key: string, value: unknown) => unknown;
+}
+
+function getExtensionStorage(): ExtensionStorage | undefined {
+	try {
+		const runtime = (globalThis as { eda?: unknown }).eda;
+		if (!isPlainObjectRecord(runtime) || !isPlainObjectRecord(runtime.sys_Storage)) {
+			return undefined;
+		}
+		return runtime.sys_Storage as ExtensionStorage;
+	}
+	catch {
+		return undefined;
+	}
+}
+
 export type ConnectionStatusType = 'connecting' | 'connected' | 'error';
 
 /**
@@ -49,7 +67,20 @@ export function isConnectionStatusSnapshot(value: unknown): value is ConnectionS
  * @param snapshot 状态快照。
  */
 export function saveConnectionStatus(snapshot: ConnectionStatusSnapshot): void {
-	void eda.sys_Storage.setExtensionUserConfig(MCP_CONNECTION_STATUS_KEY, snapshot);
+	const storage = getExtensionStorage();
+	if (!storage || typeof storage.setExtensionUserConfig !== 'function') {
+		return;
+	}
+
+	try {
+		// EDA may expose the storage object before its backing runtime is ready.
+		// Consume both synchronous throws and rejected promises so reconnect logic
+		// cannot fail with an unhandled rejection during EDA startup.
+		void Promise.resolve(storage.setExtensionUserConfig.call(storage, MCP_CONNECTION_STATUS_KEY, snapshot)).catch(() => undefined);
+	}
+	catch {
+		// Storage is best-effort; connection state is recomputed on the next tick.
+	}
 }
 
 /**
@@ -58,7 +89,11 @@ export function saveConnectionStatus(snapshot: ConnectionStatusSnapshot): void {
  */
 export function readConnectionStatus(): ConnectionStatusSnapshot | undefined {
 	try {
-		const raw = eda.sys_Storage.getExtensionUserConfig(MCP_CONNECTION_STATUS_KEY);
+		const storage = getExtensionStorage();
+		if (!storage || typeof storage.getExtensionUserConfig !== 'function') {
+			return undefined;
+		}
+		const raw = storage.getExtensionUserConfig.call(storage, MCP_CONNECTION_STATUS_KEY);
 		return isConnectionStatusSnapshot(raw) ? raw : undefined;
 	}
 	catch {

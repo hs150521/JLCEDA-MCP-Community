@@ -13,6 +13,7 @@ const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPl
 const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
+const { readConnectionStatus, saveConnectionStatus } = require('../src/state/status-store.ts');
 
 for (const name of ['UART_TX', 'SPI_CLK', 'BLUE_LED_DATA']) {
 	assert.equal(detectNetLabelKind(name), 'NetLabel', `${name} must use an ordinary net label`);
@@ -53,6 +54,29 @@ async function main() {
 			},
 		},
 	};
+	// Storage can be exposed before the EDA backing runtime is initialized.
+	// Status persistence must remain best-effort and never reject bridge startup.
+	globalThis.eda.sys_Storage = {
+		setExtensionUserConfig: () => { throw new Error('storage is not ready'); },
+		getExtensionUserConfig: () => { throw new Error('storage is not ready'); },
+	};
+	assert.doesNotThrow(() => saveConnectionStatus({
+		bridgeType: 'connecting',
+		bridgeText: 'connecting',
+		websocketType: 'connecting',
+		websocketText: 'connecting',
+		updatedAt: new Date().toISOString(),
+	}));
+	assert.equal(readConnectionStatus(), undefined);
+	globalThis.eda.sys_Storage.setExtensionUserConfig = () => Promise.reject(new Error('storage rejected'));
+	assert.doesNotThrow(() => saveConnectionStatus({
+		bridgeType: 'error',
+		bridgeText: 'error',
+		websocketType: 'error',
+		websocketText: 'error',
+		updatedAt: new Date().toISOString(),
+	}));
+	await new Promise(resolve => setImmediate(resolve));
 	assert.equal((await handlePcbNetQueryTask({ query: 'vcc' })).returned, 1);
 	const detailedDrc = await handlePcbDrcCheckTask({});
 	assert.equal(detailedDrc.ok, false);

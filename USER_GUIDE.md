@@ -1,5 +1,7 @@
 # JLCEDA MCP 用户使用指南
 
+> **当前版本说明（2.2.x）**：本项目已切换到原生 MCP Server 架构。请不要再安装旧版 VS Code/Cursor **MCP Hub** 或 `.vsix`；它们已从仓库移除，并会导致 `Connection closed`、端口冲突和无法连接等问题。请直接按 [`docs/native-mcp-setup.md`](docs/native-mcp-setup.md) 安装 `jlceda-mcp`，再安装本仓库发布的 MCP Bridge `.eext`。本文件中早期 Hub 流程仅保留作历史参考。
+
 > 本指南面向初次使用 JLCEDA MCP 的用户，提供从安装到实际使用的完整教程。
 
 ## 目录
