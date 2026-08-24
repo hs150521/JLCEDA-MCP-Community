@@ -52,6 +52,7 @@ import { handlePcbRealtimeDrcTask } from '../mcp/pcb-realtime-drc-handler.ts';
 import { handleProjectInfoTask } from '../mcp/project-info-handler.ts';
 import { handleSchematicDocumentTask } from '../mcp/schematic-document-handler.ts';
 import { handleSchematicDrcCheckTask } from '../mcp/schematic-drc-handler.ts';
+import { handleSchematicLayoutCheckTask } from '../mcp/schematic-layout-check-handler.ts';
 import { handleSchematicPagesManageTask } from '../mcp/schematic-pages-manage-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
@@ -104,6 +105,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/library/sources': handleLibrarySourcesTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,
+	'/bridge/jlceda/schematic/layout-check': handleSchematicLayoutCheckTask,
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,
 	'/bridge/jlceda/workspace/query': handleWorkspaceQueryTask,
 };

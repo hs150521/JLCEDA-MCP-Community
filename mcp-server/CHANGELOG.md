@@ -2,6 +2,8 @@
 
 ## 2.2.1 - 2026-08-24
 
+- 新增 `schematic_layout_check`，提供原理图符号、引脚、属性文本、网络标签和导线的保守几何重叠检查、密集区域报告及确认保护的属性文本修复。
+
 - 发布与 Bridge 2.1.2 配套的 Server 2.2.1 构建产物，并同步中文文档。
 
 - MCP WebSocket 断开时清理挂起的 Bridge 请求，避免失联调用方一直锁定 `bridge_select_client` 直到队列超时。
