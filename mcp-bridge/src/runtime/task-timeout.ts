@@ -16,6 +16,7 @@ const EXTENDED_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/manufacture/export',
 	'/bridge/jlceda/pcb/document',
 	'/bridge/jlceda/schematic/document',
+	'/bridge/jlceda/schematic/layout-check',
 	'/bridge/jlceda/canvas/snapshot',
 	'/bridge/jlceda/library/sources',
 	'/bridge/jlceda/library/classification-query',

@@ -8,6 +8,7 @@ const DEFAULT_FONT_SIZE = 50;
 const DEFAULT_SYMBOL_WIDTH = 400;
 const DEFAULT_SYMBOL_HEIGHT = 300;
 const MAX_PRIMITIVES = 1200;
+const MAX_COLLISIONS = 5000;
 
 function num(value: unknown, fallback = 0): number {
 	return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -145,6 +146,7 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 	const components = allComponents.slice(0, MAX_PRIMITIVES);
 	const primitives: LayoutPrimitive[] = [];
 	let primitivesTruncated = allComponents.length > MAX_PRIMITIVES;
+	const pinsCapability = typeof componentApi.getAllPinsByPrimitiveId === 'function';
 	for (let index = 0; index < components.length; index += 1) {
 		if (primitives.length >= MAX_PRIMITIVES) {
 			primitivesTruncated = true;
@@ -160,7 +162,7 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 		const rotation = num(getSyncState(component, 'getState_Rotation', 0)); const designator = text(getSyncState(component, 'getState_Designator', ''));
 		let width = DEFAULT_SYMBOL_WIDTH; let height = DEFAULT_SYMBOL_HEIGHT;
 		let pins: unknown[] = [];
-		if (typeof componentApi.getAllPinsByPrimitiveId === 'function') {
+		if (pinsCapability) {
 			const rawPins = await (componentApi.getAllPinsByPrimitiveId as (id: string) => Promise<unknown[]>).call(componentApi, id);
 			pins = Array.isArray(rawPins) ? rawPins : [];
 			if (pins.length) {
@@ -224,6 +226,7 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 	}
 
 	const collisions: Record<string, unknown>[] = [];
+	let collisionTotal = 0;
 	for (let i = 0; i < primitives.length; i += 1) {
 		for (let j = i + 1; j < primitives.length; j += 1) {
 			const a = primitives[i]; const b = primitives[j]; if (!a.pageKnown || !b.pageKnown || a.pageKey !== b.pageKey)
@@ -235,7 +238,9 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 			const area = intersectionArea(a.rect, b.rect); if (!area)
 				continue;
 			const type = a.kind === 'attribute' && b.kind === 'attribute' ? 'text-text' : a.kind === 'attribute' || b.kind === 'attribute' ? (a.kind === 'pin' || b.kind === 'pin' ? 'text-pin' : a.kind === 'wire' || b.kind === 'wire' ? 'label-wire' : 'text-symbol') : a.kind === 'symbol' && b.kind === 'symbol' ? 'symbol-symbol' : 'primitive-overlap';
-			collisions.push({ pageKey: a.pageKey, primitiveIds: [a.id, b.id], collisionType: type, severity: severity(a.kind, b.kind, area), area, primitives: [{ id: a.id, kind: a.kind, x: a.x, y: a.y, rect: rectCopy(a.rect), text: a.text, designator: a.designator }, { id: b.id, kind: b.kind, x: b.x, y: b.y, rect: rectCopy(b.rect), text: b.text, designator: b.designator }] });
+			collisionTotal += 1;
+			if (collisions.length < MAX_COLLISIONS)
+				collisions.push({ pageKey: a.pageKey, primitiveIds: [a.id, b.id], collisionType: type, severity: severity(a.kind, b.kind, area), area, primitives: [{ id: a.id, kind: a.kind, x: a.x, y: a.y, rect: rectCopy(a.rect), text: a.text, designator: a.designator }, { id: b.id, kind: b.kind, x: b.x, y: b.y, rect: rectCopy(b.rect), text: b.text, designator: b.designator }] });
 		}
 	}
 
@@ -261,12 +266,42 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 	}
 	const suggestedFixes = Array.from(fixByAttribute.values());
 	const appliedFixes: unknown[] = [];
+	const skippedFixes: Array<Record<string, unknown>> = [];
 	if (mode === 'fix' && isPlainObjectRecord(attributeApi) && typeof attributeApi.modify === 'function') {
 		for (const fix of suggestedFixes) {
-			const item = fix as Record<string, unknown>; try { await (attributeApi.modify as (id: string, property: Record<string, number>) => Promise<unknown>).call(attributeApi, String(item.primitiveId), { x: Number(item.suggestedX), y: Number(item.suggestedY) }); appliedFixes.push(item); }
-			catch { /* keep analysis result when one attribute is not writable */ }
+			const item = fix as Record<string, unknown>;
+			const target = primitives.find(primitive => primitive.id === item.primitiveId && primitive.kind === 'attribute');
+			if (!target) {
+				skippedFixes.push({ ...item, reason: 'attribute_geometry_unavailable' });
+				continue;
+			}
+			const dx = Number(item.suggestedX) - target.x;
+			const dy = Number(item.suggestedY) - target.y;
+			const proposedRect: Rect = { left: target.rect.left + dx, right: target.rect.right + dx, top: target.rect.top + dy, bottom: target.rect.bottom + dy };
+			const outsidePage = pageBounds && (proposedRect.left < pageBounds.left || proposedRect.right > pageBounds.right || proposedRect.bottom < pageBounds.bottom || proposedRect.top > pageBounds.top);
+			const createsCollision = primitives.some(other => {
+				if (other.id === target.id || (target.parentId && other.id === target.parentId) || (other.parentId && other.parentId === target.id) || !other.pageKnown || !target.pageKnown || other.pageKey !== target.pageKey)
+					return false;
+				if ((other.kind === 'wire' && target.kind === 'pin' && endpointTouchesRect(other.endpoints, proposedRect)) || (target.kind === 'wire' && other.kind === 'pin' && endpointTouchesRect(target.endpoints, other.rect)))
+					return false;
+				return intersectionArea(proposedRect, other.rect) > 0;
+			});
+			if (outsidePage || createsCollision) {
+				skippedFixes.push({ ...item, reason: outsidePage ? 'outside_page_bounds' : 'destination_collision' });
+				continue;
+			}
+			try {
+				const updated = await (attributeApi.modify as (id: string, property: Record<string, number>) => Promise<unknown>).call(attributeApi, String(item.primitiveId), { x: Number(item.suggestedX), y: Number(item.suggestedY) });
+				if (updated !== undefined && updated !== null)
+					appliedFixes.push(item);
+				else
+					skippedFixes.push({ ...item, reason: 'attribute_modify_unavailable' });
+			}
+			catch {
+				skippedFixes.push({ ...item, reason: 'attribute_modify_failed' });
+			}
 		}
 	}
 
-	return await toSerializableAsync({ ok: true, mode, confirmed: mode === 'fix', page: currentPage, capabilities: { components: true, pins: true, attributes: attributeCapability, attributesGeometry: attributeCapability && attributesMissingGeometry === 0, wires: wireCapability, pageBounds: Boolean(pageBounds), pageBoundsSource: pageBounds ? 'request.pageBounds' : 'unavailable_in_current_api', pageGrouping: pageGroupingAvailable ? 'structured' : 'unknown-single-group' }, counts: { components: allComponents.length, componentsAnalyzed: components.length, attributes: allAttributes.length, attributesAnalyzed: rawAttributes.length, attributesMissingGeometry, wires: wires.length, primitives: primitives.length, primitiveLimit: MAX_PRIMITIVES, truncated: primitivesTruncated, collisions: collisions.length, outOfBounds: outOfBounds.length, denseRegions: denseRegions.length }, collisions, outOfBounds, denseRegions, suggestedFixes, appliedFixes });
+	return await toSerializableAsync({ ok: true, mode, confirmed: mode === 'fix', page: currentPage, capabilities: { components: true, pins: pinsCapability, attributes: attributeCapability, attributesGeometry: attributeCapability && attributesMissingGeometry === 0, wires: wireCapability, pageBounds: Boolean(pageBounds), pageBoundsSource: pageBounds ? 'request.pageBounds' : 'unavailable_in_current_api', pageGrouping: pageGroupingAvailable ? 'structured' : 'unknown-single-group' }, counts: { components: allComponents.length, componentsAnalyzed: components.length, attributes: allAttributes.length, attributesAnalyzed: rawAttributes.length, attributesMissingGeometry, wires: wires.length, primitives: primitives.length, primitiveLimit: MAX_PRIMITIVES, truncated: primitivesTruncated, collisionTotal, collisionLimit: MAX_COLLISIONS, collisionsTruncated: collisionTotal > MAX_COLLISIONS, collisions: collisions.length, outOfBounds: outOfBounds.length, denseRegions: denseRegions.length }, collisions, outOfBounds, denseRegions, suggestedFixes, appliedFixes, skippedFixes });
 }
