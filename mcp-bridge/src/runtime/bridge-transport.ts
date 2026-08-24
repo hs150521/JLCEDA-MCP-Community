@@ -51,6 +51,8 @@ interface BridgeTransportCallbacks {
 interface BridgeTaskError {
 	message: string;
 	stack?: string;
+	code?: string;
+	timeoutMs?: number;
 }
 
 type TimerHandle = ReturnType<typeof globalThis.setTimeout>;

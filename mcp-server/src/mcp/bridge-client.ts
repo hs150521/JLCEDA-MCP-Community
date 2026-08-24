@@ -117,6 +117,20 @@ function hasMutatingRecoveryDiagnostics(diagnostics: Iterable<RecoveryDiagnostic
   return false;
 }
 
+function getBridgeTaskTimeoutMs(error: unknown): number | undefined {
+  if (isRecord(error) && error.code === 'BRIDGE_TASK_TIMEOUT') {
+    const timeoutMs = Number(error.timeoutMs);
+    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined;
+  }
+  // Accept older Bridge clients that only serialized the timeout message.
+  const message = typeof error === 'string' ? error : isRecord(error) && typeof error.message === 'string' ? error.message : undefined;
+  if (message) {
+    const match = /^Bridge task timed out after (\d+)ms: /.exec(message);
+    return match ? Number(match[1]) : undefined;
+  }
+  return undefined;
+}
+
 interface BridgeServerOptions {
   peerTtlMs?: number;
   peerSweepIntervalMs?: number;
@@ -562,6 +576,10 @@ export class EdaBridgeServer {
     }
     this.clearPendingTimeout(pending);
     this.pendingRequests.delete(requestId);
+    const bridgeTimeoutMs = getBridgeTaskTimeoutMs(message.error);
+    if (bridgeTimeoutMs !== undefined) {
+      this.recordTimedOutRequest(requestId, pending, bridgeTimeoutMs);
+    }
     if (isRecord(message.error) && typeof message.error.message === 'string') {
       pending.reject(new Error(message.error.message));
       return;
@@ -588,20 +606,7 @@ export class EdaBridgeServer {
       // The EDA handler cannot be cancelled when the server-side timeout wins.
       // Keep this client quarantined for the execution window before admitting
       // another task that could mutate the same document.
-      if (pending.clientId) {
-        this.enterReconnectBarrier(pending.clientId);
-        const diagnostic: RecoveryDiagnostic = {
-          requestId,
-          clientId: pending.clientId,
-          path: pending.path ?? '/bridge/jlceda/unknown',
-          startedAt: new Date(pending.startedAt ?? Date.now()).toISOString(),
-          timeoutMs: executionTimeoutMs,
-          timedOutAtMs: Date.now(),
-          mutating: !isReadOnlyRequest(pending.path ?? '', pending.payload),
-          context: pending.context,
-        };
-        this.recoveryDiagnostics.set(requestId, diagnostic);
-      }
+      this.recordTimedOutRequest(requestId, pending, executionTimeoutMs);
       this.pendingRequests.delete(requestId);
       pending.reject(new Error(`Request execution timeout after ${String(executionTimeoutMs)}ms`));
     }, executionTimeoutMs);
@@ -771,6 +776,24 @@ export class EdaBridgeServer {
       this.broadcastRoles('Client explicitly selected by MCP');
     }
     return this.getClientSnapshot();
+  }
+
+  private recordTimedOutRequest(requestId: string, pending: PendingRequest, timeoutMs: number): void {
+    if (!pending.clientId) {
+      return;
+    }
+    this.enterReconnectBarrier(pending.clientId);
+    const diagnostic: RecoveryDiagnostic = {
+      requestId,
+      clientId: pending.clientId,
+      path: pending.path ?? '/bridge/jlceda/unknown',
+      startedAt: new Date(pending.startedAt ?? Date.now()).toISOString(),
+      timeoutMs,
+      timedOutAtMs: Date.now(),
+      mutating: !isReadOnlyRequest(pending.path ?? '', pending.payload),
+      context: pending.context,
+    };
+    this.recoveryDiagnostics.set(requestId, diagnostic);
   }
 
   private async recoverClient(payload: unknown, timeoutMs: number): Promise<Record<string, unknown>> {

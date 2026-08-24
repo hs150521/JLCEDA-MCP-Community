@@ -42,7 +42,7 @@ const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 export class BridgeTaskTimeoutError extends Error {
 	public constructor(
 		path: string,
-		timeoutMs: number,
+		public readonly timeoutMs: number,
 		public readonly backgroundSettled?: Promise<void>,
 		message = `Bridge task timed out after ${String(timeoutMs)}ms: ${path}`,
 	) {

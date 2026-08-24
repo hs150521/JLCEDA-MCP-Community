@@ -1,4 +1,5 @@
 ## 未发布
+- Bridge task 超时结果现在包含结构化 `BRIDGE_TASK_TIMEOUT` 标记和 `timeoutMs`，Server 可在客户端先超时时建立受控恢复诊断。
 
 - 支持服务端发起的受控恢复请求：超时隔离的运行时会建立新的 Bridge generation；底层 EDA Promise 不会被取消，Server 会在身份校验和回读确认前继续阻止写入。
 

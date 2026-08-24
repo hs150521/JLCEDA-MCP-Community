@@ -314,6 +314,9 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 			taskError = {
 				message: toSafeErrorMessage(error),
 				stack: error instanceof Error ? error.stack : undefined,
+				...(error instanceof BridgeTaskTimeoutError
+					? { code: 'BRIDGE_TASK_TIMEOUT', timeoutMs: error.timeoutMs }
+					: {}),
 			};
 		}
 

@@ -267,6 +267,21 @@ try {
         leaseTerm: message.leaseTerm,
         startedAt: Date.now(),
       }));
+      setTimeout(() => {
+        if (stuck.socket.readyState === WebSocket.OPEN) {
+          stuck.socket.send(JSON.stringify({
+            type: 'bridge/result',
+            clientId: 'stuck-page',
+            requestId: message.requestId,
+            leaseTerm: message.leaseTerm,
+            error: {
+              message: `Bridge task timed out after 50ms: ${message.path}`,
+              code: 'BRIDGE_TASK_TIMEOUT',
+              timeoutMs: 50,
+            },
+          }));
+        }
+      }, 50);
     }
   });
   replacement = await registerEda(
@@ -283,7 +298,7 @@ try {
     recoveryServer.request('/bridge/admin/select-client', { clientId: 'replacement-page' }, 2000),
     /pending task/,
   );
-  await assert.rejects(stuckRequest, /Request execution timeout/);
+  await assert.rejects(stuckRequest, /Bridge task timed out/);
   const recoverySnapshot = await recoveryServer.request('/bridge/admin/clients', {}, 2000);
   const recoveryRequestId = recoverySnapshot.clients
     .find((client) => client.clientId === 'stuck-page')
@@ -296,6 +311,7 @@ try {
   assert.match(recoveryStart.warning, /may have completed/);
   assert.equal(recoveryStart.diagnostic.mutating, true);
   assert.equal(recoveryStart.diagnostic.path, '/bridge/jlceda/schematic/layout-check');
+  assert.equal(recoveryStart.diagnostic.timeoutMs, 50);
   const recoveryMessage = await recoveryMessagePromise;
   assert.equal(recoveryMessage.recoveryId, recoveryStart.recoveryId);
   stuck.socket.close();

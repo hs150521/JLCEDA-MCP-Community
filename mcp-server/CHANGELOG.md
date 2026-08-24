@@ -1,6 +1,7 @@
 # 更新日志
 
 ## 未发布
+- 修复 Bridge 客户端先于 Server 超时时未创建 recovery diagnostic 的问题；超时结果现在携带结构化 `BRIDGE_TASK_TIMEOUT` 标记和超时时间，并进入同一写隔离流程。
 - 加固受控恢复：恢复绑定显式超时 `requestId`，拒绝 `layout-check mode=fix` 回读写入，断开源客户端仍可通过 quarantine 诊断恢复；目标客户端断开后可由新连接世代重新绑定，同 ID 重连也会校验连接世代；未确认完成的写诊断不会因 TTL 自动解除写阻断。
 
 - 新增 `bridge_recover_client` 的受控恢复流程：保留超时写操作诊断，要求显式确认、新的 Bridge 运行时、文档身份校验和只读回读；在确认前继续阻止写入并提示修改可能已完成。

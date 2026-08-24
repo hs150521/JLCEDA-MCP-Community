@@ -58,6 +58,8 @@ export interface BridgeClientResultMessage {
 	error?: {
 		message: string;
 		stack?: string;
+		code?: string;
+		timeoutMs?: number;
 	};
 }
 
