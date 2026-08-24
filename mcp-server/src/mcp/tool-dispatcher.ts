@@ -16,6 +16,8 @@ const __dirname = dirname(__filename);
 // 加载工具定义
 const toolDefinitionsPath = join(__dirname, '..', 'resources', 'mcp-tool-definitions.json');
 const rawToolDefinitions = JSON.parse(readFileSync(toolDefinitionsPath, 'utf8'));
+const bridgeRoutesPath = join(__dirname, '..', 'resources', 'bridge-tool-routes.json');
+const rawBridgeRoutes = JSON.parse(readFileSync(bridgeRoutesPath, 'utf8')) as unknown;
 
 export interface ToolCallParams {
   name: string;
@@ -77,6 +79,22 @@ function loadToolDefinitions(): readonly ToolDefinition[] {
 }
 
 const TOOL_DEFINITIONS = loadToolDefinitions();
+
+function loadBridgeRoutes(): Readonly<Record<string, string>> {
+  if (!isPlainObjectRecord(rawBridgeRoutes)) {
+    throw new Error('bridge-tool-routes.json must contain an object');
+  }
+  const routes: Record<string, string> = {};
+  for (const [toolName, route] of Object.entries(rawBridgeRoutes)) {
+    if (typeof route !== 'string' || route.length === 0 || !route.startsWith('/bridge/')) {
+      throw new Error(`Invalid bridge route for tool ${toolName}`);
+    }
+    routes[toolName] = route;
+  }
+  return routes;
+}
+
+const BRIDGE_ROUTES = loadBridgeRoutes();
 
 export class ToolDispatcher {
   constructor(private readonly bridgeServer: EdaBridgeServer) {}
@@ -141,50 +159,7 @@ export class ToolDispatcher {
    * 根据工具名获取桥接路径
    */
   private getBridgePath(toolName: string): string {
-    const pathMap: Record<string, string> = {
-      'schematic_read': '/bridge/jlceda/schematic/read',
-      'schematic_layout_check': '/bridge/jlceda/schematic/layout-check',
-      'schematic_review': '/bridge/jlceda/schematic/review',
-      'component_select': '/bridge/jlceda/component/select',
-		'eda_canvas_snapshot': '/bridge/jlceda/canvas/snapshot',
-      'component_place': '/bridge/jlceda/component/place',
-      'component_place_auto': '/bridge/jlceda/component/place-auto',
-      'netlabel_place': '/bridge/jlceda/netlabel/place',
-      'netlabel_modify': '/bridge/jlceda/netlabel/modify',
-      'pcb_drc_check': '/bridge/jlceda/pcb/drc-check',
-      'schematic_drc_check': '/bridge/jlceda/schematic/drc-check',
-      'pcb_constraints_query': '/bridge/jlceda/pcb/constraints-query',
-		'pcb_constraints_manage': '/bridge/jlceda/pcb/constraints-manage',
-      'netlist_compare': '/bridge/jlceda/netlist/compare',
-      'design_compare': '/bridge/jlceda/design/compare',
-		'design_archive_export': '/bridge/jlceda/design/archive-export',
-      'design_source_export': '/bridge/jlceda/design/source-export',
-      'pcb_layer_query': '/bridge/jlceda/pcb/layer-query',
-      'pcb_realtime_drc': '/bridge/jlceda/pcb/realtime-drc',
-      'pcb_document_action': '/bridge/jlceda/pcb/document',
-      'schematic_document_action': '/bridge/jlceda/schematic/document',
-      'schematic_pages_manage': '/bridge/jlceda/schematic/pages-manage',
-      'project_info': '/bridge/jlceda/project/info',
-		'workspace_query': '/bridge/jlceda/workspace/query',
-      'manufacture_export': '/bridge/jlceda/manufacture/export',
-      'manufacture_templates_query': '/bridge/jlceda/manufacture/templates-query',
-      'library_search': '/bridge/jlceda/library/search',
-		'library_classification_query': '/bridge/jlceda/library/classification-query',
-		'library_preview': '/bridge/jlceda/library/preview',
-		'library_sources': '/bridge/jlceda/library/sources',
-      'pcb_net_query': '/bridge/jlceda/net/query-pcb',
-      'schematic_auto_layout': '/bridge/jlceda/auto/layout',
-      'schematic_auto_routing': '/bridge/jlceda/auto/routing',
-      'api_index': '/bridge/jlceda/api/index',
-      'api_search': '/bridge/jlceda/api/search',
-      'api_invoke': '/bridge/jlceda/api/invoke',
-      'eda_context': '/bridge/jlceda/context',
-      'bridge_clients': '/bridge/admin/clients',
-      'bridge_select_client': '/bridge/admin/select-client',
-      'bridge_recover_client': '/bridge/admin/recover-client',
-    };
-
-    const path = pathMap[toolName];
+    const path = BRIDGE_ROUTES[toolName];
     if (!path) {
       throw new Error(`未知工具: ${toolName}`);
     }

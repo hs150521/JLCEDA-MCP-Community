@@ -5,7 +5,7 @@
 ### 1. mcp-bridge（EDA 插件端）
 - ✅ **创建** `netlabel-place-handler.ts` - 网络标签放置处理器
 - ✅ **创建** `netlabel-modify-handler.ts` - 网络标签修改处理器  
-- ✅ **更新** `bridge-runtime-client.ts` - 注册新的任务路径
+- ✅ **更新** `bridge-runtime.ts` - 注册新的任务路径
 - ✅ **编译** 生成 `jlceda-mcp-bridge-2.0.0.eext` (2026/7/4 4:04:18)
 
 ### 2. JLCEDA-MCP-Server（MCP 服务器端）

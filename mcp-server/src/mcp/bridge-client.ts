@@ -73,6 +73,11 @@ interface BridgeTask {
 }
 
 const BRIDGE_QUEUE_TIMEOUT_MS = 15 * 60 * 1000;
+const BRIDGE_MAX_PENDING_REQUESTS = 64;
+// Keep Bridge messages bounded even on localhost.  This protects both the
+// server and the EDA extension from accidentally serialising unbounded data
+// (for example, a malformed API response or an oversized image).
+const BRIDGE_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 const RECOVERY_READBACK_TIMEOUT_MS = 15_000;
 const RECOVERY_DIAGNOSTIC_TTL_MS = 15 * 60 * 1000;
 const READ_ONLY_PATHS = new Set([
@@ -154,7 +159,11 @@ function sendJson(socket: WebSocket, message: unknown): void {
   if (socket.readyState !== WebSocket.OPEN) {
     throw new Error('WebSocket is not open');
   }
-  socket.send(JSON.stringify(message));
+  const payload = JSON.stringify(message);
+  if (Buffer.byteLength(payload, 'utf8') > BRIDGE_MAX_PAYLOAD_BYTES) {
+    throw new Error(`WebSocket payload exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} bytes`);
+  }
+  socket.send(payload);
 }
 
 function secureEquals(left: string, right: string): boolean {
@@ -247,7 +256,11 @@ export class EdaBridgeServer {
   private async startAsMainServer(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      const server = new WebSocketServer({ host: '127.0.0.1', port: this.port });
+      const server = new WebSocketServer({
+        host: '127.0.0.1',
+        port: this.port,
+        maxPayload: BRIDGE_MAX_PAYLOAD_BYTES,
+      });
       this.wss = server;
 
       server.once('listening', () => {
@@ -296,7 +309,7 @@ export class EdaBridgeServer {
     await new Promise<void>((resolve, reject) => {
       const tokenQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
       const url = `ws://127.0.0.1:${this.port}/mcp-internal${tokenQuery}`;
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url, { maxPayload: BRIDGE_MAX_PAYLOAD_BYTES });
       this.internalClient = socket;
       let settled = false;
       const timer = setTimeout(() => {
@@ -635,12 +648,36 @@ export class EdaBridgeServer {
       }
       const requestId = String(message.requestId ?? '');
       const path = String(message.path ?? '');
+      if (!requestId || !path) {
+        this.trySend(socket, {
+          type: 'bridge/result',
+          requestId,
+          error: 'bridge/task requires non-empty requestId and path',
+        });
+        return;
+      }
+      if (this.pendingRequests.has(requestId)) {
+        this.trySend(socket, {
+          type: 'bridge/result',
+          requestId,
+          error: 'Duplicate bridge requestId',
+        });
+        return;
+      }
       const forwardedTimeoutMs = Number(message.timeoutMs);
       const timeoutMs = Number.isInteger(forwardedTimeoutMs) && forwardedTimeoutMs > 0
-        ? forwardedTimeoutMs
+        ? Math.min(forwardedTimeoutMs, BRIDGE_QUEUE_TIMEOUT_MS)
         : 30000;
       void this.dispatchRequest(path, message.payload, timeoutMs, socket).then(
-        (result) => this.trySend(socket, { type: 'bridge/result', requestId, result }),
+        (result) => {
+          if (!this.trySend(socket, { type: 'bridge/result', requestId, result })) {
+            this.trySend(socket, {
+              type: 'bridge/result',
+              requestId,
+              error: 'Bridge result exceeded the WebSocket payload limit',
+            });
+          }
+        },
         (error) => this.trySend(socket, {
           type: 'bridge/result',
           requestId,
@@ -936,6 +973,9 @@ export class EdaBridgeServer {
       const remainingMs = Math.max(1, reconnectBarrier.until - Date.now());
       throw new Error(`EDA client is quarantined after reconnect while ${reconnectBarrier.path} may still be settling; retry in ${String(remainingMs)}ms`);
     }
+    if (this.pendingRequests.size >= BRIDGE_MAX_PENDING_REQUESTS) {
+      throw new Error(`Bridge request queue is full (maximum ${String(BRIDGE_MAX_PENDING_REQUESTS)} pending requests)`);
+    }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -989,11 +1029,34 @@ export class EdaBridgeServer {
     }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve, reject });
+      // Client mode has no visibility into the EDA task queue, so it must
+      // enforce its own deadline.  Without this timer a healthy-but-stalled
+      // main server could leave the MCP call pending indefinitely.
+      const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? Math.min(Math.floor(timeoutMs), BRIDGE_QUEUE_TIMEOUT_MS)
+        : 30_000;
+      const timeout = setTimeout(() => {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending) {
+          return;
+        }
+        this.pendingRequests.delete(requestId);
+        this.clearPendingTimeout(pending);
+        reject(new Error(`Internal bridge request timeout after ${String(effectiveTimeoutMs)}ms`));
+      }, effectiveTimeoutMs);
+      this.pendingRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+        path,
+        payload,
+        executionTimeoutMs: effectiveTimeoutMs,
+      });
       try {
-        const request: BridgeTask = { type: 'bridge/task', requestId, path, payload, timeoutMs };
+        const request: BridgeTask = { type: 'bridge/task', requestId, path, payload, timeoutMs: effectiveTimeoutMs };
         sendJson(socket, request);
       } catch (error) {
+        clearTimeout(timeout);
         this.pendingRequests.delete(requestId);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
@@ -1005,11 +1068,13 @@ export class EdaBridgeServer {
     return `req_${this.instanceId}_${this.requestIdCounter}_${Date.now()}`;
   }
 
-  private trySend(socket: WebSocket, message: unknown): void {
+  private trySend(socket: WebSocket, message: unknown): boolean {
     try {
       sendJson(socket, message);
+      return true;
     } catch (error) {
       process.stderr.write(`WebSocket send failed: ${String(error)}\n`);
+      return false;
     }
   }
 

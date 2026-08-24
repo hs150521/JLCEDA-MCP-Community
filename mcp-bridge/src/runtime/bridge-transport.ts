@@ -106,6 +106,59 @@ async function parseServerMessage(data: unknown): Promise<BridgeServerMessage> {
 		throw new Error(`${BRIDGE_STATUS_TEXT.transport.unknownTypePrefix}${messageType}。`);
 	}
 
+	const requiredString = (field: string): void => {
+		if (typeof parsed[field] !== 'string' || parsed[field].trim().length === 0) {
+			throw new TypeError(`Bridge message ${messageType} requires non-empty ${field}`);
+		}
+	};
+	const requiredFiniteNumber = (field: string): void => {
+		if (typeof parsed[field] !== 'number' || !Number.isFinite(parsed[field])) {
+			throw new TypeError(`Bridge message ${messageType} requires finite ${field}`);
+		}
+	};
+
+	switch (messageType) {
+		case 'bridge/welcome':
+			requiredString('clientId');
+			requiredString('connectedAt');
+			break;
+		case 'bridge/role':
+			requiredString('clientId');
+			requiredString('role');
+			if (parsed.role !== 'active' && parsed.role !== 'standby') {
+				throw new TypeError('Bridge role must be active or standby');
+			}
+			requiredString('activeClientId');
+			requiredFiniteNumber('leaseTerm');
+			break;
+		case 'bridge/task':
+			requiredString('requestId');
+			requiredString('path');
+			requiredFiniteNumber('createdAt');
+			requiredFiniteNumber('leaseTerm');
+			break;
+		case 'bridge/recover':
+			requiredString('recoveryId');
+			requiredString('reason');
+			break;
+		case 'bridge/error':
+			requiredString('message');
+			break;
+		case 'bridge/heartbeat-ack':
+			requiredString('clientId');
+			requiredFiniteNumber('sentAt');
+			requiredString('receivedAt');
+			break;
+		case 'bridge/debug-switch':
+			requiredString('clientId');
+			if (!isPlainObjectRecord(parsed.debugSwitch)
+				|| typeof parsed.debugSwitch.enableSystemLog !== 'boolean'
+				|| typeof parsed.debugSwitch.enableConnectionList !== 'boolean') {
+				throw new Error('Bridge debug-switch contains an invalid debugSwitch object');
+			}
+			break;
+	}
+
 	return parsed as unknown as BridgeServerMessage;
 }
 

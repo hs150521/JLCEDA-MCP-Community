@@ -1,5 +1,7 @@
 # JLCEDA MCP 社区版
 
+当前开发版本：Bridge `2.2.0`，MCP Server `2.3.0`。本版本完成工具路由单一事实源、Bridge 协议校验、请求生命周期保护和旧运行时清理；本机 token 认证保持可选。
+
 ## 2.1 开发工具
 
 - `bridge_clients` 和 `bridge_select_client` 用于在已连接的 EDA 页面客户端之间切换 MCP 路由；它们不会切换同一个 EDA 进程中的可见标签页。如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。

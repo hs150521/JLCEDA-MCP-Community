@@ -12,6 +12,7 @@
 import type { BridgeClientContext, BridgeDebugSwitch, BridgeRole, BridgeServerRoleMessage } from '../bridge/protocol.ts';
 import type { UnifiedLogEntry } from '../logging/log.ts';
 import extensionConfig from '../../extension.json';
+import { BRIDGE_TOOL_ROUTES } from '../bridge/bridge-tool-routes.ts';
 import { getConfiguredMcpUrl, getMcpServerUrlChangedTopic } from '../bridge/config.ts';
 import { BridgeLogDispatchPipeline } from '../logging/log-dispatch.ts';
 import { bridgeLogPipeline } from '../logging/log.ts';
@@ -273,6 +274,12 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 			});
 			return;
 		}
+		if (!Object.values(BRIDGE_TOOL_ROUTES).includes(task.path)) {
+			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+				message: `${BRIDGE_STATUS_TEXT.runtime.taskPathUnsupportedPrefix}${task.path}`,
+			});
+			return;
+		}
 
 		const handler = BRIDGE_TASK_HANDLERS[task.path];
 		debugLog('[DEBUG] handler found:', !!handler, 'for path:', task.path);
@@ -392,6 +399,30 @@ async function ensureConnected(): Promise<void> {
 	finally {
 		connecting = false;
 	}
+}
+
+function startControlledRecovery(): void {
+	// The underlying EDA Promise remains uncancellable. The server will keep
+	// writes blocked until a fresh connection has been read back and acknowledged.
+	taskQuarantine.releaseForControlledRecovery();
+	taskChain = Promise.resolve();
+	clientId = '';
+	clearReconnectTimer();
+	stopTransport();
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+	statusReporter.markConnecting();
+	void isEditablePage().then((editable) => {
+		if (editable) {
+			void ensureConnected();
+		}
+		else {
+			statusReporter.markNotOnEditablePage();
+		}
+	}).catch((error: unknown) => {
+		statusReporter.markFailed(toSafeErrorMessage(error));
+	});
 }
 
 // 安排重连。
@@ -528,30 +559,6 @@ export function restartBridgeServer(): void {
 		return;
 	}
 
-	clearReconnectTimer();
-	stopTransport();
-	currentRole = 'standby';
-	currentLeaseTerm = 0;
-	currentActiveClientId = '';
-	statusReporter.markConnecting();
-	void isEditablePage().then((editable) => {
-		if (editable) {
-			void ensureConnected();
-		}
-		else {
-			statusReporter.markNotOnEditablePage();
-		}
-	}).catch((error: unknown) => {
-		statusReporter.markFailed(toSafeErrorMessage(error));
-	});
-}
-
-function startControlledRecovery(): void {
-	// The underlying EDA Promise remains uncancellable. The server will keep
-	// writes blocked until a fresh connection has been read back and acknowledged.
-	taskQuarantine.releaseForControlledRecovery();
-	taskChain = Promise.resolve();
-	clientId = '';
 	clearReconnectTimer();
 	stopTransport();
 	currentRole = 'standby';

@@ -1,5 +1,9 @@
 # MCP Bridge 社区版
 
+## 2.2.0
+
+本版本集中维护 Bridge 工具路由，强化 WebSocket 消息校验与请求保护，并移除未使用的旧版运行时实现。`JLCEDA_BRIDGE_TOKEN` 仍为可选配置。
+
 ## 2.1 PCB 工具
 
 `schematic_layout_check` 读取结构化原理图图元并返回稳定 primitive ID、估算矩形、碰撞类型/严重度、密集区域和能力缺失说明。`mode: "fix"` 配合 `confirm: true` 时仅应用属性文本建议位置。
