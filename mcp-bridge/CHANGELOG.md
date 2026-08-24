@@ -1,85 +1,85 @@
 ## [2.1.1] - 2026-08-24
 
-### Fixed
+### 修复
 
-- Guard connection-status persistence while the EDA storage runtime is unavailable during startup or reconnect.
-- Resolve the live EDA runtime through the shared binding resolver so status reads and writes work across supported EDA global layouts.
-- Replace obsolete MCP Hub installation guidance with the native MCP Server setup flow.
+- EDA 存储运行时在启动或重连期间不可用时，保护连接状态持久化操作。
+- 通过共享绑定解析器获取实时 EDA 运行时，确保状态读写兼容受支持的 EDA 全局布局。
+- 用原生 MCP Server 安装流程替换过时的 MCP Hub 安装说明。
 
 ## [2.1.0] - 2026-08-23
 
-### Added
+### 新增
 
-- Fix runtime EDA binding resolution so dedicated PCB, layer, network, and DRC handlers use the same SDK object as `api_invoke` on EDA Pro 3.2.181.
-- Add confirmation-gated `schematic_pages_manage` for page creation, copy, rename, and complete verified reordering; page deletion is intentionally excluded.
-- Add bounded official manufacturing exports, including flying-probe test and auto-route/layout JSON files.
-- Add read-only `simulation_model` searches with optional Ngspice/SimulIDE filtering.
-- Add `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
-- Add read-only active-canvas snapshots, library-source discovery, and 3D-model/reusable-module/panel-library search and retrieval.
-- Add read-only workspace, team, project, and folder discovery through `workspace_query`.
-- Add bounded read-only document and footprint source export through `design_source_export`, plus optional Board and Panel inventories in `project_info`.
-- Add bounded symbol/footprint `library_preview` images and official `library_classification_query` trees; extend `project_info` with schematic and PCB inventories.
-- Add `design_archive_export` for bounded, explicit native project/document archive retrieval without filesystem writes.
-- Include active canvas data unit in `eda_context`, and expose current/default PCB rule-configuration names through `pcb_constraints_query`.
-- Add confirmation-gated `pcb_constraints_manage` for bounded net-class, differential-pair, equal-length-group, and pad-pair-group changes with read-back verification.
-- Remove the unsupported `schematic_net_query` and `pcb_layer_query.current` routes from the 0.4.15 public surface.
-- Resolve the current PCB UUID before calling the required-argument `pcb_Document.save(uuid)` API.
-- Include client edition, mode, editor version, and build date in `eda_context` when supported by the runtime.
-- Extend `pcb_document_action` with bounded primitive ID/type/BBox queries, mouse position, and explicit selection controls.
-- Add structured PCB and schematic DRC tools with non-UI defaults.
-- Defer PCB auto-layout and auto-routing MCP tools until the pinned API surface exposes those methods; external route/layout files remain available through `pcb_document_action`.
-- Extend `library_search` with official batch LCSC C-number mapping; unsupported simulation-model search is not advertised on the 0.4.15 client surface.
-- Add PCB/schematic network queries, PCB constraints, project information, netlist comparison, and whitelisted manufacturing exports.
-- Add exact device-property search, PCB layer queries, real-time DRC control, external route/layout imports, and flying-probe manufacturing export.
-- Add read-only BOM template discovery and template selection for PCB/schematic BOM exports.
-- Add `library_search` for exact device, symbol, and footprint library searches.
-- Extend `pcb_document_action` with bounded primitive/selection inspection, coordinate conversion, and canvas navigation.
-- Add exact UUID retrieval for device, symbol, and footprint library assets.
-- Expand `pcb_constraints_query` with rule configurations, net rules, net-to-net rules, and region rules.
-- Add `pcb_document_action` for PCB save, schematic-change import, and Base64 auto-layout/route file imports.
-- Include schematic BOM assembly-variant configurations in template discovery and export.
-- Include bounded JSON/SES text previews for manufacturing exports.
+- 修复运行时 EDA 绑定解析，使专用 PCB、图层、网络和 DRC 处理器在 EDA Pro 3.2.181 上使用与 `api_invoke` 相同的 SDK 对象。
+- 新增受确认保护的 `schematic_pages_manage`，支持创建、复制、重命名和完整验证后的页面重排；有意不提供页面删除。
+- 新增受限的官方制造导出，包括飞针测试和自动布线/布局 JSON 文件。
+- 新增只读 `simulation_model` 搜索，可选 Ngspice/SimulIDE 过滤。
+- 新增 `schematic_document_action`，支持受限的原理图坐标/区域检查、选择、图元查询、导航、保存和导入。
+- 新增只读当前画布快照、库来源发现，以及 3D 模型/可复用模块/Panel 库搜索和读取。
+- 通过 `workspace_query` 新增只读工作区、团队、工程和文件夹发现。
+- 通过 `design_source_export` 新增受限只读文档和封装源文件导出，并在 `project_info` 中提供可选 Board 和 Panel 清单。
+- 新增受限符号/封装 `library_preview` 图像和官方 `library_classification_query` 分类树；扩展 `project_info` 返回原理图和 PCB 清单。
+- 新增 `design_archive_export`，支持受限且明确授权的原生工程/文档归档读取，不写入文件系统。
+- 在 `eda_context` 中加入当前画布数据单位，并通过 `pcb_constraints_query` 暴露当前/默认 PCB 规则配置名称。
+- 新增受确认保护的 `pcb_constraints_manage`，支持受限修改网类、差分对、等长组和焊盘对组并读取验证。
+- 从 0.4.15 公共接口中移除不受支持的 `schematic_net_query` 和 `pcb_layer_query.current` 路由。
+- 调用需要参数的 `pcb_Document.save(uuid)` API 前先解析当前 PCB UUID。
+- 运行时支持时，在 `eda_context` 中加入客户端版本、模式、编辑器版本和编译日期。
+- 扩展 `pcb_document_action`，支持受限图元 ID/类型/BBox 查询、鼠标位置和明确选择控制。
+- 新增结构化 PCB 和原理图 DRC 工具，默认不依赖界面状态。
+- 固定版本 API 未公开相应方法前，暂缓 PCB 自动布局和自动布线 MCP 工具；仍可通过 `pcb_document_action` 使用外部布线/布局文件。
+- 扩展 `library_search`，支持官方批量 LCSC C 编号映射；固定版本客户端不支持仿真模型搜索，因此不在 0.4.15 接口上宣传。
+- 新增 PCB/原理图网络查询、PCB 约束、工程信息、网表比较和白名单制造导出。
+- 新增精确器件属性搜索、PCB 图层查询、实时 DRC 控制、外部布线/布局导入和飞针制造导出。
+- 新增只读 BOM 模板发现及 PCB/原理图 BOM 导出的模板选择。
+- 新增精确器件、符号和封装库搜索 `library_search`。
+- 扩展 `pcb_document_action`，支持受限图元/选择检查、坐标转换和画布导航。
+- 新增器件、符号和封装库资源的精确 UUID 获取。
+- 扩展 `pcb_constraints_query`，支持规则配置、网络规则、网络间规则和区域规则。
+- 新增 `pcb_document_action`，支持 PCB 保存、原理图变更导入以及 Base64 自动布局/布线文件导入。
+- 在模板发现和导出中加入原理图 BOM 装配变体配置。
+- 为制造导出加入受限 JSON/SES 文本预览。
 
-### Fixes
+### 修复
 
-- Return canvas snapshots as MCP image content, and pass the public snapshot/library/workspace timeout controls through the server and Bridge.
-- Keep long-running EDA mutations quarantined after timeout until their uncancellable Promise settles.
-- Propagate net-label handler timeouts to the runtime quarantine mechanism.
-- Align selector and analysis schemas with handler exclusivity and official primitive enums; preserve full LCSC match counts before bounded serialization.
-- Normalize object-shaped differential-pair read-backs returned by some 0.4.15 EDA builds.
+- 将画布快照作为 MCP 图像内容返回，并通过 Server 和 Bridge 传递公开的快照/库/工作区超时控制。
+- 长时间运行的 EDA 修改超时后继续隔离，直到不可取消的 Promise 完成。
+- 将网络标签处理器的超时传递给运行时隔离机制。
+- 使选择器和分析架构与处理器互斥规则及官方图元枚举一致；在受限序列化前保留完整的 LCSC 匹配数量。
+- 规范化部分 0.4.15 EDA 构建返回的对象形式差分对读回数据。
 
-### Changes
+### 变更
 
-- Upgrade `@jlceda/pro-api-types` from `0.2.15` to `0.4.15` for current EDA Pro API declarations. This is a compile-time type update and does not change the EDA client's runtime implementation.
+- 将 `@jlceda/pro-api-types` 从 `0.2.15` 升级到 `0.4.15` 以匹配当前 EDA Pro API 声明。这是编译期类型更新，不改变 EDA 客户端运行时实现。
 
 ---
 
 ## [2.0.9] - 2026-08-23
 
-### Fixes
+### 修复
 
-- Keep timed-out EDA mutations quarantined until their uncancellable API Promise settles, preventing later reads and writes from overlapping the pending mutation.
-- Propagate net-label handler timeouts to the runtime quarantine mechanism.
+- EDA 修改超时后继续隔离，直到不可取消的 API Promise 完成，避免后续读写与挂起的修改重叠。
+- 将网络标签处理器的超时传递给运行时隔离机制。
 
-### Changes
+### 变更
 
-- Upgrade `@jlceda/pro-api-types` from `0.2.15` to `0.4.15` for current EDA Pro API declarations. This is a compile-time type update and does not change the EDA client's runtime implementation.
+- 将 `@jlceda/pro-api-types` 从 `0.2.15` 升级到 `0.4.15` 以匹配当前 EDA Pro API 声明。这是编译期类型更新，不改变 EDA 客户端运行时实现。
 
 ---
 
-## Unreleased
+## 未发布
 
 
 ## [2.0.8] - 2026-08-23
 
-### Fixes
+### 修复
 
-- Preserve individually supplied `x` and `y` coordinates in automatic component placement.
-- Recover from stale active bridge tasks with guarded forced client switching.
+- 自动放置器件时保留单独提供的 `x` 和 `y` 坐标。
+- 通过受保护的强制客户端切换，从失效的活动 Bridge 任务中恢复。
 
-### Changes
+### 变更
 
-- Support direct LCSC C-number lookup through the official EasyEDA library API.
+- 通过官方 EasyEDA 库 API 支持直接查询 LCSC C 编号。
 
 ---
 
