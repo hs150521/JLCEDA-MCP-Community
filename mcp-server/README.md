@@ -32,10 +32,10 @@ Server 提供 PCB DRC、网络查询、库搜索、制造查询和受保护的�
 
 ## 安装
 
-从 GitHub 发布页下载 `jlceda-mcp-server-2.2.0.tgz`：
+从 GitHub 发布页下载 `jlceda-mcp-server-2.2.1.tgz`：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.2.0.tgz
+npm install --global .\jlceda-mcp-server-2.2.1.tgz
 Get-Command jlceda-mcp
 ```
 
