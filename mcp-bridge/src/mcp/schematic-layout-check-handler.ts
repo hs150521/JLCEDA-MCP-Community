@@ -127,29 +127,43 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 		? await (eda.dmt_Schematic.getCurrentSchematicPageInfo as () => Promise<unknown>)()
 		: undefined;
 	const currentPageKey = text(isPlainObjectRecord(currentPage) ? currentPage.uuid : '') || 'current-page';
+	let pageGroupingAvailable = !includeAllPages;
 
 	const rawComponents = await (componentApi.getAll as (type?: unknown, all?: boolean) => Promise<unknown[]>).call(componentApi, undefined, includeAllPages);
 	const components = Array.isArray(rawComponents) ? rawComponents.slice(0, MAX_PRIMITIVES) : [];
 	const primitives: LayoutPrimitive[] = [];
-	const componentIds = new Set<string>();
+	let primitivesTruncated = false;
 	for (let index = 0; index < components.length; index += 1) {
-		const component = components[index]; const id = primitiveId(component, `component-${index}`); componentIds.add(id);
-		const componentPageKey = pageKey(component, includeAllPages ? `unknown-component-page-${index}` : currentPageKey);
+		if (primitives.length >= MAX_PRIMITIVES) {
+			primitivesTruncated = true;
+			break;
+		}
+		const component = components[index]; const id = primitiveId(component, `component-${index}`);
+		const explicitComponentPageKey = pageKey(component, '');
+		if (includeAllPages && explicitComponentPageKey.length > 0)
+			pageGroupingAvailable = true;
+		const componentPageKey = explicitComponentPageKey || (includeAllPages ? 'unknown-all-pages' : currentPageKey);
 		const x = num(getSyncState(component, 'getState_X', 0)); const y = num(getSyncState(component, 'getState_Y', 0));
 		const rotation = num(getSyncState(component, 'getState_Rotation', 0)); const designator = text(getSyncState(component, 'getState_Designator', ''));
 		let width = DEFAULT_SYMBOL_WIDTH; let height = DEFAULT_SYMBOL_HEIGHT;
+		let pins: unknown[] = [];
 		if (typeof componentApi.getAllPinsByPrimitiveId === 'function') {
-			const pins = await (componentApi.getAllPinsByPrimitiveId as (id: string) => Promise<unknown[]>).call(componentApi, id);
-			if (Array.isArray(pins) && pins.length) {
+			const rawPins = await (componentApi.getAllPinsByPrimitiveId as (id: string) => Promise<unknown[]>).call(componentApi, id);
+			pins = Array.isArray(rawPins) ? rawPins : [];
+			if (pins.length) {
 				const xs = pins.map(pin => num(getSyncState(pin, 'getState_X', x))); const ys = pins.map(pin => num(getSyncState(pin, 'getState_Y', y)));
 				width = Math.max(width, Math.max(...xs) - Math.min(...xs) + 120); height = Math.max(height, Math.max(...ys) - Math.min(...ys) + 120);
-				for (let pinIndex = 0; pinIndex < pins.length; pinIndex += 1) {
-					const pin = pins[pinIndex]; const px = num(getSyncState(pin, 'getState_X', x)); const py = num(getSyncState(pin, 'getState_Y', y));
-					primitives.push({ id: `${id}:pin:${text(getSyncState(pin, 'getState_PinNumber', pinIndex + 1))}`, kind: 'pin', x: px, y: py, rotation: num(getSyncState(pin, 'getState_Rotation', rotation)), rect: rectAround(px, py, 45, 45), parentId: id, pageKey: pageKey(pin, componentPageKey) });
-				}
 			}
 		}
 		primitives.push({ id, kind: 'symbol', designator, x, y, rotation, rect: rectAround(x, y, width, height, rotation), pageKey: componentPageKey });
+		for (let pinIndex = 0; pinIndex < pins.length; pinIndex += 1) {
+			if (primitives.length >= MAX_PRIMITIVES) {
+				primitivesTruncated = true;
+				break;
+			}
+			const pin = pins[pinIndex]; const px = num(getSyncState(pin, 'getState_X', x)); const py = num(getSyncState(pin, 'getState_Y', y));
+			primitives.push({ id: `${id}:pin:${text(getSyncState(pin, 'getState_PinNumber', pinIndex + 1))}`, kind: 'pin', x: px, y: py, rotation: num(getSyncState(pin, 'getState_Rotation', rotation)), rect: rectAround(px, py, 45, 45), parentId: id, pageKey: pageKey(pin, componentPageKey) });
+		}
 	}
 
 	let attributeCapability = false; let rawAttributes: unknown[] = [];
@@ -158,6 +172,10 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 		const result = await (attributeApi.getAll as () => Promise<unknown[]>).call(attributeApi);
 		rawAttributes = Array.isArray(result) ? result.slice(0, MAX_PRIMITIVES) : [];
 		for (let index = 0; index < rawAttributes.length; index += 1) {
+			if (primitives.length >= MAX_PRIMITIVES) {
+				primitivesTruncated = true;
+				break;
+			}
 			const attribute = rawAttributes[index]; if (!attributeVisible(attribute))
 				continue;
 			const id = primitiveId(attribute, `attribute-${index}`); const value = attributeText(attribute); if (!value)
@@ -172,10 +190,14 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 	if (isPlainObjectRecord(wireApi) && typeof wireApi.getAll === 'function') {
 		wireCapability = true; const wires = await (wireApi.getAll as () => Promise<unknown[]>).call(wireApi);
 		if (Array.isArray(wires)) {
-			wires.slice(0, MAX_PRIMITIVES).forEach((wire, index) => {
+			for (const [index, wire] of wires.slice(0, MAX_PRIMITIVES).entries()) {
+				if (primitives.length >= MAX_PRIMITIVES) {
+					primitivesTruncated = true;
+					break;
+				}
 				const geometry = lineGeometry(getSyncState(wire, 'getState_Line', null)); if (geometry)
 					primitives.push({ id: primitiveId(wire, `wire-${index}`), kind: 'wire', x: (geometry.rect.left + geometry.rect.right) / 2, y: (geometry.rect.bottom + geometry.rect.top) / 2, rotation: 0, rect: geometry.rect, endpoints: geometry.endpoints, pageKey: currentPageKey });
-			});
+			}
 		}
 	}
 
@@ -213,5 +235,5 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 		}
 	}
 
-	return await toSerializableAsync({ ok: true, mode, confirmed: mode === 'fix', page: currentPage, capabilities: { components: true, pins: true, attributes: attributeCapability, wires: wireCapability, pageBounds: Boolean(pageBounds), pageBoundsSource: pageBounds ? 'request.pageBounds' : 'unavailable_in_current_api' }, counts: { components: components.length, attributes: rawAttributes.length, primitives: primitives.length, collisions: collisions.length, outOfBounds: outOfBounds.length, denseRegions: denseRegions.length }, collisions, outOfBounds, denseRegions, suggestedFixes, appliedFixes });
+	return await toSerializableAsync({ ok: true, mode, confirmed: mode === 'fix', page: currentPage, capabilities: { components: true, pins: true, attributes: attributeCapability, wires: wireCapability, pageBounds: Boolean(pageBounds), pageBoundsSource: pageBounds ? 'request.pageBounds' : 'unavailable_in_current_api', pageGrouping: pageGroupingAvailable ? 'structured' : 'unknown-single-group' }, counts: { components: components.length, attributes: rawAttributes.length, primitives: primitives.length, primitiveLimit: MAX_PRIMITIVES, truncated: primitivesTruncated, collisions: collisions.length, outOfBounds: outOfBounds.length, denseRegions: denseRegions.length }, collisions, outOfBounds, denseRegions, suggestedFixes, appliedFixes });
 }
