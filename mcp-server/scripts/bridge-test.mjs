@@ -137,6 +137,9 @@ let queuedDisconnectNew;
 let reconnectOld;
 let reconnectNew;
 let reconnectTarget;
+let disconnectedRecoveryServer;
+let disconnectedRecoveryOld;
+let disconnectedRecoveryTarget;
 
 try {
   await mainServer.start();
@@ -274,7 +277,7 @@ try {
   attachTaskResponder(replacement.socket, 'replacement-page', (message) => message.path === '/bridge/jlceda/context'
     ? { currentDocumentInfo: { uuid: 'recovery-document', parentProjectUuid: 'recovery-project' }, currentProjectInfo: { uuid: 'recovery-project' } }
     : ({ source: 'replacement', path: message.path }));
-  const stuckRequest = recoveryServer.request('/bridge/jlceda/api/invoke', {}, 100);
+  const stuckRequest = recoveryServer.request('/bridge/jlceda/schematic/layout-check', { mode: 'fix', confirm: true }, 100);
   await waitUntil(() => receivedStuckTask);
   await assert.rejects(
     recoveryServer.request('/bridge/admin/select-client', { clientId: 'replacement-page' }, 2000),
@@ -286,6 +289,7 @@ try {
   assert.equal(recoveryStart.readbackRequired, true);
   assert.match(recoveryStart.warning, /may have completed/);
   assert.equal(recoveryStart.diagnostic.mutating, true);
+  assert.equal(recoveryStart.diagnostic.path, '/bridge/jlceda/schematic/layout-check');
   const recoveryMessage = await recoveryMessagePromise;
   assert.equal(recoveryMessage.recoveryId, recoveryStart.recoveryId);
   stuck.socket.close();
@@ -298,6 +302,10 @@ try {
   attachTaskResponder(freshRecoveryClient.socket, 'recovered-page', (message) => message.path === '/bridge/jlceda/context'
     ? { currentDocumentInfo: { uuid: 'recovery-document', parentProjectUuid: 'recovery-project' }, currentProjectInfo: { uuid: 'recovery-project' } }
     : ({ source: 'replacement', path: message.path }));
+  assert.deepEqual(
+    await recoveryServer.request('/bridge/jlceda/context', {}, 2000),
+    { currentDocumentInfo: { uuid: 'recovery-document', parentProjectUuid: 'recovery-project' }, currentProjectInfo: { uuid: 'recovery-project' } },
+  );
   await assert.rejects(
     recoveryServer.request('/bridge/test/write-blocked', {}, 2000),
     /writes are blocked pending recovery readback/,
@@ -309,6 +317,7 @@ try {
     clientId: 'recovered-page',
     expectedDocumentUuid: 'recovery-document',
     expectedProjectUuid: 'recovery-project',
+    readbackPath: '/bridge/jlceda/schematic/read',
   }, 2000);
   assert.equal(recoveryReadback.readbackVerified, true);
   assert.deepEqual(
@@ -320,6 +329,63 @@ try {
   replacement = undefined;
   recoveryServer.close();
   recoveryServer = undefined;
+
+  const disconnectedRecoveryPort = await reservePort();
+  disconnectedRecoveryServer = new EdaBridgeServer(disconnectedRecoveryPort);
+  await disconnectedRecoveryServer.start();
+  disconnectedRecoveryOld = await registerEda(
+    `ws://127.0.0.1:${disconnectedRecoveryPort}/bridge/ws${tokenQuery}`,
+    'disconnected-recovery-old',
+    { documentUuid: 'disconnected-document', projectUuid: 'disconnected-project', pageKind: 'schematic', pageUuid: 'disconnected-page' },
+  );
+  disconnectedRecoveryOld.socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type === 'bridge/task') {
+      disconnectedRecoveryOld.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'disconnected-recovery-old',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
+    }
+  });
+  disconnectedRecoveryTarget = await registerEda(
+    `ws://127.0.0.1:${disconnectedRecoveryPort}/bridge/ws${tokenQuery}`,
+    'disconnected-recovery-target',
+    { documentUuid: 'disconnected-document', projectUuid: 'disconnected-project', pageKind: 'schematic', pageUuid: 'disconnected-page' },
+  );
+  attachTaskResponder(disconnectedRecoveryTarget.socket, 'disconnected-recovery-target', (message) => message.path === '/bridge/jlceda/context'
+    ? { currentDocumentInfo: { uuid: 'disconnected-document', parentProjectUuid: 'disconnected-project' }, currentProjectInfo: { uuid: 'disconnected-project' } }
+    : ({ source: 'disconnected-recovery-target', path: message.path }));
+  const disconnectedRequest = disconnectedRecoveryServer.request('/bridge/jlceda/api/invoke', {}, 100);
+  await assert.rejects(disconnectedRequest, /Request execution timeout/);
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const disconnectedReadOnlyTimeout = disconnectedRecoveryServer.request('/bridge/jlceda/context', {}, 100);
+  await assert.rejects(disconnectedReadOnlyTimeout, /Request execution timeout/);
+  disconnectedRecoveryOld.socket.close();
+  await waitUntil(async () => {
+    const snapshot = await disconnectedRecoveryServer.request('/bridge/admin/clients', {}, 2000);
+    return snapshot.activeClientId === 'disconnected-recovery-target';
+  });
+  const disconnectedStart = await disconnectedRecoveryServer.request('/bridge/admin/recover-client', { confirm: true }, 2000);
+  assert.equal(disconnectedStart.sourceConnected, false);
+  assert.equal(disconnectedStart.freshBridgeGenerationRequested, false);
+  await assert.rejects(disconnectedRecoveryServer.request('/bridge/test/write-blocked', {}, 2000), /writes are blocked pending recovery readback/);
+  const disconnectedReadback = await disconnectedRecoveryServer.request('/bridge/admin/recover-client', {
+    action: 'readback',
+    confirm: true,
+    recoveryId: disconnectedStart.recoveryId,
+    clientId: 'disconnected-recovery-target',
+    expectedDocumentUuid: 'disconnected-document',
+    expectedProjectUuid: 'disconnected-project',
+  }, 2000);
+  assert.equal(disconnectedReadback.readbackVerified, true);
+  disconnectedRecoveryTarget.socket.close();
+  disconnectedRecoveryOld = undefined;
+  disconnectedRecoveryTarget = undefined;
+  disconnectedRecoveryServer.close();
+  disconnectedRecoveryServer = undefined;
 
   const disconnectPort = await reservePort();
   disconnectServer = new EdaBridgeServer(disconnectPort);
@@ -628,6 +694,8 @@ try {
   reconnectOld?.socket.close();
   reconnectNew?.socket.close();
   reconnectTarget?.socket.close();
+  disconnectedRecoveryOld?.socket.close();
+  disconnectedRecoveryTarget?.socket.close();
   expiryServer?.close();
   queueServer?.close();
   recoveryServer?.close();
@@ -635,6 +703,7 @@ try {
   edaFirstServer?.close();
   queuedDisconnectServer?.close();
   reconnectServer?.close();
+  disconnectedRecoveryServer?.close();
   secondaryServer.close();
   mainServer.close();
   if (originalToken === undefined) {
