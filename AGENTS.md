@@ -4,6 +4,7 @@
 
 - 文档中的自然语言优先使用中文；代码、命令、API 名称、协议名称、产品名和必要的专有名词可保留原文。
 - 当用户要求检查仓库、Issue、PR 或其他 repo 内容时，若未特别说明，默认检查社区仓库 `hs150521/JLCEDA-MCP-Community`，不要检查 upstream `sengbin/JLCEDA-MCP`。
+- 使用 `gh` 发送 Issue、PR 描述或评论前，先验证 Markdown 格式，尤其是换行符、代码块和列表，确保不会把转义字符或明文换行符直接显示给读者。
 
 ## 仓库结构
 
@@ -27,10 +28,10 @@ npm run build
 # JLCEDA 扩展
 cd ../mcp-bridge
 npm install
-npm run build  # produces ../build/mcp-bridge-community-{version}.eext
+npm run build  # 生成 ../build/mcp-bridge-community-{version}.eext
 ```
 
-`mcp-server` produces runtime files in `mcp-server/dist/`. `mcp-bridge` uses esbuild and ts-node, then writes its EDA extension package to `build/`.
+`mcp-server` 会在 `mcp-server/dist/` 生成运行时文件。`mcp-bridge` 使用 esbuild 和 ts-node，然后将 EDA 扩展包写入 `build/`。
 
 ## 测试命令
 
@@ -52,11 +53,11 @@ npm run lint
 
 新增或修改 MCP 工具时：
 
-1. Update `mcp-server/src/resources/mcp-tool-definitions.json`.
-2. Update the server route/dispatcher in `mcp-server/src/`.
-3. Update the corresponding handler and runtime route in `mcp-bridge/src/`.
-4. Update relevant READMEs and CHANGELOGs in both packages and the root README.
-5. Add focused schema and handler tests.
+1. 更新 `mcp-server/src/resources/mcp-tool-definitions.json`。
+2. 更新 `mcp-server/src/` 中的 Server 路由/分发器。
+3. 更新 `mcp-bridge/src/` 中对应的处理器和运行时路由。
+4. 更新两个包中的相关 README、CHANGELOG 以及根目录 README。
+5. 增加针对性的架构和处理器测试。
 
 工具定义、Server 分发路由、Bridge 运行时路由和处理器行为必须保持同步。
 
