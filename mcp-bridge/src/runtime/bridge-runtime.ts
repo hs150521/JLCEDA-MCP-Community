@@ -52,6 +52,7 @@ import { handlePcbRealtimeDrcTask } from '../mcp/pcb-realtime-drc-handler.ts';
 import { handleProjectInfoTask } from '../mcp/project-info-handler.ts';
 import { handleSchematicDocumentTask } from '../mcp/schematic-document-handler.ts';
 import { handleSchematicDrcCheckTask } from '../mcp/schematic-drc-handler.ts';
+import { handleSchematicLayoutCheckTask } from '../mcp/schematic-layout-check-handler.ts';
 import { handleSchematicPagesManageTask } from '../mcp/schematic-pages-manage-handler.ts';
 import { handleSchematicReadTask } from '../mcp/schematic-read-handler.ts';
 import { handleSchematicReviewTask } from '../mcp/schematic-review-handler.ts';
@@ -104,6 +105,7 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/library/sources': handleLibrarySourcesTask,
 	'/bridge/jlceda/net/query-pcb': handlePcbNetQueryTask,
 	'/bridge/jlceda/schematic/read': handleSchematicReadTask,
+	'/bridge/jlceda/schematic/layout-check': handleSchematicLayoutCheckTask,
 	'/bridge/jlceda/schematic/review': handleSchematicReviewTask,
 	'/bridge/jlceda/workspace/query': handleWorkspaceQueryTask,
 };
@@ -312,6 +314,9 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 			taskError = {
 				message: toSafeErrorMessage(error),
 				stack: error instanceof Error ? error.stack : undefined,
+				...(error instanceof BridgeTaskTimeoutError
+					? { code: 'BRIDGE_TASK_TIMEOUT', timeoutMs: error.timeoutMs }
+					: {}),
 			};
 		}
 
@@ -344,6 +349,9 @@ async function ensureConnected(): Promise<void> {
 		},
 		onTask: async (task) => {
 			enqueueTask(task, instance);
+		},
+		onRecoveryRequested: (_recoveryId, _reason) => {
+			startControlledRecovery();
 		},
 		onLost: (message) => {
 			if (transport === instance) {
@@ -520,6 +528,30 @@ export function restartBridgeServer(): void {
 		return;
 	}
 
+	clearReconnectTimer();
+	stopTransport();
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+	statusReporter.markConnecting();
+	void isEditablePage().then((editable) => {
+		if (editable) {
+			void ensureConnected();
+		}
+		else {
+			statusReporter.markNotOnEditablePage();
+		}
+	}).catch((error: unknown) => {
+		statusReporter.markFailed(toSafeErrorMessage(error));
+	});
+}
+
+function startControlledRecovery(): void {
+	// The underlying EDA Promise remains uncancellable. The server will keep
+	// writes blocked until a fresh connection has been read back and acknowledged.
+	taskQuarantine.releaseForControlledRecovery();
+	taskChain = Promise.resolve();
+	clientId = '';
 	clearReconnectTimer();
 	stopTransport();
 	currentRole = 'standby';

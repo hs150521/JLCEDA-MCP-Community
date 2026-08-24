@@ -16,6 +16,7 @@ const EXTENDED_READ_TIMEOUT_PATHS = new Set([
 	'/bridge/jlceda/manufacture/export',
 	'/bridge/jlceda/pcb/document',
 	'/bridge/jlceda/schematic/document',
+	'/bridge/jlceda/schematic/layout-check',
 	'/bridge/jlceda/canvas/snapshot',
 	'/bridge/jlceda/library/sources',
 	'/bridge/jlceda/library/classification-query',
@@ -41,7 +42,7 @@ const CONFIGURABLE_TIMEOUT_PATHS = new Set([
 export class BridgeTaskTimeoutError extends Error {
 	public constructor(
 		path: string,
-		timeoutMs: number,
+		public readonly timeoutMs: number,
 		public readonly backgroundSettled?: Promise<void>,
 		message = `Bridge task timed out after ${String(timeoutMs)}ms: ${path}`,
 	) {
@@ -65,6 +66,12 @@ export class BridgeTaskQuarantine {
 				this.active = undefined;
 			}
 		});
+	}
+
+	public releaseForControlledRecovery(): { path: string; startedAt: number } | undefined {
+		const active = this.active;
+		this.active = undefined;
+		return active;
 	}
 }
 

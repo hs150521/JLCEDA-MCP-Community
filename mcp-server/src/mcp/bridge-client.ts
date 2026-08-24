@@ -37,6 +37,31 @@ interface PendingRequest {
   mcpSocket?: WebSocket;
   edaSocket?: WebSocket;
   path?: string;
+  payload?: unknown;
+  startedAt?: number;
+  context?: BridgeClientContext;
+}
+
+interface RecoveryDiagnostic {
+  requestId: string;
+  clientId: string;
+  path: string;
+  startedAt: string;
+  timeoutMs: number;
+  timedOutAtMs: number;
+  mutating: boolean;
+  context?: BridgeClientContext;
+}
+
+interface RecoverySession {
+  recoveryId: string;
+  diagnostic: RecoveryDiagnostic;
+  requestedAt: string;
+  requestedAtMs: number;
+  sourceConnected: boolean;
+  sourceConnectedAt?: number;
+  targetClientId?: string;
+  targetConnectedAt?: number;
 }
 
 interface BridgeTask {
@@ -48,6 +73,63 @@ interface BridgeTask {
 }
 
 const BRIDGE_QUEUE_TIMEOUT_MS = 15 * 60 * 1000;
+const RECOVERY_READBACK_TIMEOUT_MS = 15_000;
+const RECOVERY_DIAGNOSTIC_TTL_MS = 15 * 60 * 1000;
+const READ_ONLY_PATHS = new Set([
+  '/bridge/jlceda/context',
+  '/bridge/jlceda/schematic/read',
+  '/bridge/jlceda/schematic/review',
+  '/bridge/jlceda/schematic/drc-check',
+  '/bridge/jlceda/schematic/layout-check',
+  '/bridge/jlceda/pcb/drc-check',
+  '/bridge/jlceda/canvas/snapshot',
+  '/bridge/jlceda/project/info',
+  '/bridge/jlceda/design/source-export',
+  '/bridge/jlceda/design/archive-export',
+  '/bridge/jlceda/library/search',
+  '/bridge/jlceda/library/preview',
+  '/bridge/jlceda/library/sources',
+  '/bridge/jlceda/library/classification-query',
+  '/bridge/jlceda/workspace/query',
+  '/bridge/jlceda/net/query-pcb',
+  '/bridge/jlceda/pcb/layer-query',
+  '/bridge/jlceda/pcb/constraints-query',
+  '/bridge/jlceda/manufacture/templates-query',
+  '/bridge/jlceda/netlist/compare',
+  '/bridge/jlceda/design/compare',
+]);
+
+function isReadOnlyRequest(path: string, payload: unknown): boolean {
+  if (!READ_ONLY_PATHS.has(path)) {
+    return false;
+  }
+  return path !== '/bridge/jlceda/schematic/layout-check'
+    || !isRecord(payload)
+    || payload.mode !== 'fix';
+}
+
+function hasMutatingRecoveryDiagnostics(diagnostics: Iterable<RecoveryDiagnostic>): boolean {
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.mutating) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getBridgeTaskTimeoutMs(error: unknown): number | undefined {
+  if (isRecord(error) && error.code === 'BRIDGE_TASK_TIMEOUT') {
+    const timeoutMs = Number(error.timeoutMs);
+    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined;
+  }
+  // Accept older Bridge clients that only serialized the timeout message.
+  const message = typeof error === 'string' ? error : isRecord(error) && typeof error.message === 'string' ? error.message : undefined;
+  if (message) {
+    const match = /^Bridge task timed out after (\d+)ms: /.exec(message);
+    return match ? Number(match[1]) : undefined;
+  }
+  return undefined;
+}
 
 interface BridgeServerOptions {
   peerTtlMs?: number;
@@ -108,6 +190,18 @@ function parseClientContext(value: unknown): BridgeClientContext | undefined {
   };
 }
 
+function extractReadbackIdentity(value: unknown): { documentUuid?: string; projectUuid?: string } {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const document = isRecord(value.currentDocumentInfo) ? value.currentDocumentInfo : isRecord(value.currentDocument) ? value.currentDocument : undefined;
+  const project = isRecord(value.currentProjectInfo) ? value.currentProjectInfo : isRecord(value.project) ? value.project : undefined;
+  return {
+    documentUuid: optionalString(document?.uuid),
+    projectUuid: optionalString(document?.parentProjectUuid) ?? optionalString(project?.uuid),
+  };
+}
+
 export class EdaBridgeServer {
   private wss: WebSocketServer | null = null;
   private readonly peers = new Map<string, BridgePeer>();
@@ -115,6 +209,8 @@ export class EdaBridgeServer {
   private readonly mcpClients = new Set<WebSocket>();
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly reconnectBarriers = new Map<string, { path: string; until: number }>();
+  private readonly recoveryDiagnostics = new Map<string, RecoveryDiagnostic>();
+  private recoverySession: RecoverySession | undefined;
   private readonly instanceId = randomUUID();
   private requestIdCounter = 0;
   private activeClientId = '';
@@ -386,6 +482,10 @@ export class EdaBridgeServer {
   ): BridgePeer {
     const previous = this.peers.get(clientId);
     if (previous && previous.socket !== socket) {
+      if (this.recoverySession?.targetClientId === clientId) {
+        this.recoverySession.targetClientId = undefined;
+        this.recoverySession.targetConnectedAt = undefined;
+      }
       this.enterReconnectBarrier(clientId);
       this.rejectPendingForClient(clientId, 'EDA client reconnected before the pending request completed');
       this.clientIdBySocket.delete(previous.socket);
@@ -395,7 +495,7 @@ export class EdaBridgeServer {
     const peer: BridgePeer = {
       clientId,
       bridgeVersion,
-      connectedAt: previous?.connectedAt ?? now,
+      connectedAt: previous?.socket === socket ? previous.connectedAt : now,
       context,
       isReady: previous?.socket === socket ? previous.isReady : false,
       lastSeenAt: now,
@@ -434,6 +534,12 @@ export class EdaBridgeServer {
       return;
     }
     this.peers.delete(clientId);
+    if (this.recoverySession?.targetClientId === clientId) {
+      // The readback target is a socket generation, not merely a clientId.
+      // Permit a later generation to rebind after this socket disconnects.
+      this.recoverySession.targetClientId = undefined;
+      this.recoverySession.targetConnectedAt = undefined;
+    }
     if (this.activeClientId === clientId) {
       this.rejectPendingForClient(clientId, 'Active EDA client disconnected');
       const replacement = [...this.peers.values()].sort((left, right) => left.connectedAt - right.connectedAt)[0];
@@ -460,10 +566,20 @@ export class EdaBridgeServer {
     const requestId = String(message.requestId ?? '');
     const pending = this.pendingRequests.get(requestId);
     if (!pending || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
+      // A timed-out EDA Promise can still send its result later. Seeing that
+      // result is the only safe indication that the background mutation settled.
+      const diagnostic = this.recoveryDiagnostics.get(requestId);
+      if (diagnostic?.clientId === peer.clientId) {
+        this.recoveryDiagnostics.delete(requestId);
+      }
       return;
     }
     this.clearPendingTimeout(pending);
     this.pendingRequests.delete(requestId);
+    const bridgeTimeoutMs = getBridgeTaskTimeoutMs(message.error);
+    if (bridgeTimeoutMs !== undefined) {
+      this.recordTimedOutRequest(requestId, pending, bridgeTimeoutMs);
+    }
     if (isRecord(message.error) && typeof message.error.message === 'string') {
       pending.reject(new Error(message.error.message));
       return;
@@ -483,15 +599,14 @@ export class EdaBridgeServer {
     }
 
     pending.started = true;
+    pending.startedAt = Date.now();
     this.clearPendingTimeout(pending);
     const executionTimeoutMs = pending.executionTimeoutMs ?? 30000;
     pending.timeout = setTimeout(() => {
       // The EDA handler cannot be cancelled when the server-side timeout wins.
       // Keep this client quarantined for the execution window before admitting
       // another task that could mutate the same document.
-      if (pending.clientId) {
-        this.enterReconnectBarrier(pending.clientId);
-      }
+      this.recordTimedOutRequest(requestId, pending, executionTimeoutMs);
       this.pendingRequests.delete(requestId);
       pending.reject(new Error(`Request execution timeout after ${String(executionTimeoutMs)}ms`));
     }, executionTimeoutMs);
@@ -583,10 +698,14 @@ export class EdaBridgeServer {
       const force = isRecord(payload) && payload.force === true;
       return this.selectClient(clientId, force);
     }
+    if (path === '/bridge/admin/recover-client') {
+      return this.recoverClient(payload, timeoutMs);
+    }
     return this.dispatchToEda(path, payload, timeoutMs, mcpSocket);
   }
 
   private getClientSnapshot(): Record<string, unknown> {
+    this.pruneRecoveryDiagnostics();
     const now = Date.now();
     const clients = [...this.peers.values()]
       .sort((left, right) => left.connectedAt - right.connectedAt)
@@ -598,17 +717,49 @@ export class EdaBridgeServer {
         connectedAt: new Date(peer.connectedAt).toISOString(),
         lastSeenMsAgo: Math.max(0, now - peer.lastSeenAt),
         context: peer.context,
-      }));
+        quarantine: this.recoverySession?.targetClientId === peer.clientId
+          ? { state: 'readback-required', recoveryId: this.recoverySession.recoveryId }
+          : [...this.recoveryDiagnostics.values()].some(diagnostic => diagnostic.clientId === peer.clientId)
+            ? {
+              state: 'timed-out',
+              diagnostics: [...this.recoveryDiagnostics.values()].filter(diagnostic => diagnostic.clientId === peer.clientId),
+            }
+            : undefined,
+        }));
+    const visibleClientIds = new Set(clients.map((client) => client.clientId));
+    const disconnectedDiagnostics = new Map<string, RecoveryDiagnostic[]>();
+    for (const diagnostic of this.recoveryDiagnostics.values()) {
+      if (!visibleClientIds.has(diagnostic.clientId)) {
+        const entries = disconnectedDiagnostics.get(diagnostic.clientId) ?? [];
+        entries.push(diagnostic);
+        disconnectedDiagnostics.set(diagnostic.clientId, entries);
+      }
+    }
+    for (const [clientId, diagnostics] of disconnectedDiagnostics) {
+      clients.push({
+        clientId,
+        active: false,
+        ready: false,
+        bridgeVersion: 'unknown',
+        connectedAt: diagnostics[0].startedAt,
+        lastSeenMsAgo: Math.max(0, now - diagnostics.reduce((earliest, diagnostic) => Math.min(earliest, diagnostic.timedOutAtMs), now)),
+        context: diagnostics.find((diagnostic) => diagnostic.context)?.context,
+        quarantine: { state: 'timed-out', diagnostics },
+      });
+    }
     return { activeClientId: this.activeClientId || null, leaseTerm: this.leaseTerm, clients };
   }
 
-  private selectClient(clientId: string, force: boolean): Record<string, unknown> {
+  private selectClient(clientId: string, force: boolean, allowRecoverySessionSwitch = false): Record<string, unknown> {
     if (!clientId) {
       throw new Error('clientId is required');
     }
     const peer = this.peers.get(clientId);
     if (!peer || !peer.isReady || peer.socket.readyState !== WebSocket.OPEN) {
       throw new Error(`EDA client is not connected and ready: ${clientId}`);
+    }
+    if (this.recoverySession && this.activeClientId !== clientId && !allowRecoverySessionSwitch) {
+      throw new Error(`Cannot switch EDA client while recovery ${this.recoverySession.recoveryId} is awaiting readback.`);
     }
     const hasPendingTask = [...this.pendingRequests.values()].some(
       (pending) => pending.clientId === this.activeClientId,
@@ -627,10 +778,158 @@ export class EdaBridgeServer {
     return this.getClientSnapshot();
   }
 
-  private async dispatchToEda(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket): Promise<unknown> {
-    const peer = this.peers.get(this.activeClientId);
+  private recordTimedOutRequest(requestId: string, pending: PendingRequest, timeoutMs: number): void {
+    if (!pending.clientId) {
+      return;
+    }
+    this.enterReconnectBarrier(pending.clientId);
+    const diagnostic: RecoveryDiagnostic = {
+      requestId,
+      clientId: pending.clientId,
+      path: pending.path ?? '/bridge/jlceda/unknown',
+      startedAt: new Date(pending.startedAt ?? Date.now()).toISOString(),
+      timeoutMs,
+      timedOutAtMs: Date.now(),
+      mutating: !isReadOnlyRequest(pending.path ?? '', pending.payload),
+      context: pending.context,
+    };
+    this.recoveryDiagnostics.set(requestId, diagnostic);
+  }
+
+  private async recoverClient(payload: unknown, timeoutMs: number): Promise<Record<string, unknown>> {
+    this.pruneRecoveryDiagnostics();
+    if (!isRecord(payload) || payload.confirm !== true) {
+      throw new Error('bridge_recover_client requires confirm=true.');
+    }
+    const action = payload.action === undefined ? 'recover' : String(payload.action);
+    if (action !== 'recover' && action !== 'readback') {
+      throw new Error('bridge_recover_client action must be recover or readback.');
+    }
+
+    if (action === 'recover') {
+      if (this.recoverySession) {
+        throw new Error('A Bridge recovery is already awaiting readback.');
+      }
+      const requestId = String(payload.requestId ?? '').trim();
+      if (!requestId) {
+        throw new Error('bridge_recover_client action=recover requires the timed-out requestId from bridge_clients.');
+      }
+      const diagnostic = this.recoveryDiagnostics.get(requestId);
+      if (!diagnostic)
+        throw new Error(`No unresolved timeout diagnostic exists for requestId: ${requestId}`);
+      const sourceClientId = diagnostic.clientId;
+      if (!diagnostic.mutating) {
+        throw new Error('The active timed-out task was read-only and does not require controlled mutation recovery.');
+      }
+      const source = this.peers.get(sourceClientId);
+      const sourceConnected = Boolean(source?.isReady && source.socket.readyState === WebSocket.OPEN);
+      const recoveryId = randomUUID();
+      this.recoverySession = {
+        recoveryId,
+        diagnostic,
+        requestedAt: new Date().toISOString(),
+        requestedAtMs: Date.now(),
+        sourceConnected,
+        sourceConnectedAt: source?.connectedAt,
+      };
+      if (sourceConnected) {
+        this.trySend(source!.socket, {
+          type: 'bridge/recover',
+          recoveryId,
+          reason: `Controlled recovery after timed-out mutation ${diagnostic.requestId}`,
+        });
+      }
+      return {
+        ok: true,
+        action,
+        recoveryId,
+        sourceClientId,
+        freshBridgeGenerationRequested: sourceConnected,
+        sourceConnected,
+        readbackRequired: true,
+        warning: 'mutation may have completed; underlying EDA API was not cancelled',
+        diagnostic,
+      };
+    }
+
+    const session = this.recoverySession;
+    if (!session) {
+      throw new Error('No Bridge recovery is awaiting readback.');
+    }
+    if (String(payload.recoveryId ?? '').trim() !== session.recoveryId) {
+      throw new Error('recoveryId does not match the active recovery session.');
+    }
+    const targetClientId = String(payload.clientId ?? '').trim();
+    if (!targetClientId) {
+      throw new Error('clientId must identify the fresh Bridge client reported by bridge_clients.');
+    }
+    if (session.targetClientId && session.targetClientId !== targetClientId) {
+      throw new Error(`Recovery readback is already bound to client ${session.targetClientId}.`);
+    }
+    const readbackPath = String(payload.readbackPath ?? '/bridge/jlceda/context');
+    const readbackPayload = isRecord(payload.readbackPayload) ? payload.readbackPayload : {};
+    if (!isReadOnlyRequest(readbackPath, readbackPayload)) {
+      throw new Error('readbackPath and readbackPayload must describe a read-only operation; schematic layout mode=fix is not allowed.');
+    }
+    const target = this.peers.get(targetClientId);
+    if (!target || !target.isReady || target.socket.readyState !== WebSocket.OPEN)
+      throw new Error(`EDA client is not connected and ready: ${targetClientId}`);
+    if (session.targetClientId && session.targetConnectedAt !== target.connectedAt) {
+      throw new Error('Recovery readback target connection was replaced; retry with the new Bridge generation.');
+    }
+    if (session.sourceConnected && target.connectedAt < session.requestedAtMs)
+      throw new Error('clientId is not a fresh Bridge generation created after recovery was requested.');
+    if (targetClientId === session.diagnostic.clientId
+      && target.connectedAt <= (session.sourceConnectedAt ?? session.requestedAtMs)) {
+      throw new Error('clientId must identify a newer Bridge generation than the timed-out source.');
+    }
+    const expectedDocumentUuid = optionalString(payload.expectedDocumentUuid) ?? session.diagnostic.context?.documentUuid;
+    const expectedProjectUuid = optionalString(payload.expectedProjectUuid) ?? session.diagnostic.context?.projectUuid;
+    if (!expectedDocumentUuid && !expectedProjectUuid)
+      throw new Error('Recovery requires expectedDocumentUuid or expectedProjectUuid when the original client did not report document identity.');
+    if (expectedDocumentUuid && target.context?.documentUuid && target.context.documentUuid !== expectedDocumentUuid)
+      throw new Error('Fresh Bridge client documentUuid does not match the expected document; writes remain blocked.');
+    if (expectedProjectUuid && target.context?.projectUuid && target.context.projectUuid !== expectedProjectUuid)
+      throw new Error('Fresh Bridge client projectUuid does not match the expected project; writes remain blocked.');
+    this.selectClient(targetClientId, true, true);
+    session.targetClientId = targetClientId;
+    session.targetConnectedAt = target.connectedAt;
+    const readback = await this.dispatchToEda(readbackPath, readbackPayload, Math.min(timeoutMs, RECOVERY_READBACK_TIMEOUT_MS), undefined, true, targetClientId);
+    const identityReadback = readbackPath === '/bridge/jlceda/context'
+      ? readback
+      : await this.dispatchToEda('/bridge/jlceda/context', {}, Math.min(timeoutMs, RECOVERY_READBACK_TIMEOUT_MS), undefined, true, targetClientId);
+    const identity = extractReadbackIdentity(identityReadback);
+    if (expectedDocumentUuid && identity.documentUuid !== expectedDocumentUuid) {
+      throw new Error('Readback documentUuid does not match expectedDocumentUuid; writes remain blocked.');
+    }
+    if (expectedProjectUuid && identity.projectUuid !== expectedProjectUuid) {
+      throw new Error('Readback projectUuid does not match expectedProjectUuid; writes remain blocked.');
+    }
+    this.recoverySession = undefined;
+    this.recoveryDiagnostics.delete(session.diagnostic.requestId);
+    return {
+      ok: true,
+      action,
+      recoveryId: session.recoveryId,
+      readbackVerified: true,
+      writesRemainBlocked: hasMutatingRecoveryDiagnostics(this.recoveryDiagnostics.values()),
+      unresolvedMutatingRequestIds: [...this.recoveryDiagnostics.values()].filter(item => item.mutating).map(item => item.requestId),
+      readback,
+      identityReadback,
+      warningAcknowledged: true,
+    };
+  }
+
+  private async dispatchToEda(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket, recoveryReadback = false, targetClientId?: string): Promise<unknown> {
+    this.pruneRecoveryDiagnostics();
+    const routedClientId = targetClientId ?? this.activeClientId;
+    const peer = this.peers.get(routedClientId);
     if (!peer || !peer.isReady || peer.socket.readyState !== WebSocket.OPEN) {
       throw new Error('No ready EDA client connected');
+    }
+    if (!recoveryReadback && !isReadOnlyRequest(path, payload) && (this.recoverySession || hasMutatingRecoveryDiagnostics(this.recoveryDiagnostics.values()))) {
+      const recoveryId = this.recoverySession?.recoveryId ?? 'pending-timeout-diagnostics';
+      throw new Error(`EDA writes are blocked pending recovery readback for ${recoveryId}.`);
     }
     const reconnectBarrier = this.getReconnectBarrier(peer.clientId);
     if (reconnectBarrier) {
@@ -650,10 +949,12 @@ export class EdaBridgeServer {
         executionTimeoutMs: timeoutMs,
         started: false,
         clientId: peer.clientId,
+        context: peer.context,
         leaseTerm: this.leaseTerm,
         mcpSocket,
         edaSocket: peer.socket,
         path,
+        payload,
       });
       try {
         sendJson(peer.socket, {
@@ -670,6 +971,15 @@ export class EdaBridgeServer {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  private pruneRecoveryDiagnostics(): void {
+    const cutoff = Date.now() - RECOVERY_DIAGNOSTIC_TTL_MS;
+    for (const [requestId, diagnostic] of this.recoveryDiagnostics) {
+      if (!diagnostic.mutating && diagnostic.timedOutAtMs < cutoff && this.recoverySession?.diagnostic.requestId !== requestId) {
+        this.recoveryDiagnostics.delete(requestId);
+      }
+    }
   }
 
   private async dispatchViaInternalClient(path: string, payload: unknown, timeoutMs: number): Promise<unknown> {

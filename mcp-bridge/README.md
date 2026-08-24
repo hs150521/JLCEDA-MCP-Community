@@ -2,7 +2,11 @@
 
 ## 2.1 PCB 工具
 
+`schematic_layout_check` 读取结构化原理图图元并返回稳定 primitive ID、估算矩形、碰撞类型/严重度、密集区域和能力缺失说明。`mode: "fix"` 配合 `confirm: true` 时仅应用属性文本建议位置。
+
 `bridge_select_client` 在已连接的 EDA 页面客户端之间选择 MCP 路由目标。它不会切换同一个 EDA 进程中的可见标签页；如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。
+
+Server 通过 `bridge_recover_client` 请求受控恢复时，Bridge 会创建新的运行时 generation；底层不可取消 EDA Promise 不会被终止，Server 会在文档身份和只读回读确认前阻止写入。
 
 2.1 版本新增 `schematic_document_action`，用于受限地检查原理图坐标/区域、选中对象、图元、导航、保存和导入。
 

@@ -44,12 +44,15 @@ interface BridgeTransportCallbacks {
 	onRoleChanged: (message: BridgeServerRoleMessage) => void;
 	onDebugSwitchChanged: (debugSwitch: BridgeDebugSwitch) => void;
 	onTask: (task: BridgeQueueTask) => void | Promise<void>;
+	onRecoveryRequested: (recoveryId: string, reason: string) => void;
 	onLost: (message: string) => void;
 }
 
 interface BridgeTaskError {
 	message: string;
 	stack?: string;
+	code?: string;
+	timeoutMs?: number;
 }
 
 type TimerHandle = ReturnType<typeof globalThis.setTimeout>;
@@ -82,6 +85,7 @@ const VALID_SERVER_MESSAGE_TYPES = new Set([
 	'bridge/debug-switch',
 	'bridge/heartbeat-ack',
 	'bridge/task',
+	'bridge/recover',
 	'bridge/error',
 ]);
 
@@ -325,6 +329,11 @@ export class BridgeTransport {
 					createdAt: message.createdAt,
 					leaseTerm: message.leaseTerm,
 				});
+				return;
+			}
+
+			if (message.type === 'bridge/recover') {
+				this.callbacks.onRecoveryRequested(message.recoveryId, message.reason);
 				return;
 			}
 

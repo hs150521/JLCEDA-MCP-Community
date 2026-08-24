@@ -116,7 +116,7 @@ export class ToolDispatcher {
   }
 
   private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'pcb_net_query'];
+    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'schematic_layout_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'pcb_net_query'];
     const standardReadTools = ['design_source_export', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query'];
     if (!['api_invoke', 'eda_context', ...extendedReadTools, ...standardReadTools].includes(toolName)) {
       return undefined;
@@ -143,6 +143,7 @@ export class ToolDispatcher {
   private getBridgePath(toolName: string): string {
     const pathMap: Record<string, string> = {
       'schematic_read': '/bridge/jlceda/schematic/read',
+      'schematic_layout_check': '/bridge/jlceda/schematic/layout-check',
       'schematic_review': '/bridge/jlceda/schematic/review',
       'component_select': '/bridge/jlceda/component/select',
 		'eda_canvas_snapshot': '/bridge/jlceda/canvas/snapshot',
@@ -180,6 +181,7 @@ export class ToolDispatcher {
       'eda_context': '/bridge/jlceda/context',
       'bridge_clients': '/bridge/admin/clients',
       'bridge_select_client': '/bridge/admin/select-client',
+      'bridge_recover_client': '/bridge/admin/recover-client',
     };
 
     const path = pathMap[toolName];
