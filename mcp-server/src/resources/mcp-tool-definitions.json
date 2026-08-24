@@ -160,6 +160,7 @@
         "mode": { "type": "string", "enum": ["check", "fix"], "default": "check" },
         "confirm": { "type": "boolean", "default": false, "description": "应用属性文本建议位置前的显式确认。" },
         "denseThreshold": { "type": "integer", "minimum": 2, "maximum": 50, "default": 5 },
+        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000, "description": "布局检查桥接超时时间（毫秒）。" },
         "pageBounds": {
           "type": "object",
           "description": "可选页面工作区边界；当前 API 未提供结构化尺寸时用于执行越界检查。",
