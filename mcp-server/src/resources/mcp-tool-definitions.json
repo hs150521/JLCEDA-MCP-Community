@@ -38,6 +38,7 @@
       "properties": {
         "action": { "type": "string", "enum": ["recover", "readback"], "default": "recover" },
         "confirm": { "const": true, "description": "必须显式确认恢复和可能已完成的修改。" },
+        "requestId": { "type": "string", "minLength": 1, "description": "bridge_clients 返回的具体超时写操作 requestId。" },
         "recoveryId": { "type": "string", "minLength": 1 },
         "clientId": { "type": "string", "minLength": 1, "description": "readback 时 bridge_clients 返回的全新 Bridge clientId。" },
         "expectedDocumentUuid": { "type": "string", "minLength": 1 },
@@ -47,6 +48,7 @@
       },
       "required": ["confirm"],
       "allOf": [
+        { "if": { "properties": { "action": { "const": "recover" } } }, "then": { "required": ["requestId"] } },
         { "if": { "properties": { "action": { "const": "readback" } }, "required": ["action"] }, "then": { "required": ["recoveryId", "clientId"] } }
       ],
       "additionalProperties": false

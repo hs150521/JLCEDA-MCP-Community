@@ -4,6 +4,8 @@
 
 `bridge_recover_client` 用于不可取消 EDA 修改超时后的受控恢复：先显式确认并请求新的 Bridge generation，再用新 `clientId` 做文档身份校验和只读回读；回读完成前，EDA 写操作都会被阻止，但普通只读查询仍可执行。`schematic_layout_check` 只有默认检查模式是只读，`mode: "fix"` 会按写操作隔离。
 
+恢复时必须从 `bridge_clients` 选择具体超时写操作的 `requestId`；`readbackPath` 与 `readbackPayload` 始终只能描述只读操作，恢复目标客户端在首次回读后锁定。多个未解决的超时写操作会继续保持写阻断，直到各自完成受控恢复或诊断过期。
+
 ## 2.1 开发工具
 
 `schematic_layout_check` 对当前原理图执行保守的符号/引脚/属性/导线矩形碰撞检查，并显式报告属性几何和页面边界能力是否可用。修复模式需要 `confirm: true`，只移动属性文本，不改变电气连接。

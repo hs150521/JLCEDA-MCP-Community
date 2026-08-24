@@ -284,8 +284,14 @@ try {
     /pending task/,
   );
   await assert.rejects(stuckRequest, /Request execution timeout/);
+  const recoverySnapshot = await recoveryServer.request('/bridge/admin/clients', {}, 2000);
+  const recoveryRequestId = recoverySnapshot.clients
+    .find((client) => client.clientId === 'stuck-page')
+    .quarantine.diagnostics
+    .find((diagnostic) => diagnostic.mutating)
+    .requestId;
   const recoveryMessagePromise = waitForMessage(stuck.socket, (message) => message.type === 'bridge/recover');
-  const recoveryStart = await recoveryServer.request('/bridge/admin/recover-client', { confirm: true }, 2000);
+  const recoveryStart = await recoveryServer.request('/bridge/admin/recover-client', { confirm: true, requestId: recoveryRequestId }, 2000);
   assert.equal(recoveryStart.readbackRequired, true);
   assert.match(recoveryStart.warning, /may have completed/);
   assert.equal(recoveryStart.diagnostic.mutating, true);
@@ -309,6 +315,19 @@ try {
   await assert.rejects(
     recoveryServer.request('/bridge/test/write-blocked', {}, 2000),
     /writes are blocked pending recovery readback/,
+  );
+  await assert.rejects(
+    recoveryServer.request('/bridge/admin/recover-client', {
+      action: 'readback',
+      confirm: true,
+      recoveryId: recoveryStart.recoveryId,
+      clientId: 'recovered-page',
+      expectedDocumentUuid: 'recovery-document',
+      expectedProjectUuid: 'recovery-project',
+      readbackPath: '/bridge/jlceda/schematic/layout-check',
+      readbackPayload: { mode: 'fix', confirm: true },
+    }, 2000),
+    /read-only operation/,
   );
   const recoveryReadback = await recoveryServer.request('/bridge/admin/recover-client', {
     action: 'readback',
@@ -368,7 +387,13 @@ try {
     const snapshot = await disconnectedRecoveryServer.request('/bridge/admin/clients', {}, 2000);
     return snapshot.activeClientId === 'disconnected-recovery-target';
   });
-  const disconnectedStart = await disconnectedRecoveryServer.request('/bridge/admin/recover-client', { confirm: true }, 2000);
+  const disconnectedSnapshot = await disconnectedRecoveryServer.request('/bridge/admin/clients', {}, 2000);
+  const disconnectedRequestId = disconnectedSnapshot.clients
+    .find((client) => client.clientId === 'disconnected-recovery-old')
+    .quarantine.diagnostics
+    .find((diagnostic) => diagnostic.mutating)
+    .requestId;
+  const disconnectedStart = await disconnectedRecoveryServer.request('/bridge/admin/recover-client', { confirm: true, requestId: disconnectedRequestId }, 2000);
   assert.equal(disconnectedStart.sourceConnected, false);
   assert.equal(disconnectedStart.freshBridgeGenerationRequested, false);
   await assert.rejects(disconnectedRecoveryServer.request('/bridge/test/write-blocked', {}, 2000), /writes are blocked pending recovery readback/);
