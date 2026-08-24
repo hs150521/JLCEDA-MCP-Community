@@ -9,7 +9,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { isPlainObjectRecord } from '../utils';
+import { getEdaRuntime, isPlainObjectRecord } from '../utils';
 
 // 固定连接状态存储键，与上下文无关，设置页直接轮询此键。
 const MCP_CONNECTION_STATUS_KEY = 'jlc_mcp_connection_status';
@@ -21,7 +21,7 @@ interface ExtensionStorage {
 
 function getExtensionStorage(): ExtensionStorage | undefined {
 	try {
-		const runtime = (globalThis as { eda?: unknown }).eda;
+		const runtime = getEdaRuntime();
 		if (!isPlainObjectRecord(runtime) || !isPlainObjectRecord(runtime.sys_Storage)) {
 			return undefined;
 		}
