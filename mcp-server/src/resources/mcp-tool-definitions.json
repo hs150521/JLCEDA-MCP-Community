@@ -151,6 +151,27 @@
     }
   },
   {
+    "name": "schematic_layout_check",
+    "description": "检查当前原理图的符号、引脚、属性文本、网络标签和导线的保守几何重叠，报告碰撞、越界和密集区域。文本属性几何不可用时会显式返回能力状态；mode=fix 必须同时提供 confirm=true，且只移动属性文本。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "allPages": { "type": "boolean", "default": false, "description": "读取当前原理图的全部页面组件；属性和导线仍按当前 EDA 页面返回。" },
+        "mode": { "type": "string", "enum": ["check", "fix"], "default": "check" },
+        "confirm": { "type": "boolean", "default": false, "description": "应用属性文本建议位置前的显式确认。" },
+        "denseThreshold": { "type": "integer", "minimum": 2, "maximum": 50, "default": 5 },
+        "pageBounds": {
+          "type": "object",
+          "description": "可选页面工作区边界；当前 API 未提供结构化尺寸时用于执行越界检查。",
+          "properties": { "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" } },
+          "required": ["left", "right", "top", "bottom"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "schematic_review",
     "description": "读取全工程所有原理图页面的网表文件。",
     "inputSchema": {
