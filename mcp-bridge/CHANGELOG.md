@@ -1,3 +1,11 @@
+## [2.1.1] - 2026-08-24
+
+### Fixed
+
+- Guard connection-status persistence while the EDA storage runtime is unavailable during startup or reconnect.
+- Resolve the live EDA runtime through the shared binding resolver so status reads and writes work across supported EDA global layouts.
+- Replace obsolete MCP Hub installation guidance with the native MCP Server setup flow.
+
 ## [2.1.0] - 2026-08-23
 
 ### Added
