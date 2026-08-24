@@ -59,7 +59,9 @@ interface RecoverySession {
   requestedAt: string;
   requestedAtMs: number;
   sourceConnected: boolean;
+  sourceConnectedAt?: number;
   targetClientId?: string;
+  targetConnectedAt?: number;
 }
 
 interface BridgeTask {
@@ -466,6 +468,10 @@ export class EdaBridgeServer {
   ): BridgePeer {
     const previous = this.peers.get(clientId);
     if (previous && previous.socket !== socket) {
+      if (this.recoverySession?.targetClientId === clientId) {
+        this.recoverySession.targetClientId = undefined;
+        this.recoverySession.targetConnectedAt = undefined;
+      }
       this.enterReconnectBarrier(clientId);
       this.rejectPendingForClient(clientId, 'EDA client reconnected before the pending request completed');
       this.clientIdBySocket.delete(previous.socket);
@@ -475,7 +481,7 @@ export class EdaBridgeServer {
     const peer: BridgePeer = {
       clientId,
       bridgeVersion,
-      connectedAt: previous?.connectedAt ?? now,
+      connectedAt: previous?.socket === socket ? previous.connectedAt : now,
       context,
       isReady: previous?.socket === socket ? previous.isReady : false,
       lastSeenAt: now,
@@ -514,6 +520,12 @@ export class EdaBridgeServer {
       return;
     }
     this.peers.delete(clientId);
+    if (this.recoverySession?.targetClientId === clientId) {
+      // The readback target is a socket generation, not merely a clientId.
+      // Permit a later generation to rebind after this socket disconnects.
+      this.recoverySession.targetClientId = undefined;
+      this.recoverySession.targetConnectedAt = undefined;
+    }
     if (this.activeClientId === clientId) {
       this.rejectPendingForClient(clientId, 'Active EDA client disconnected');
       const replacement = [...this.peers.values()].sort((left, right) => left.connectedAt - right.connectedAt)[0];
@@ -789,7 +801,14 @@ export class EdaBridgeServer {
       const source = this.peers.get(sourceClientId);
       const sourceConnected = Boolean(source?.isReady && source.socket.readyState === WebSocket.OPEN);
       const recoveryId = randomUUID();
-      this.recoverySession = { recoveryId, diagnostic, requestedAt: new Date().toISOString(), requestedAtMs: Date.now(), sourceConnected };
+      this.recoverySession = {
+        recoveryId,
+        diagnostic,
+        requestedAt: new Date().toISOString(),
+        requestedAtMs: Date.now(),
+        sourceConnected,
+        sourceConnectedAt: source?.connectedAt,
+      };
       if (sourceConnected) {
         this.trySend(source!.socket, {
           type: 'bridge/recover',
@@ -818,7 +837,7 @@ export class EdaBridgeServer {
       throw new Error('recoveryId does not match the active recovery session.');
     }
     const targetClientId = String(payload.clientId ?? '').trim();
-    if (!targetClientId || targetClientId === session.diagnostic.clientId) {
+    if (!targetClientId) {
       throw new Error('clientId must identify the fresh Bridge client reported by bridge_clients.');
     }
     if (session.targetClientId && session.targetClientId !== targetClientId) {
@@ -832,8 +851,15 @@ export class EdaBridgeServer {
     const target = this.peers.get(targetClientId);
     if (!target || !target.isReady || target.socket.readyState !== WebSocket.OPEN)
       throw new Error(`EDA client is not connected and ready: ${targetClientId}`);
+    if (session.targetClientId && session.targetConnectedAt !== target.connectedAt) {
+      throw new Error('Recovery readback target connection was replaced; retry with the new Bridge generation.');
+    }
     if (session.sourceConnected && target.connectedAt < session.requestedAtMs)
       throw new Error('clientId is not a fresh Bridge generation created after recovery was requested.');
+    if (targetClientId === session.diagnostic.clientId
+      && target.connectedAt <= (session.sourceConnectedAt ?? session.requestedAtMs)) {
+      throw new Error('clientId must identify a newer Bridge generation than the timed-out source.');
+    }
     const expectedDocumentUuid = optionalString(payload.expectedDocumentUuid) ?? session.diagnostic.context?.documentUuid;
     const expectedProjectUuid = optionalString(payload.expectedProjectUuid) ?? session.diagnostic.context?.projectUuid;
     if (!expectedDocumentUuid && !expectedProjectUuid)
@@ -844,6 +870,7 @@ export class EdaBridgeServer {
       throw new Error('Fresh Bridge client projectUuid does not match the expected project; writes remain blocked.');
     this.selectClient(targetClientId, true, true);
     session.targetClientId = targetClientId;
+    session.targetConnectedAt = target.connectedAt;
     const readback = await this.dispatchToEda(readbackPath, readbackPayload, Math.min(timeoutMs, RECOVERY_READBACK_TIMEOUT_MS), undefined, true, targetClientId);
     const identityReadback = readbackPath === '/bridge/jlceda/context'
       ? readback
@@ -926,7 +953,7 @@ export class EdaBridgeServer {
   private pruneRecoveryDiagnostics(): void {
     const cutoff = Date.now() - RECOVERY_DIAGNOSTIC_TTL_MS;
     for (const [requestId, diagnostic] of this.recoveryDiagnostics) {
-      if (diagnostic.timedOutAtMs < cutoff && this.recoverySession?.diagnostic.requestId !== requestId) {
+      if (!diagnostic.mutating && diagnostic.timedOutAtMs < cutoff && this.recoverySession?.diagnostic.requestId !== requestId) {
         this.recoveryDiagnostics.delete(requestId);
       }
     }

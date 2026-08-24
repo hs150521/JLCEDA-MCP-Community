@@ -397,16 +397,27 @@ try {
   assert.equal(disconnectedStart.sourceConnected, false);
   assert.equal(disconnectedStart.freshBridgeGenerationRequested, false);
   await assert.rejects(disconnectedRecoveryServer.request('/bridge/test/write-blocked', {}, 2000), /writes are blocked pending recovery readback/);
+  disconnectedRecoveryTarget.socket.close();
+  disconnectedRecoveryTarget = undefined;
+  disconnectedRecoveryOld = await registerEda(
+    `ws://127.0.0.1:${disconnectedRecoveryPort}/bridge/ws${tokenQuery}`,
+    'disconnected-recovery-old',
+    { documentUuid: 'disconnected-document', projectUuid: 'disconnected-project', pageKind: 'schematic', pageUuid: 'disconnected-page' },
+  );
+  attachTaskResponder(disconnectedRecoveryOld.socket, 'disconnected-recovery-old', (message) => message.path === '/bridge/jlceda/context'
+    ? { currentDocumentInfo: { uuid: 'disconnected-document', parentProjectUuid: 'disconnected-project' }, currentProjectInfo: { uuid: 'disconnected-project' } }
+    : ({ source: 'disconnected-recovery-old-reconnected', path: message.path }));
+  await new Promise((resolve) => setTimeout(resolve, 180));
   const disconnectedReadback = await disconnectedRecoveryServer.request('/bridge/admin/recover-client', {
     action: 'readback',
     confirm: true,
     recoveryId: disconnectedStart.recoveryId,
-    clientId: 'disconnected-recovery-target',
+    clientId: 'disconnected-recovery-old',
     expectedDocumentUuid: 'disconnected-document',
     expectedProjectUuid: 'disconnected-project',
   }, 2000);
   assert.equal(disconnectedReadback.readbackVerified, true);
-  disconnectedRecoveryTarget.socket.close();
+  disconnectedRecoveryOld.socket.close();
   disconnectedRecoveryOld = undefined;
   disconnectedRecoveryTarget = undefined;
   disconnectedRecoveryServer.close();
