@@ -1,19 +1,13 @@
-# Publishing the Community Bridge
+# 发布社区版 Bridge
 
-This project publishes an unofficial community-maintained derivative of the
-MCP Bridge from [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP).
-Keep the upstream attribution and the non-official disclaimer in the extension
-description and README for every release.
+本项目发布的是 MCP Bridge 的非官方社区衍生版本，来源为 sengbin/JLCEDA-MCP。每次发布都要在扩展描述和 README 中保留上游署名及非官方声明。
 
-## Release checklist
+## 发布检查表
 
-1. Keep `mcp-bridge/extension.json.uuid` unchanged. JLCEDA groups later uploads
-   into the same extension namespace by UUID.
-2. Increment the versions in `mcp-bridge/extension.json`,
-   `mcp-bridge/package.json`, and `mcp-server/package.json` as applicable.
-3. Update `mcp-bridge/CHANGELOG.md` and verify the README describes installation,
-   configuration, security assumptions, upstream attribution, and support.
-4. Run:
+1. 保持 mcp-bridge/extension.json.uuid 不变。JLCEDA 会按 UUID 将后续上传归入同一扩展命名空间。
+2. 按需递增 mcp-bridge/extension.json、mcp-bridge/package.json 和 mcp-server/package.json 中的版本。
+3. 更新 mcp-bridge/CHANGELOG.md，并确认 README 说明安装、配置、安全假设、上游署名和支持渠道。
+4. 执行：
 
    ```powershell
    cd mcp-server
@@ -25,32 +19,17 @@ description and README for every release.
    npm run build
    ```
 
-5. Install the generated `build/mcp-bridge-community-<version>.eext` in a clean
-   JLCEDA Professional profile. Test connection, reconnect, multi-client
-   selection, read-only tools, component placement, ordinary net labels, power
-   flags, error handling, and upgrade from the previous version.
-6. Create a GitHub release for the matching commit and attach the `.eext`, its
-   SHA-256 checksum, and release notes. Do not publish from a dirty worktree.
-7. Visit the [JLCEDA Extension Marketplace](https://jlc-ext.com/), open
-   **Extension Management**, choose **Upload Extension**, and upload the tested
-   `.eext` file. The first upload creates the namespace; later versions use the
-   same UUID.
-8. Review the generated marketplace page before submitting. The package must
-   contain valid `name`, `uuid`, `displayName`, `description`, `version`,
-   `license`, category, entry file, README, and a non-default 1:1 icon no larger
-   than 5 MiB. Different extension UUIDs may not reuse the same `name`.
-9. Submit for review. If rejected, address the marketplace notice and upload a
-   new patch version; do not replace an already published artifact silently.
+5. 在干净的 JLCEDA Professional 配置中安装 `build/mcp-bridge-community-<version>.eext`，测试连接、重连、多客户端选择、只读工具、器件放置、普通网络标签、电源标识、错误处理、升级和上一版本兼容性。
+6. 为对应提交创建 GitHub Release，并附加 .eext、SHA-256 校验和及发布说明。不要从有未提交改动的工作区发布。
+7. 访问 JLCEDA 扩展广场 https://jlc-ext.com/，打开“扩展管理”，选择“上传扩展”，上传测试通过的 .eext 文件。首次上传会创建命名空间，后续版本继续使用同一 UUID。
+8. 提交前检查生成的扩展广场页面。包中必须包含有效的 name、uuid、displayName、description、version、license、分类、入口文件、README，以及不超过 5 MiB 的非默认 1:1 图标。不同扩展 UUID 不得复用同一 name。
+9. 提交审核。若被拒绝，按扩展广场通知修复并上传新的补丁版本，不要静默替换已发布产物。
 
-Official requirements:
+## 官方要求
 
-- [JLCEDA extension marketplace guide](https://prodocs.lceda.cn/cn/api/guide/extensions-marketplace.html)
-- [JLCEDA extension manifest guide](https://prodocs.lceda.cn/cn/api/guide/extension-json.html)
+- 嘉立创扩展广场指南：https://prodocs.lceda.cn/cn/api/guide/extensions-marketplace.html
+- 嘉立创扩展清单指南：https://prodocs.lceda.cn/cn/api/guide/extension-json.html
 
-## Naming and trademark
+## 命名和商标
 
-The marketplace display name is **MCP Bridge 社区版**. The description
-must continue to state that it is based on the upstream MCP Bridge and is not an
-official JLCEDA plugin. The repository remains under Apache-2.0; retain the
-repository LICENSE and upstream attribution when distributing source or binary
-packages.
+扩展广场显示名称为“**MCP Bridge 社区版**”。描述必须继续说明其基于上游 MCP Bridge，且不是官方 JLCEDA 插件。仓库采用 Apache-2.0 许可证；分发源代码或二进制包时保留 LICENSE 和上游署名。

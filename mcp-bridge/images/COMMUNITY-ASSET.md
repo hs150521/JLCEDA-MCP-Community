@@ -1,14 +1,11 @@
-# Community logo asset
+# 社区图标素材
 
-`community-logo.png` is the 1254 x 1254 generated source image.
-`community-logo-512.png` is the optimized extension-store asset.
+community-logo.png 是 1254 x 1254 的生成源图。
+community-logo-512.png 是优化后的扩展商店素材。
 
-The source was generated with the built-in OpenAI image generation tool on
-2026-08-16 for JLCEDA MCP Community. It does not reuse the upstream logo or
-JLCEDA artwork.
+源图于 2026-08-16 使用内置图像生成工具为 JLCEDA MCP Community 生成，没有复用上游图标或嘉立创 EDA 素材。
 
-Prompt summary: an original vector-like developer-tool icon in which cyan and
-amber circuit traces form a bridge on a dark navy rounded square; no text, no
-company logo, no OpenAI mark, and no watermark.
+提示词摘要：原创的矢量风格开发工具图标，青色和琥珀色电路走线在深蓝色圆角方块上组成桥梁；不含文字、公司标志、OpenAI 标志或水印。
 
-Only `community-logo-512.png` is included in the packaged EDA extension.
+打包后的 EDA 扩展只包含 community-logo-512.png。
+

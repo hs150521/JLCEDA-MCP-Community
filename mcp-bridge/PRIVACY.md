@@ -1,20 +1,12 @@
-# Privacy
+# 隐私说明
 
-JLCEDA MCP Community does not include analytics, advertising, crash reporting,
-or project-data telemetry. The native server binds its Bridge listener to
-`127.0.0.1`.
+JLCEDA MCP Community 不包含分析、广告、崩溃报告或工程数据遥测功能。原生 Server 的 Bridge 监听器只绑定 127.0.0.1。
 
-When an MCP client invokes a tool, the extension may read data from the active
-JLCEDA project and return it through the local MCP connection. Your AI client
-may then process or transmit that data according to the client's own settings,
-provider terms, and privacy policy. Do not use the integration with confidential
-designs unless that processing is acceptable to you.
+MCP 客户端调用工具时，扩展可能读取当前 JLCEDA 工程数据并通过本地 MCP 连接返回。AI 客户端可能依据自身设置、服务条款和隐私政策继续处理或传输数据。除非你接受这种处理方式，否则不要用于机密设计。
 
-The EDA extension stores its configured Bridge WebSocket URL locally. If the URL
-contains a token, treat the setting and screenshots of it as credentials. Runtime
-logs redact the token, but users should still review logs before sharing them.
+EDA 扩展会在本地保存 Bridge WebSocket 地址。包含 token 的地址、设置页面和截图都应视为凭据；日志虽会隐藏 token，分享前仍需检查。
 
-The optional API passthrough tools can access the capabilities exposed by the
-JLCEDA extension API. Enable them only for trusted MCP clients.
+API 透传工具仅应对可信 MCP 客户端启用。
 
-Privacy and security questions: `hs150521@proton.me`.
+隐私和安全问题请联系：hs150521@proton.me。
+

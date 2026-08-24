@@ -1,32 +1,32 @@
 # MCP Bridge 社区版
 
-## 2.1 PCB tools
+## 2.1 PCB 工具
 
-`bridge_select_client` selects the MCP routing target among connected EDA page clients. It does not activate a different visible tab within one EDA process; use `api_invoke` with `eda.dmt_EditorControl.activateDocument(tabId)` when an explicit in-client tab switch is required.
+`bridge_select_client` 在已连接的 EDA 页面客户端之间选择 MCP 路由目标。它不会切换同一个 EDA 进程中的可见标签页；如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。
 
-The 2.1 release also adds `schematic_document_action` for bounded schematic coordinate/region inspection, selection, primitive lookup, navigation, save, and import actions.
+2.1 版本新增 `schematic_document_action`，用于受限地检查原理图坐标/区域、选中对象、图元、导航、保存和导入。
 
-`schematic_pages_manage` is a confirmation-gated page workflow: create, copy, rename, or completely reorder a schematic's pages. Reorder validates the complete UUID set against freshly read EDA page objects, then verifies the resulting order. Page deletion is deliberately unavailable.
+`schematic_pages_manage` 是受确认保护的页面工作流，可创建、复制、重命名或完整重排原理图页面。重排会使用重新读取的 EDA 页面对象验证完整 UUID 集合和最终顺序；不提供页面删除。
 
-`eda_context` reports the client edition, connection mode, editor version, build date, and current canvas data unit when the installed EDA exposes those 0.4.15 APIs.
+`eda_context` 在已安装的 EDA 提供 0.4.15 API 时返回客户端版本、连接模式、编辑器版本、编译日期和当前画布数据单位。
 
-`eda_canvas_snapshot` can return the rendered active canvas as a bounded image without changing the document or viewport.
+`eda_canvas_snapshot` 可在不改变文档或视图的情况下返回受限的当前画布图像。
 
-`workspace_query` reads the current workspace/team and bounded lists of accessible workspaces, teams, projects, or folders.
+`workspace_query` 读取当前工作区/团队以及受限的可访问工作区、团队、工程和文件夹列表。
 
-`design_source_export` reads bounded previews of the active document or its footprint sources; complete source text requires explicit opt-in and remains byte-limited.
+`design_source_export` 读取当前文档或封装源文件的受限预览；完整源文本需要明确授权且受字节数限制。
 
-`design_archive_export` returns metadata for native current-project/current-document archives by default and only includes bounded Base64 data when explicitly requested.
+`design_archive_export` 默认返回原生当前工程/当前文档归档元数据，只有明确请求时才包含受限的 Base64 数据。
 
-`library_preview` renders symbol and footprint assets as bounded MCP images, while `library_classification_query` returns bounded official library category trees.
+`library_preview` 将符号和封装资源渲染为受限的 MCP 图像，`library_classification_query` 返回受限的官方库分类树。
 
-`project_info` can optionally return bounded Board and Panel inventories for the current project.
+`project_info` 可选返回当前工程受限的 Board 和 Panel 清单。
 
-`pcb_document_action` additionally supports PCB mouse position, explicit selection, and bounded primitive ID/type/BBox queries.
+`pcb_document_action` 还支持 PCB 鼠标位置、明确选择以及受限的图元 ID/类型/BBox 查询。
 
-The 2.1 release adds `pcb_drc_check`, `schematic_drc_check`, `pcb_net_query`, `pcb_constraints_query`, `pcb_layer_query`, `pcb_realtime_drc`, `pcb_document_action`, `project_info`, `netlist_compare`, `design_compare`, `manufacture_export`, read-only `manufacture_templates_query`, `library_sources`, and `library_search`. Network queries support full details, name-only lists, exact official `getNet` lookup, and optional exact-net length/color/primitive analysis. `component_select` and device `library_search` support exact 0.4.15 property searches; device `library_search` also exposes official single/batch LCSC C-number mapping and exact UUID retrieval, while symbol, footprint, 3D-model, reusable-module, panel-library, and simulation-model searches use their supported APIs. Simulation-model retrieval stays unavailable because its official `get` API requires a private deployment. PCB BOM exports can select a template returned by `manufacture_templates_query`; schematic BOM exports can select a returned assembly variant. Manufacturing exports include the official flying-probe test file. `pcb_constraints_query` exposes structured rule data and constraint groups. `pcb_document_action` can inspect PCB coordinates, selected/region primitives, filters, and canvas state; it also accepts Base64 JSON/SES imports, controls navigation/ratline calculation, and supports explicitly requested scoped routing cleanup. PCB auto-layout/auto-routing remain deferred until the target client exposes and a live PCB page confirms those APIs.
+2.1 版本新增 `pcb_drc_check`、`schematic_drc_check`、`pcb_net_query`、`pcb_constraints_query`、`pcb_layer_query`、`pcb_realtime_drc`、`pcb_document_action`、`project_info`、`netlist_compare`、`design_compare`、`manufacture_export`、只读的 `manufacture_templates_query`、`library_sources` 和 `library_search`。网络查询支持完整详情、仅名称列表、官方 `getNet` 精确读取以及精确网络的长度/颜色/图元分析。`component_select` 和设备 `library_search` 支持精确的 0.4.15 属性查询；设备搜索还支持官方单个/批量 LCSC C 编号映射和精确 UUID 获取，符号、封装、3D 模型、可复用模块、Panel 库和仿真模型搜索使用各自支持的 API。仿真模型读取不可用，因为官方 `get` API 需要私有部署。PCB BOM 导出可选择 `manufacture_templates_query` 返回的模板，原理图 BOM 导出可选择装配变体。制造导出包含官方飞针测试文件。`pcb_constraints_query` 返回结构化规则和约束组。`pcb_document_action` 可检查 PCB 坐标、选中/区域图元、过滤器和画布状态，也可导入 Base64 JSON/SES、控制导航/飞线计算，并执行明确请求的受限布线清理。PCB 自动布局/自动布线会等到目标客户端公开并经实页确认对应 API 后再启用。
 
-`pcb_constraints_manage` is the confirmation-gated write companion for constraint groups: it supports individual net class, differential-pair, equal-length-group, and pad-pair-group changes, validates only fields relevant to the requested operation, and reads back the affected item. Bulk rule-configuration replacement is intentionally excluded.
+`pcb_constraints_manage` 是约束组的受确认保护写入工具，支持单个网类、差分对、等长组和 Pad 对组修改，只校验当前操作相关字段并读取验证受影响项目；不支持批量替换规则配置。
 
 当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
 直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。

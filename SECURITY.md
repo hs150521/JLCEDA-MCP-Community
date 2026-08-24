@@ -1,21 +1,22 @@
-# Security policy
+# 安全政策
 
-JLCEDA MCP Community controls an EDA application through a local WebSocket bridge. Some exposed operations can modify schematics, PCB documents, libraries, and project data. Treat access to the bridge as equivalent to interactive access to the open EDA session.
+JLCEDA MCP Community 通过本地 WebSocket Bridge 控制 EDA 应用。部分公开操作可以修改原理图、PCB 文档、库和工程数据，因此应将 Bridge 访问视为等同于直接操作当前 EDA 会话。
 
-## Supported code
+## 支持范围
 
-Security fixes are developed on `native-mcp-v2` until that architecture is promoted to the stable branch. Released versions and the current stable branch receive priority.
+安全修复会先在 native-mcp-v2 上开发，待该架构提升为稳定分支后再合并。已发布版本和当前稳定分支享有优先支持。
 
-## Reporting a vulnerability
+## 漏洞报告
 
-Report security issues privately to `hs150521@proton.me`. Include the affected commit or release, reproduction steps, impact, and any suggested mitigation. Please do not publish a working exploit before a fix is available.
+请将安全问题私下发送至 hs150521@proton.me，并附上受影响的提交或版本、复现步骤、影响范围和建议的缓解措施。修复可用前请不要公开可运行的漏洞利用代码。
 
-## Local bridge protections
+## 本地 Bridge 保护
 
-- The native bridge listens only on `127.0.0.1`.
-- Set `JLCEDA_BRIDGE_TOKEN` to require a shared secret on both `/bridge/ws` and `/mcp-internal`.
-- The EDA extension connects with `?token=...` in its configured WebSocket URL.
-- Bridge logs redact `token`, `access_token`, and `auth` query parameters.
-- Never expose port 8765 through a firewall rule, reverse proxy, tunnel, or port-forward.
+- 原生 Bridge 只监听 127.0.0.1。
+- 设置 JLCEDA_BRIDGE_TOKEN，即可在 /bridge/ws 和 /mcp-internal 上要求共享密钥。
+- EDA 扩展会在配置的 WebSocket 地址中使用 ?token=... 连接。
+- Bridge 日志会隐藏 token、access_token 和 auth 查询参数。
+- 不要通过防火墙规则、反向代理、隧道或端口转发暴露 8765 端口。
 
-Running without `JLCEDA_BRIDGE_TOKEN` is supported temporarily for local compatibility, but it allows any process running as the local user to attempt a bridge connection.
+不设置 JLCEDA_BRIDGE_TOKEN 可暂时兼容本地环境，但同一用户下运行的任意进程都可能尝试连接 Bridge。
+

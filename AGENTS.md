@@ -1,33 +1,39 @@
 # AGENTS.md
 
-## Repository structure
+## 协作规则
 
-Dual-package monorepo for JLCEDA EDA integration via the MCP protocol:
+- 文档中的自然语言优先使用中文；代码、命令、API 名称、协议名称、产品名和必要的专有名词可保留原文。
+- 当用户要求检查仓库、Issue、PR 或其他 repo 内容时，若未特别说明，默认检查社区仓库 `hs150521/JLCEDA-MCP-Community`，不要检查 upstream `sengbin/JLCEDA-MCP`。
+- 使用 `gh` 发送 Issue、PR 描述或评论前，先验证 Markdown 格式，尤其是换行符、代码块和列表，确保不会把转义字符或明文换行符直接显示给读者。
 
-- `mcp-server/` - Node.js MCP server. It exposes MCP over stdio and hosts the localhost WebSocket bridge.
-- `mcp-bridge/` - JLCEDA EDA extension. It connects to `mcp-server` and executes EDA operations.
-- `build/` - packaged JLCEDA extension output (`.eext`).
-- `tool/` - utility scripts, including offline API-document generation.
+## 仓库结构
 
-There is no root-level build orchestration. Build each package from its own directory.
+这是通过 MCP 协议集成 JLCEDA EDA 的双包单仓库：
 
-## Build commands
+- `mcp-server/` - Node.js MCP Server，通过 stdio 暴露 MCP，并承载本机 WebSocket Bridge。
+- `mcp-bridge/` - JLCEDA EDA 扩展，连接 `mcp-server` 并执行 EDA 操作。
+- `build/` - 打包后的 JLCEDA 扩展输出（`.eext`）。
+- `tool/` - 工具脚本，包括离线 API 文档生成。
+
+根目录没有统一构建编排，请分别在各包目录中构建。
+
+## 构建命令
 
 ```powershell
-# MCP server
+# MCP Server
 cd mcp-server
 npm install
 npm run build
 
-# JLCEDA extension
+# JLCEDA 扩展
 cd ../mcp-bridge
 npm install
-npm run build  # produces ../build/mcp-bridge-community-{version}.eext
+npm run build  # 生成 ../build/mcp-bridge-community-{version}.eext
 ```
 
-`mcp-server` produces runtime files in `mcp-server/dist/`. `mcp-bridge` uses esbuild and ts-node, then writes its EDA extension package to `build/`.
+`mcp-server` 会在 `mcp-server/dist/` 生成运行时文件。`mcp-bridge` 使用 esbuild 和 ts-node，然后将 EDA 扩展包写入 `build/`。
 
-## Test commands
+## 测试命令
 
 ```powershell
 cd mcp-server
@@ -41,30 +47,30 @@ npm run typecheck
 npm run lint
 ```
 
-The multi-client entry points run the maintained bridge protocol integration test. It requires a built `mcp-server/dist/` tree.
+多客户端入口会运行维护中的 Bridge 协议集成测试，需要先构建 `mcp-server/dist/` 目录。
 
-## Cross-package coordination
+## 跨包协同
 
-When adding or changing an MCP tool:
+新增或修改 MCP 工具时：
 
-1. Update `mcp-server/src/resources/mcp-tool-definitions.json`.
-2. Update the server route/dispatcher in `mcp-server/src/`.
-3. Update the corresponding handler and runtime route in `mcp-bridge/src/`.
-4. Update relevant READMEs and CHANGELOGs in both packages and the root README.
-5. Add focused schema and handler tests.
+1. 更新 `mcp-server/src/resources/mcp-tool-definitions.json`。
+2. 更新 `mcp-server/src/` 中的 Server 路由/分发器。
+3. 更新 `mcp-bridge/src/` 中对应的处理器和运行时路由。
+4. 更新两个包中的相关 README、CHANGELOG 以及根目录 README。
+5. 增加针对性的架构和处理器测试。
 
-Tool definitions, dispatcher routes, bridge runtime routes, and handler behavior must stay synchronized.
+工具定义、Server 分发路由、Bridge 运行时路由和处理器行为必须保持同步。
 
-## Manual verification
+## 手动验证
 
-- Install the built `.eext` in JLCEDA EDA Professional.
-- Start the built MCP server with `node mcp-server/dist/index.js` or the packaged `jlceda-mcp` command.
-- Open a schematic or PCB page and confirm it connects to `ws://127.0.0.1:8765/bridge/ws`.
-- Invoke the tool through an MCP client and verify the active bridge client executes it.
+- 在 JLCEDA EDA Professional 中安装构建出的 `.eext`。
+- 使用 `node mcp-server/dist/index.js` 或打包后的 `jlceda-mcp` 命令启动 MCP Server。
+- 打开原理图或 PCB 页面，确认连接到 `ws://127.0.0.1:8765/bridge/ws`。
+- 通过 MCP 客户端调用工具，确认活动 Bridge 客户端执行了操作。
 
-Only schematic and PCB pages establish bridge connections. Multiple pages can connect, but the active bridge client executes tasks.
+只有原理图和 PCB 页面会建立 Bridge 连接。多个页面可以同时连接，但由活动 Bridge 客户端执行任务。
 
-## Requirements
+## 环境要求
 
-- Node.js 20+
+- Node.js 20 或更高版本
 - JLCEDA EDA Professional
