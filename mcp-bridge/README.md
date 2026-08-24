@@ -6,6 +6,8 @@
 
 `bridge_select_client` 在已连接的 EDA 页面客户端之间选择 MCP 路由目标。它不会切换同一个 EDA 进程中的可见标签页；如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。
 
+Server 通过 `bridge_recover_client` 请求受控恢复时，Bridge 会创建新的运行时 generation；底层不可取消 EDA Promise 不会被终止，Server 会在文档身份和只读回读确认前阻止写入。
+
 2.1 版本新增 `schematic_document_action`，用于受限地检查原理图坐标/区域、选中对象、图元、导航、保存和导入。
 
 `schematic_pages_manage` 是受确认保护的页面工作流，可创建、复制、重命名或完整重排原理图页面。重排会使用重新读取的 EDA 页面对象验证完整 UUID 集合和最终顺序；不提供页面删除。

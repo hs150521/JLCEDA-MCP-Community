@@ -31,6 +31,28 @@
     }
   },
   {
+    "name": "bridge_recover_client",
+    "description": "对不可取消 EDA 写操作超时后的 Bridge 执行受控恢复。先以 action=recover 和 confirm=true 请求原 Bridge 创建新运行时，再通过 bridge_clients 确认新的 clientId；随后以 action=readback、同一 recoveryId、预期文档身份和 confirm=true 执行只读回读。回读成功前所有 EDA 写操作均被阻止，超时写操作可能已经完成。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["recover", "readback"], "default": "recover" },
+        "confirm": { "const": true, "description": "必须显式确认恢复和可能已完成的修改。" },
+        "recoveryId": { "type": "string", "minLength": 1 },
+        "clientId": { "type": "string", "minLength": 1, "description": "readback 时 bridge_clients 返回的全新 Bridge clientId。" },
+        "expectedDocumentUuid": { "type": "string", "minLength": 1 },
+        "expectedProjectUuid": { "type": "string", "minLength": 1 },
+        "readbackPath": { "type": "string", "enum": ["/bridge/jlceda/context", "/bridge/jlceda/schematic/read", "/bridge/jlceda/schematic/review", "/bridge/jlceda/schematic/layout-check", "/bridge/jlceda/pcb/drc-check", "/bridge/jlceda/schematic/drc-check"], "default": "/bridge/jlceda/context" },
+        "readbackPayload": { "type": "object", "default": {} }
+      },
+      "required": ["confirm"],
+      "allOf": [
+        { "if": { "properties": { "action": { "const": "readback" } }, "required": ["action"] }, "then": { "required": ["recoveryId", "clientId"] } }
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "api_index",
     "description": "获取可调用 EDA API 索引列表。",
     "inputSchema": {

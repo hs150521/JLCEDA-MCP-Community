@@ -67,6 +67,12 @@ export class BridgeTaskQuarantine {
 			}
 		});
 	}
+
+	public releaseForControlledRecovery(): { path: string; startedAt: number } | undefined {
+		const active = this.active;
+		this.active = undefined;
+		return active;
+	}
 }
 
 export interface TimedTask<T> {

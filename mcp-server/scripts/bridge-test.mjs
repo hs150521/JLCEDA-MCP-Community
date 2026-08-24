@@ -250,33 +250,72 @@ try {
   stuck = await registerEda(
     `ws://127.0.0.1:${recoveryPort}/bridge/ws${tokenQuery}`,
     'stuck-page',
+    { documentUuid: 'recovery-document', projectUuid: 'recovery-project', pageKind: 'schematic', pageUuid: 'recovery-page' },
   );
   let receivedStuckTask = false;
   stuck.socket.on('message', (data) => {
     const message = JSON.parse(data.toString());
     if (message.type === 'bridge/task') {
       receivedStuckTask = true;
+      stuck.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'stuck-page',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
     }
   });
   replacement = await registerEda(
     `ws://127.0.0.1:${recoveryPort}/bridge/ws${tokenQuery}`,
     'replacement-page',
+    { documentUuid: 'recovery-document', projectUuid: 'recovery-project', pageKind: 'schematic', pageUuid: 'recovery-page' },
   );
-  attachTaskResponder(replacement.socket, 'replacement-page', (message) => ({ source: 'replacement', path: message.path }));
-  const stuckRequest = recoveryServer.request('/bridge/test/stuck', {}, 2000);
+  attachTaskResponder(replacement.socket, 'replacement-page', (message) => message.path === '/bridge/jlceda/context'
+    ? { currentDocumentInfo: { uuid: 'recovery-document', parentProjectUuid: 'recovery-project' }, currentProjectInfo: { uuid: 'recovery-project' } }
+    : ({ source: 'replacement', path: message.path }));
+  const stuckRequest = recoveryServer.request('/bridge/jlceda/api/invoke', {}, 100);
   await waitUntil(() => receivedStuckTask);
   await assert.rejects(
     recoveryServer.request('/bridge/admin/select-client', { clientId: 'replacement-page' }, 2000),
     /pending task/,
   );
-  await recoveryServer.request('/bridge/admin/select-client', { clientId: 'replacement-page', force: true }, 2000);
-  await assert.rejects(stuckRequest, /force-switched/);
-  assert.deepEqual(
-    await recoveryServer.request('/bridge/test/recovered', {}, 2000),
-    { source: 'replacement', path: '/bridge/test/recovered' },
-  );
+  await assert.rejects(stuckRequest, /Request execution timeout/);
+  const recoveryMessagePromise = waitForMessage(stuck.socket, (message) => message.type === 'bridge/recover');
+  const recoveryStart = await recoveryServer.request('/bridge/admin/recover-client', { confirm: true }, 2000);
+  assert.equal(recoveryStart.readbackRequired, true);
+  assert.match(recoveryStart.warning, /may have completed/);
+  assert.equal(recoveryStart.diagnostic.mutating, true);
+  const recoveryMessage = await recoveryMessagePromise;
+  assert.equal(recoveryMessage.recoveryId, recoveryStart.recoveryId);
   stuck.socket.close();
   stuck = undefined;
+  const freshRecoveryClient = await registerEda(
+    `ws://127.0.0.1:${recoveryPort}/bridge/ws${tokenQuery}`,
+    'recovered-page',
+    { documentUuid: 'recovery-document', projectUuid: 'recovery-project', pageKind: 'schematic', pageUuid: 'recovery-page' },
+  );
+  attachTaskResponder(freshRecoveryClient.socket, 'recovered-page', (message) => message.path === '/bridge/jlceda/context'
+    ? { currentDocumentInfo: { uuid: 'recovery-document', parentProjectUuid: 'recovery-project' }, currentProjectInfo: { uuid: 'recovery-project' } }
+    : ({ source: 'replacement', path: message.path }));
+  await assert.rejects(
+    recoveryServer.request('/bridge/test/write-blocked', {}, 2000),
+    /writes are blocked pending recovery readback/,
+  );
+  const recoveryReadback = await recoveryServer.request('/bridge/admin/recover-client', {
+    action: 'readback',
+    confirm: true,
+    recoveryId: recoveryStart.recoveryId,
+    clientId: 'recovered-page',
+    expectedDocumentUuid: 'recovery-document',
+    expectedProjectUuid: 'recovery-project',
+  }, 2000);
+  assert.equal(recoveryReadback.readbackVerified, true);
+  assert.deepEqual(
+    await recoveryServer.request('/bridge/test/recovery-write-after-readback', {}, 2000),
+    { source: 'replacement', path: '/bridge/test/recovery-write-after-readback' },
+  );
+  freshRecoveryClient.socket.close();
   replacement.socket.close();
   replacement = undefined;
   recoveryServer.close();

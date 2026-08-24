@@ -181,6 +181,7 @@ export class ToolDispatcher {
       'eda_context': '/bridge/jlceda/context',
       'bridge_clients': '/bridge/admin/clients',
       'bridge_select_client': '/bridge/admin/select-client',
+      'bridge_recover_client': '/bridge/admin/recover-client',
     };
 
     const path = pathMap[toolName];

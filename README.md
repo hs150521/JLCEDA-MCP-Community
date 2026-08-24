@@ -3,6 +3,7 @@
 ## 2.1 开发工具
 
 - `bridge_clients` 和 `bridge_select_client` 用于在已连接的 EDA 页面客户端之间切换 MCP 路由；它们不会切换同一个 EDA 进程中的可见标签页。如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。
+- `bridge_recover_client`：不可取消 EDA 修改超时时，以显式确认请求新的 Bridge 运行时，再对新客户端执行文档身份校验和只读回读；回读确认前始终阻止写操作，并明确提示超时修改可能已完成。
 - `schematic_document_action`：检查原理图坐标、选中对象、区域图元、过滤器和鼠标位置；执行视图导航、图元选择、图元属性/BBox 读取、保存和变更导入。
 - `schematic_layout_check`：基于结构化 EDA 几何估算原理图符号、引脚、属性文本、网络标签和导线重叠，报告密集区域与可选页面越界；`mode: "fix"` 仅在 `confirm: true` 时移动属性文本。
 - `schematic_pages_manage`：在 `confirm: true` 时创建、复制、重命名或完整重排原理图页面。重排必须提供每个当前页面 UUID，Bridge 会重新读取并验证结果；不提供删除功能。

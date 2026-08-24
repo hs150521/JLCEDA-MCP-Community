@@ -347,6 +347,9 @@ async function ensureConnected(): Promise<void> {
 		onTask: async (task) => {
 			enqueueTask(task, instance);
 		},
+		onRecoveryRequested: (_recoveryId, _reason) => {
+			startControlledRecovery();
+		},
 		onLost: (message) => {
 			if (transport === instance) {
 				transport = undefined;
@@ -522,6 +525,30 @@ export function restartBridgeServer(): void {
 		return;
 	}
 
+	clearReconnectTimer();
+	stopTransport();
+	currentRole = 'standby';
+	currentLeaseTerm = 0;
+	currentActiveClientId = '';
+	statusReporter.markConnecting();
+	void isEditablePage().then((editable) => {
+		if (editable) {
+			void ensureConnected();
+		}
+		else {
+			statusReporter.markNotOnEditablePage();
+		}
+	}).catch((error: unknown) => {
+		statusReporter.markFailed(toSafeErrorMessage(error));
+	});
+}
+
+function startControlledRecovery(): void {
+	// The underlying EDA Promise remains uncancellable. The server will keep
+	// writes blocked until a fresh connection has been read back and acknowledged.
+	taskQuarantine.releaseForControlledRecovery();
+	taskChain = Promise.resolve();
+	clientId = '';
 	clearReconnectTimer();
 	stopTransport();
 	currentRole = 'standby';

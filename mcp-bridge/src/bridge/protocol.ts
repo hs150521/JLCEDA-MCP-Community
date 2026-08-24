@@ -133,9 +133,17 @@ export interface BridgeServerErrorMessage {
 	requestId?: string;
 }
 
+// 服务端请求客户端创建新的运行时连接。该消息不经过任务队列，因而可在
+// 某个不可取消的 EDA 调用已经使队列隔离时被处理。
+export interface BridgeServerRecoveryMessage {
+	type: 'bridge/recover';
+	recoveryId: string;
+	reason: string;
+}
+
 export type BridgeClientMessage = BridgeClientHelloMessage | BridgeClientHeartbeatMessage | BridgeClientTaskStartedMessage | BridgeClientResultMessage | BridgeClientLogMessage | BridgeClientReadyMessage;
 
-export type BridgeServerMessage = BridgeServerWelcomeMessage | BridgeServerRoleMessage | BridgeServerDebugSwitchMessage | BridgeServerHeartbeatAckMessage | BridgeServerTaskMessage | BridgeServerErrorMessage;
+export type BridgeServerMessage = BridgeServerWelcomeMessage | BridgeServerRoleMessage | BridgeServerDebugSwitchMessage | BridgeServerHeartbeatAckMessage | BridgeServerTaskMessage | BridgeServerErrorMessage | BridgeServerRecoveryMessage;
 
 // 任务载荷定义。
 export interface BridgeQueueTask {

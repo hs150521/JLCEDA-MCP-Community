@@ -1,3 +1,7 @@
+## 未发布
+
+- 支持服务端发起的受控恢复请求：超时隔离的运行时会建立新的 Bridge generation；底层 EDA Promise 不会被取消，Server 会在身份校验和回读确认前继续阻止写入。
+
 ## [2.1.2] - 2026-08-24
 
 - 新增 `schematic_layout_check` 处理器；当 EDA 版本缺少属性或页面边界几何时返回显式 capability 状态，避免误报布局干净。
