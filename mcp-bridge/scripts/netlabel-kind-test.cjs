@@ -13,6 +13,7 @@ const { createNetLabelWithTimeout, detectNetLabelKind, findPin, handleNetLabelPl
 const { handlePcbDrcCheckTask } = require('../src/mcp/pcb-drc-handler.ts');
 const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.ts');
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
+const { startConnectionStatusMonitor } = require('../src/state/status-monitor.ts');
 const { readConnectionStatus, saveConnectionStatus } = require('../src/state/status-store.ts');
 
 for (const name of ['UART_TX', 'SPI_CLK', 'BLUE_LED_DATA']) {
@@ -43,6 +44,53 @@ assert.deepEqual(findPin([sdkPin], '1'), {
 });
 
 async function main() {
+	const freshSnapshot = {
+		bridgeType: 'connected',
+		bridgeText: 'connected',
+		websocketType: 'connected',
+		websocketText: 'connected',
+		updatedAt: new Date().toISOString(),
+	};
+	let fallbackTick;
+	const fallbackUpdates = [];
+	let subscribeFailure;
+	startConnectionStatusMonitor({
+		messageBus: {
+			subscribe: () => {
+				throw new Error('MessageBus is not ready');
+			},
+		},
+		readSnapshot: () => freshSnapshot,
+		setIntervalFn: (callback) => {
+			fallbackTick = callback;
+			return {};
+		},
+		onSnapshot: snapshot => fallbackUpdates.push(snapshot),
+		onSubscribeFailed: (error) => {
+			subscribeFailure = error;
+		},
+	});
+	assert.equal(fallbackUpdates.length, 1, 'the initial fresh snapshot must be displayed');
+	assert.match(String(subscribeFailure), /MessageBus is not ready/);
+	fallbackTick();
+	assert.equal(fallbackUpdates.length, 2, 'subscription failure must retain storage polling');
+
+	let messageListener;
+	let unexpectedFallback = false;
+	const pushUpdates = [];
+	startConnectionStatusMonitor({
+		messageBus: { subscribe: (_topic, listener) => { messageListener = listener; } },
+		readSnapshot: () => undefined,
+		setIntervalFn: () => {
+			unexpectedFallback = true;
+			return {};
+		},
+		onSnapshot: snapshot => pushUpdates.push(snapshot),
+	});
+	messageListener(freshSnapshot);
+	assert.equal(pushUpdates.length, 1, 'MessageBus snapshots must update the settings state');
+	assert.equal(unexpectedFallback, false, 'working MessageBus subscriptions must not poll storage');
+
 	globalThis.eda = {
 		pcb_Net: { getAllNets: async () => [{ net: 'VCC', length: 10 }, { net: 'GND', length: 20 }] },
 		pcb_Drc: {
@@ -307,7 +355,8 @@ async function main() {
 
 main().then(() => {
 	process.stdout.write('Net label handler tests passed\n');
+	process.exit(0);
 }).catch((error) => {
 	process.stderr.write(`${error.stack || error}\n`);
-	process.exitCode = 1;
+	process.exit(1);
 });

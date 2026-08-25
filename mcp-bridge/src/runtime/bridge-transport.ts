@@ -18,6 +18,7 @@ import type {
 	BridgeServerRoleMessage,
 } from '../bridge/protocol.ts';
 import type { UnifiedLogEntry } from '../logging/log.ts';
+import { BRIDGE_PROTOCOL_VERSION, validateBridgeServerMessage } from '../bridge/bridge-contract.ts';
 import { bridgeLogPipeline } from '../logging/log.ts';
 import { BridgeStateManager } from '../state/state-manager.ts';
 import { isPlainObjectRecord, toSafeErrorMessage } from '../utils.ts';
@@ -96,6 +97,11 @@ async function parseServerMessage(data: unknown): Promise<BridgeServerMessage> {
 	const parsed = JSON.parse(text) as unknown;
 	if (!isPlainObjectRecord(parsed)) {
 		throw new Error(BRIDGE_STATUS_TEXT.transport.invalidMessageRoot);
+	}
+
+	const contractError = validateBridgeServerMessage(parsed);
+	if (contractError) {
+		throw new TypeError(contractError);
 	}
 
 	const messageType = String(parsed.type ?? '').trim();
@@ -326,6 +332,7 @@ export class BridgeTransport {
 			type: 'bridge/hello',
 			clientId: this.clientId,
 			bridgeVersion: this.bridgeVersion,
+			protocolVersion: BRIDGE_PROTOCOL_VERSION,
 			context: this.context,
 		});
 	}
@@ -339,6 +346,9 @@ export class BridgeTransport {
 			if (message.type === 'bridge/welcome') {
 				if (message.clientId !== this.clientId) {
 					return;
+				}
+				if (message.protocolVersion !== undefined && message.protocolVersion !== BRIDGE_PROTOCOL_VERSION) {
+					throw new Error(`Unsupported Bridge protocol version: ${String(message.protocolVersion)}`);
 				}
 				if (!this.welcomed) {
 					this.welcomed = true;

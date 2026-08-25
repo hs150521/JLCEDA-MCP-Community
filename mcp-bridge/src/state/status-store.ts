@@ -13,10 +13,19 @@ import { getEdaRuntime, isPlainObjectRecord } from '../utils';
 
 // 固定连接状态存储键，与上下文无关，设置页直接轮询此键。
 const MCP_CONNECTION_STATUS_KEY = 'jlc_mcp_connection_status';
+export const MCP_CONNECTION_STATUS_CHANGED_TOPIC = 'jlc_mcp_connection_status_changed';
+let lastPersistedSnapshotSignature = '';
+let inFlightSnapshotSignature = '';
+let pendingSnapshot: ConnectionStatusSnapshot | undefined;
+let persistenceRetryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
 interface ExtensionStorage {
 	getExtensionUserConfig?: (key: string) => unknown;
 	setExtensionUserConfig?: (key: string, value: unknown) => unknown;
+}
+
+interface ExtensionMessageBus {
+	publish?: (topic: string, message: unknown) => unknown;
 }
 
 function getExtensionStorage(): ExtensionStorage | undefined {
@@ -68,18 +77,90 @@ export function isConnectionStatusSnapshot(value: unknown): value is ConnectionS
  */
 export function saveConnectionStatus(snapshot: ConnectionStatusSnapshot): void {
 	const storage = getExtensionStorage();
-	if (!storage || typeof storage.setExtensionUserConfig !== 'function') {
+	const signature = JSON.stringify({
+		bridgeType: snapshot.bridgeType,
+		bridgeText: snapshot.bridgeText,
+		websocketType: snapshot.websocketType,
+		websocketText: snapshot.websocketText,
+		updatedAt: snapshot.updatedAt,
+	});
+
+	try {
+		const runtime = getEdaRuntime() as { sys_MessageBus?: ExtensionMessageBus };
+		void Promise.resolve(runtime.sys_MessageBus?.publish?.(MCP_CONNECTION_STATUS_CHANGED_TOPIC, snapshot)).catch(() => undefined);
+	}
+	catch {
+		// The settings iframe can still read the last persisted snapshot.
+	}
+
+	if (!storage || typeof storage.setExtensionUserConfig !== 'function'
+		|| signature === lastPersistedSnapshotSignature
+		|| signature === inFlightSnapshotSignature
+		|| (pendingSnapshot !== undefined && signature === snapshotSignature(pendingSnapshot))) {
+		return;
+	}
+	pendingSnapshot = snapshot;
+	persistConnectionStatus(storage);
+}
+
+function snapshotSignature(snapshot: ConnectionStatusSnapshot): string {
+	return JSON.stringify({
+		bridgeType: snapshot.bridgeType,
+		bridgeText: snapshot.bridgeText,
+		websocketType: snapshot.websocketType,
+		websocketText: snapshot.websocketText,
+		updatedAt: snapshot.updatedAt,
+	});
+}
+
+function schedulePersistenceRetry(storage: ExtensionStorage): void {
+	if (persistenceRetryTimer !== undefined) {
+		return;
+	}
+	persistenceRetryTimer = globalThis.setTimeout(() => {
+		persistenceRetryTimer = undefined;
+		persistConnectionStatus(storage);
+	}, 1000);
+}
+
+function persistConnectionStatus(storage: ExtensionStorage): void {
+	if (inFlightSnapshotSignature || !pendingSnapshot || typeof storage.setExtensionUserConfig !== 'function') {
 		return;
 	}
 
+	const snapshot = pendingSnapshot;
+	const signature = snapshotSignature(snapshot);
+	pendingSnapshot = undefined;
+	inFlightSnapshotSignature = signature;
 	try {
-		// EDA may expose the storage object before its backing runtime is ready.
-		// Consume both synchronous throws and rejected promises so reconnect logic
-		// cannot fail with an unhandled rejection during EDA startup.
-		void Promise.resolve(storage.setExtensionUserConfig(MCP_CONNECTION_STATUS_KEY, snapshot)).catch(() => undefined);
+		// Serialize writes so an older asynchronous write cannot overwrite a newer
+		// status snapshot. Failed writes are retried because EDA storage can appear
+		// before its backing runtime is ready.
+		void Promise.resolve(storage.setExtensionUserConfig(MCP_CONNECTION_STATUS_KEY, snapshot)).then(
+			() => {
+				lastPersistedSnapshotSignature = signature;
+			},
+			() => {
+				if (!pendingSnapshot) {
+					pendingSnapshot = snapshot;
+				}
+			},
+		).finally(() => {
+			inFlightSnapshotSignature = '';
+			if (pendingSnapshot && snapshotSignature(pendingSnapshot) === signature) {
+				schedulePersistenceRetry(storage);
+			}
+			else {
+				persistConnectionStatus(storage);
+			}
+		});
 	}
 	catch {
-		// Storage is best-effort; connection state is recomputed on the next tick.
+		inFlightSnapshotSignature = '';
+		if (!pendingSnapshot) {
+			pendingSnapshot = snapshot;
+		}
+		schedulePersistenceRetry(storage);
 	}
 }
 

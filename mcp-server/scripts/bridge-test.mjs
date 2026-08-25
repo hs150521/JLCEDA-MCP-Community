@@ -99,7 +99,9 @@ async function registerEda(url, clientId, context = undefined) {
   const welcome = waitForMessage(socket, (message) => message.type === 'bridge/welcome');
   const role = waitForMessage(socket, (message) => message.type === 'bridge/role');
   socket.send(JSON.stringify({ type: 'bridge/hello', clientId, bridgeVersion: '2.1.0', context }));
-  assert.equal((await welcome).clientId, clientId);
+  const welcomeMessage = await welcome;
+  assert.equal(welcomeMessage.clientId, clientId);
+  assert.equal(welcomeMessage.protocolVersion, 1);
   const initialRole = await role;
   socket.send(JSON.stringify({ type: 'bridge/ready', clientId, readyAt: Date.now() }));
   const heartbeat = waitForMessage(socket, (message) => message.type === 'bridge/heartbeat-ack');
@@ -199,8 +201,8 @@ try {
   const sharedClients = await secondaryServer.request('/bridge/admin/clients', {}, 2000);
   assert.equal(sharedClients.activeClientId, 'red-page');
   assert.deepEqual(
-    await secondaryServer.request('/bridge/test/shared', { value: 3 }, 2000),
-    { source: 'red', path: '/bridge/test/shared' },
+    await secondaryServer.request('/bridge/jlceda/api/invoke', { value: 3 }, 2000),
+    { source: 'red', path: '/bridge/jlceda/api/invoke' },
   );
 
   const forwardingPort = await reservePort();

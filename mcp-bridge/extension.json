@@ -3,7 +3,7 @@
 	"uuid": "4bf111f3be7d45ea94fa619409c3a79d",
 	"displayName": "MCP Bridge 社区版",
 	"description": "基于 sengbin/JLCEDA-MCP 项目中 MCP Bridge 扩展改进的社区维护版本；非嘉立创官方插件。支持原生 MCP Server、多客户端选择与原理图工具。",
-	"version": "2.2.0",
+	"version": "2.3.0",
 	"publisher": "hs150521 Community",
 	"engines": {
 		"eda": "^3.0.0"

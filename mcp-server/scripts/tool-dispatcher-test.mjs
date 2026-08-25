@@ -143,6 +143,7 @@ for (const [name, timeoutMs] of [
   ['workspace_query', 32_000],
   ['api_invoke', 17_000],
   ['eda_context', 17_000],
+  ['component_select', 27_000],
 ]) {
   const callCount = calls.length;
   await dispatcher.dispatch({ name, arguments: {} });
