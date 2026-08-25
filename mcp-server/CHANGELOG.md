@@ -2,6 +2,10 @@
 
 ## [2.3.0] - 2026-08-25
 
+- 使用根目录 `contracts/bridge-contract.json` 作为 Bridge 公开工具、内部交互路由、超时策略和协议字段的唯一事实源。
+- Server 分发和 Bridge 回包均按共享契约校验；握手协商协议版本 1，并兼容缺少版本字段的旧 Bridge。
+- 将 WebSocket 编码、负载上限和 token 比较提取为独立线协议模块，保持 `EdaBridgeServer` 协调 API 不变。
+
 - 使用共享 Bridge 路由清单注册和分发 MCP 工具。
 - 增加内部请求超时、重复 `requestId` 检查、消息大小限制和有限挂起请求队列。
 - 增强多客户端 Bridge 消息校验，保持可选的本机 token 认证。

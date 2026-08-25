@@ -37,6 +37,7 @@ export interface BridgeClientHelloMessage {
 	type: 'bridge/hello';
 	clientId: string;
 	bridgeVersion: string;
+	protocolVersion?: number;
 	context?: BridgeClientContext;
 }
 
@@ -91,6 +92,7 @@ export interface BridgeServerWelcomeMessage {
 	type: 'bridge/welcome';
 	clientId: string;
 	connectedAt: string;
+	protocolVersion?: number;
 }
 
 // 服务端下发角色更新消息。

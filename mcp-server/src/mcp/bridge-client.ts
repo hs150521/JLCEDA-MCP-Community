@@ -1,5 +1,7 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
+import { BRIDGE_PROTOCOL_VERSION, isReadOnlyBridgeRequest, operationForPath, validateBridgeClientMessage } from './bridge-contract.js';
+import { BRIDGE_MAX_PAYLOAD_BYTES, decodeBridgeMessage, sendBridgeJson, tokensMatch } from './bridge-wire.js';
 
 export function formatInternalClientEndpoint(port: number): string {
   return `ws://127.0.0.1:${String(port)}/mcp-internal`;
@@ -76,45 +78,10 @@ interface BridgeTask {
 const BRIDGE_QUEUE_TIMEOUT_MS = 15 * 60 * 1000;
 const INTERNAL_QUEUE_RESPONSE_GRACE_MS = 5_000;
 const BRIDGE_MAX_PENDING_REQUESTS = 64;
-// Keep Bridge messages bounded even on localhost.  This protects both the
-// server and the EDA extension from accidentally serialising unbounded data
-// (for example, a malformed API response or an oversized image).
-const BRIDGE_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 const RECOVERY_READBACK_TIMEOUT_MS = 15_000;
 const RECOVERY_DIAGNOSTIC_TTL_MS = 15 * 60 * 1000;
-const READ_ONLY_PATHS = new Set([
-  '/bridge/jlceda/context',
-  '/bridge/jlceda/schematic/read',
-  '/bridge/jlceda/schematic/review',
-  '/bridge/jlceda/schematic/drc-check',
-  '/bridge/jlceda/schematic/layout-check',
-  '/bridge/jlceda/pcb/drc-check',
-  '/bridge/jlceda/canvas/snapshot',
-  '/bridge/jlceda/project/info',
-  '/bridge/jlceda/design/source-export',
-  '/bridge/jlceda/design/archive-export',
-  '/bridge/jlceda/library/search',
-  '/bridge/jlceda/library/preview',
-  '/bridge/jlceda/library/sources',
-  '/bridge/jlceda/library/classification-query',
-  '/bridge/jlceda/workspace/query',
-  '/bridge/jlceda/net/query-pcb',
-  '/bridge/jlceda/pcb/layer-query',
-  '/bridge/jlceda/pcb/constraints-query',
-  '/bridge/jlceda/manufacture/templates-query',
-  '/bridge/jlceda/netlist/compare',
-  '/bridge/jlceda/design/compare',
-  '/bridge/jlceda/component/place/check',
-  '/bridge/jlceda/component/place/close',
-]);
-
 function isReadOnlyRequest(path: string, payload: unknown): boolean {
-  if (!READ_ONLY_PATHS.has(path)) {
-    return false;
-  }
-  return path !== '/bridge/jlceda/schematic/layout-check'
-    || !isRecord(payload)
-    || payload.mode !== 'fix';
+	return isReadOnlyBridgeRequest(path, payload);
 }
 
 function hasMutatingRecoveryDiagnostics(diagnostics: Iterable<RecoveryDiagnostic>): boolean {
@@ -145,35 +112,27 @@ interface BridgeServerOptions {
   peerSweepIntervalMs?: number;
 }
 
-function decodeMessage(data: RawData): unknown {
-  if (Buffer.isBuffer(data)) {
-    return JSON.parse(data.toString('utf8'));
-  }
-  if (Array.isArray(data)) {
-    return JSON.parse(Buffer.concat(data).toString('utf8'));
-  }
-  return JSON.parse(Buffer.from(data).toString('utf8'));
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function sendJson(socket: WebSocket, message: unknown): void {
-  if (socket.readyState !== WebSocket.OPEN) {
-    throw new Error('WebSocket is not open');
+function validateInternalTaskMessage(value: unknown): string | undefined {
+  if (!isRecord(value) || value.type !== 'bridge/task') {
+    return 'Internal bridge task message must have type bridge/task';
   }
-  const payload = JSON.stringify(message);
-  if (Buffer.byteLength(payload, 'utf8') > BRIDGE_MAX_PAYLOAD_BYTES) {
-    throw new Error(`WebSocket payload exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} bytes`);
+  if (typeof value.requestId !== 'string' || value.requestId.trim().length === 0) {
+    return 'Internal bridge task requires a non-empty requestId';
   }
-  socket.send(payload);
-}
-
-function secureEquals(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left, 'utf8');
-  const rightBuffer = Buffer.from(right, 'utf8');
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+  if (typeof value.path !== 'string' || !operationForPath(value.path)) {
+    return 'Internal bridge task path is not declared by the Bridge contract';
+  }
+  if (!Object.prototype.hasOwnProperty.call(value, 'payload')) {
+    return 'Internal bridge task requires payload';
+  }
+  if (typeof value.timeoutMs !== 'number' || !Number.isInteger(value.timeoutMs) || value.timeoutMs <= 0) {
+    return 'Internal bridge task requires a positive integer timeoutMs';
+  }
+  return undefined;
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -326,7 +285,7 @@ export class EdaBridgeServer {
 
       socket.on('message', (data) => {
         try {
-          const message = decodeMessage(data);
+          const message = decodeBridgeMessage(data);
           if (isRecord(message) && message.type === 'bridge/internal-ready' && !settled) {
             settled = true;
             clearTimeout(timer);
@@ -365,7 +324,7 @@ export class EdaBridgeServer {
     if (!this.authToken) {
       return true;
     }
-    return secureEquals(requestUrl.searchParams.get('token') ?? '', this.authToken);
+    return tokensMatch(requestUrl.searchParams.get('token') ?? '', this.authToken);
   }
 
   private startPeerSweep(): void {
@@ -419,7 +378,7 @@ export class EdaBridgeServer {
   private attachEdaSocket(socket: WebSocket): void {
     socket.on('message', (data) => {
       try {
-        this.handleEdaMessage(socket, decodeMessage(data));
+        this.handleEdaMessage(socket, decodeBridgeMessage(data));
       } catch (error) {
         this.trySend(socket, {
           type: 'bridge/error',
@@ -432,11 +391,18 @@ export class EdaBridgeServer {
   }
 
   private handleEdaMessage(socket: WebSocket, rawMessage: unknown): void {
-    if (!isRecord(rawMessage)) {
-      throw new Error('Bridge message must be an object');
-    }
-    const type = String(rawMessage.type ?? '');
-    if (type === 'bridge/hello') {
+	const validationError = validateBridgeClientMessage(rawMessage);
+	if (validationError) {
+		throw new Error(validationError);
+	}
+	if (!isRecord(rawMessage)) {
+		throw new Error('Bridge message must be an object');
+	}
+	const type = String(rawMessage.type ?? '');
+	if (type === 'bridge/hello') {
+		if (rawMessage.protocolVersion !== undefined && rawMessage.protocolVersion !== BRIDGE_PROTOCOL_VERSION) {
+			throw new Error(`Unsupported Bridge protocol version: ${String(rawMessage.protocolVersion)}`);
+		}
       const clientId = String(rawMessage.clientId ?? '').trim();
       if (!clientId) {
         throw new Error('bridge/hello requires clientId');
@@ -447,9 +413,10 @@ export class EdaBridgeServer {
         optionalString(rawMessage.bridgeVersion) ?? 'unknown',
         parseClientContext(rawMessage.context),
       );
-      this.trySend(socket, {
-        type: 'bridge/welcome',
-        clientId,
+		this.trySend(socket, {
+			type: 'bridge/welcome',
+			clientId,
+			protocolVersion: BRIDGE_PROTOCOL_VERSION,
         connectedAt: new Date(peer.connectedAt).toISOString(),
       });
       this.trySend(socket, {
@@ -648,24 +615,25 @@ export class EdaBridgeServer {
     socket.on('message', (data) => {
       let message: unknown;
       try {
-        message = decodeMessage(data);
+        message = decodeBridgeMessage(data);
       } catch {
         socket.close(1007, 'Invalid JSON');
         return;
       }
-      if (!isRecord(message) || message.type !== 'bridge/task') {
+      const validationError = validateInternalTaskMessage(message);
+      if (validationError) {
+        this.trySend(socket, {
+          type: 'bridge/result',
+          requestId: isRecord(message) && typeof message.requestId === 'string' ? message.requestId : '',
+          error: validationError,
+        });
+        return;
+      }
+      if (!isRecord(message)) {
         return;
       }
       const requestId = String(message.requestId ?? '');
       const path = String(message.path ?? '');
-      if (!requestId || !path) {
-        this.trySend(socket, {
-          type: 'bridge/result',
-          requestId,
-          error: 'bridge/task requires non-empty requestId and path',
-        });
-        return;
-      }
       if (this.pendingRequests.has(requestId)) {
         this.trySend(socket, {
           type: 'bridge/result',
@@ -705,7 +673,7 @@ export class EdaBridgeServer {
 
   private handleInternalMessage(data: RawData): void {
     try {
-      const message = decodeMessage(data);
+      const message = decodeBridgeMessage(data);
       if (!isRecord(message)) {
         return;
       }
@@ -1015,7 +983,7 @@ export class EdaBridgeServer {
         payload,
       });
       try {
-        sendJson(peer.socket, {
+        sendBridgeJson(peer.socket, {
           type: 'bridge/task',
           requestId,
           path,
@@ -1075,7 +1043,7 @@ export class EdaBridgeServer {
       });
       try {
         const request: BridgeTask = { type: 'bridge/task', requestId, path, payload, timeoutMs: effectiveTimeoutMs };
-        sendJson(socket, request);
+        sendBridgeJson(socket, request);
       } catch (error) {
         clearTimeout(timeout);
         this.pendingRequests.delete(requestId);
@@ -1091,7 +1059,7 @@ export class EdaBridgeServer {
 
   private trySend(socket: WebSocket, message: unknown): boolean {
     try {
-      sendJson(socket, message);
+      sendBridgeJson(socket, message);
       return true;
     } catch (error) {
       process.stderr.write(`WebSocket send failed: ${String(error)}\n`);

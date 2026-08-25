@@ -9,6 +9,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import type { EdaBridgeServer } from './bridge-client.js';
+import { bridgePathForTool, bridgeTimeoutForTool } from './bridge-contract.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,8 +17,6 @@ const __dirname = dirname(__filename);
 // 加载工具定义
 const toolDefinitionsPath = join(__dirname, '..', 'resources', 'mcp-tool-definitions.json');
 const rawToolDefinitions = JSON.parse(readFileSync(toolDefinitionsPath, 'utf8'));
-const bridgeRoutesPath = join(__dirname, '..', 'resources', 'bridge-tool-routes.json');
-const rawBridgeRoutes = JSON.parse(readFileSync(bridgeRoutesPath, 'utf8')) as unknown;
 
 export interface ToolCallParams {
   name: string;
@@ -80,22 +79,6 @@ function loadToolDefinitions(): readonly ToolDefinition[] {
 
 const TOOL_DEFINITIONS = loadToolDefinitions();
 
-function loadBridgeRoutes(): Readonly<Record<string, string>> {
-  if (!isPlainObjectRecord(rawBridgeRoutes)) {
-    throw new Error('bridge-tool-routes.json must contain an object');
-  }
-  const routes: Record<string, string> = {};
-  for (const [toolName, route] of Object.entries(rawBridgeRoutes)) {
-    if (typeof route !== 'string' || route.length === 0 || !route.startsWith('/bridge/')) {
-      throw new Error(`Invalid bridge route for tool ${toolName}`);
-    }
-    routes[toolName] = route;
-  }
-  return routes;
-}
-
-const BRIDGE_ROUTES = loadBridgeRoutes();
-
 export class ToolDispatcher {
   constructor(private readonly bridgeServer: EdaBridgeServer) {}
 
@@ -118,10 +101,10 @@ export class ToolDispatcher {
       }
 
       // 获取桥接路径
-      const bridgePath = this.getBridgePath(toolCallParams.name);
+      const bridgePath = bridgePathForTool(toolCallParams.name);
       
       // 通过WebSocket发送到EDA插件执行
-      const requestTimeoutMs = this.getRequestTimeoutMs(toolCallParams.name, args);
+      const requestTimeoutMs = bridgeTimeoutForTool(toolCallParams.name, args);
       const result = requestTimeoutMs === undefined
         ? await this.bridgeServer.request(bridgePath, args)
         : await this.bridgeServer.request(bridgePath, args, requestTimeoutMs + 2_000);
@@ -131,40 +114,6 @@ export class ToolDispatcher {
     } catch (error) {
       throw new Error(`工具 ${toolCallParams.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }
-
-  private getRequestTimeoutMs(toolName: string, args: Record<string, unknown>): number | undefined {
-    const extendedReadTools = ['pcb_drc_check', 'schematic_drc_check', 'schematic_layout_check', 'netlist_compare', 'design_compare', 'design_archive_export', 'manufacture_export', 'pcb_document_action', 'schematic_document_action', 'pcb_net_query'];
-    const standardReadTools = ['design_source_export', 'eda_canvas_snapshot', 'library_sources', 'library_classification_query', 'library_preview', 'workspace_query'];
-    if (!['api_invoke', 'eda_context', ...extendedReadTools, ...standardReadTools].includes(toolName)) {
-      return undefined;
-    }
-    if (args.timeoutMs === undefined) {
-      if (standardReadTools.includes(toolName)) {
-        return 30_000;
-      }
-      return extendedReadTools.includes(toolName) ? 60_000 : 15_000;
-    }
-
-    const timeoutMs = Number(args.timeoutMs);
-    const extendedReadTool = extendedReadTools.includes(toolName);
-	const minimum = extendedReadTool ? 5_000 : 1_000;
-    if (!Number.isInteger(timeoutMs) || timeoutMs < minimum || timeoutMs > 120_000) {
-      throw new RangeError(`timeoutMs must be an integer between ${String(minimum)} and 120000`);
-    }
-    return timeoutMs;
-  }
-
-  /**
-   * 根据工具名获取桥接路径
-   */
-  private getBridgePath(toolName: string): string {
-    const path = BRIDGE_ROUTES[toolName];
-    if (!path) {
-      throw new Error(`未知工具: ${toolName}`);
-    }
-
-    return path;
   }
 
   /**
@@ -232,7 +181,7 @@ export class ToolDispatcher {
   private async dispatchInteractiveComponentPlace(args: Record<string, unknown>): Promise<ToolCallResult> {
     // The orchestration paths are private Bridge implementation details. Derive
     // them from the public manifest route so a manifest rename cannot drift.
-    const placementPath = this.getBridgePath('component_place');
+    const placementPath = bridgePathForTool('component_place');
     const descriptorResult = await this.bridgeServer.request(placementPath, args);
     if (!isPlainObjectRecord(descriptorResult) || !isPlainObjectRecord(descriptorResult.placement)) {
       throw new Error('Bridge did not return a component placement descriptor');

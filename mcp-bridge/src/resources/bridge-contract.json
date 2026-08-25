@@ -1,0 +1,427 @@
+{
+	"contractVersion": "2.3.0",
+	"protocol": {
+		"version": 1,
+		"clientMessages": {
+			"bridge/hello": {
+				"required": {
+					"clientId": "non-empty-string",
+					"bridgeVersion": "non-empty-string"
+				},
+				"optional": {
+					"protocolVersion": "positive-integer",
+					"context": "context"
+				}
+			},
+			"bridge/heartbeat": {
+				"required": {
+					"clientId": "non-empty-string",
+					"sentAt": "finite-number"
+				},
+				"optional": {
+					"context": "context"
+				}
+			},
+			"bridge/ready": {
+				"required": {
+					"clientId": "non-empty-string",
+					"readyAt": "finite-number"
+				}
+			},
+			"bridge/task-started": {
+				"required": {
+					"clientId": "non-empty-string",
+					"requestId": "non-empty-string",
+					"leaseTerm": "non-negative-integer",
+					"startedAt": "finite-number"
+				}
+			},
+			"bridge/result": {
+				"required": {
+					"clientId": "non-empty-string",
+					"requestId": "non-empty-string",
+					"leaseTerm": "non-negative-integer"
+				},
+				"optional": {
+					"result": "any",
+					"error": "task-error"
+				}
+			},
+			"bridge/log": {
+				"required": {
+					"clientId": "non-empty-string",
+					"log": "record"
+				}
+			}
+		},
+		"serverMessages": {
+			"bridge/welcome": {
+				"required": {
+					"clientId": "non-empty-string",
+					"connectedAt": "non-empty-string"
+				},
+				"optional": {
+					"protocolVersion": "positive-integer"
+				}
+			},
+			"bridge/role": {
+				"required": {
+					"clientId": "non-empty-string",
+					"role": "role",
+					"leaseTerm": "non-negative-integer",
+					"activeClientId": "string",
+					"reason": "string"
+				}
+			},
+			"bridge/debug-switch": {
+				"required": {
+					"clientId": "non-empty-string",
+					"debugSwitch": "debug-switch"
+				}
+			},
+			"bridge/heartbeat-ack": {
+				"required": {
+					"clientId": "non-empty-string",
+					"sentAt": "finite-number",
+					"receivedAt": "non-empty-string"
+				}
+			},
+			"bridge/task": {
+				"required": {
+					"requestId": "non-empty-string",
+					"path": "bridge-path",
+					"payload": "any",
+					"createdAt": "finite-number",
+					"leaseTerm": "non-negative-integer"
+				}
+			},
+			"bridge/error": {
+				"required": {
+					"message": "non-empty-string"
+				},
+				"optional": {
+					"requestId": "non-empty-string"
+				}
+			},
+			"bridge/recover": {
+				"required": {
+					"recoveryId": "non-empty-string",
+					"reason": "non-empty-string"
+				}
+			}
+		}
+	},
+	"timeoutPolicies": {
+		"default": {
+			"defaultMs": 25000,
+			"minMs": 25000,
+			"maxMs": 25000,
+			"allowOverride": false
+		},
+		"api": {
+			"defaultMs": 15000,
+			"minMs": 1000,
+			"maxMs": 120000,
+			"allowOverride": true
+		},
+		"standard-read": {
+			"defaultMs": 30000,
+			"minMs": 5000,
+			"maxMs": 120000,
+			"allowOverride": true
+		},
+		"extended-read": {
+			"defaultMs": 60000,
+			"minMs": 5000,
+			"maxMs": 120000,
+			"allowOverride": true
+		}
+	},
+	"operations": [
+		{
+			"toolName": "bridge_clients",
+			"path": "/bridge/admin/clients",
+			"owner": "server"
+		},
+		{
+			"toolName": "bridge_select_client",
+			"path": "/bridge/admin/select-client",
+			"owner": "server"
+		},
+		{
+			"toolName": "bridge_recover_client",
+			"path": "/bridge/admin/recover-client",
+			"owner": "server"
+		},
+		{
+			"toolName": "api_index",
+			"path": "/bridge/jlceda/api/index",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "api_search",
+			"path": "/bridge/jlceda/api/search",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "api_invoke",
+			"path": "/bridge/jlceda/api/invoke",
+			"owner": "bridge",
+			"timeoutPolicy": "api"
+		},
+		{
+			"toolName": "eda_context",
+			"path": "/bridge/jlceda/context",
+			"owner": "bridge",
+			"timeoutPolicy": "api",
+			"readOnly": true
+		},
+		{
+			"toolName": "eda_canvas_snapshot",
+			"path": "/bridge/jlceda/canvas/snapshot",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "schematic_read",
+			"path": "/bridge/jlceda/schematic/read",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "schematic_layout_check",
+			"path": "/bridge/jlceda/schematic/layout-check",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true,
+			"readOnlyUnless": {
+				"field": "mode",
+				"equals": "fix"
+			}
+		},
+		{
+			"toolName": "schematic_review",
+			"path": "/bridge/jlceda/schematic/review",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "component_select",
+			"path": "/bridge/jlceda/component/select",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "component_place",
+			"path": "/bridge/jlceda/component/place",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "component_place_auto",
+			"path": "/bridge/jlceda/component/place-auto",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "netlabel_place",
+			"path": "/bridge/jlceda/netlabel/place",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "netlabel_modify",
+			"path": "/bridge/jlceda/netlabel/modify",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "pcb_drc_check",
+			"path": "/bridge/jlceda/pcb/drc-check",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "schematic_drc_check",
+			"path": "/bridge/jlceda/schematic/drc-check",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "pcb_constraints_query",
+			"path": "/bridge/jlceda/pcb/constraints-query",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "pcb_constraints_manage",
+			"path": "/bridge/jlceda/pcb/constraints-manage",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "netlist_compare",
+			"path": "/bridge/jlceda/netlist/compare",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "design_compare",
+			"path": "/bridge/jlceda/design/compare",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "design_archive_export",
+			"path": "/bridge/jlceda/design/archive-export",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "design_source_export",
+			"path": "/bridge/jlceda/design/source-export",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "pcb_layer_query",
+			"path": "/bridge/jlceda/pcb/layer-query",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "pcb_realtime_drc",
+			"path": "/bridge/jlceda/pcb/realtime-drc",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "pcb_document_action",
+			"path": "/bridge/jlceda/pcb/document",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read"
+		},
+		{
+			"toolName": "schematic_document_action",
+			"path": "/bridge/jlceda/schematic/document",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read"
+		},
+		{
+			"toolName": "schematic_pages_manage",
+			"path": "/bridge/jlceda/schematic/pages-manage",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "project_info",
+			"path": "/bridge/jlceda/project/info",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "workspace_query",
+			"path": "/bridge/jlceda/workspace/query",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "manufacture_export",
+			"path": "/bridge/jlceda/manufacture/export",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "manufacture_templates_query",
+			"path": "/bridge/jlceda/manufacture/templates-query",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "library_search",
+			"path": "/bridge/jlceda/library/search",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"toolName": "library_classification_query",
+			"path": "/bridge/jlceda/library/classification-query",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "library_preview",
+			"path": "/bridge/jlceda/library/preview",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "library_sources",
+			"path": "/bridge/jlceda/library/sources",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "pcb_net_query",
+			"path": "/bridge/jlceda/net/query-pcb",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
+		},
+		{
+			"toolName": "schematic_auto_layout",
+			"path": "/bridge/jlceda/auto/layout",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "schematic_auto_routing",
+			"path": "/bridge/jlceda/auto/routing",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		}
+	],
+	"internalOperations": [
+		{
+			"path": "/bridge/jlceda/component/place/start",
+			"owner": "bridge",
+			"timeoutPolicy": "default"
+		},
+		{
+			"path": "/bridge/jlceda/component/place/check",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		},
+		{
+			"path": "/bridge/jlceda/component/place/close",
+			"owner": "bridge",
+			"timeoutPolicy": "default",
+			"readOnly": true
+		}
+	]
+}

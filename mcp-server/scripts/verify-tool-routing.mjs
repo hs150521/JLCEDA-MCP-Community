@@ -1,90 +1,36 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import ts from 'typescript';
 
-const definitions = JSON.parse(readFileSync(new URL('../src/resources/mcp-tool-definitions.json', import.meta.url), 'utf8'));
-const routes = JSON.parse(readFileSync(new URL('../src/resources/bridge-tool-routes.json', import.meta.url), 'utf8'));
-const canonicalRoutes = JSON.parse(readFileSync(new URL('../../contracts/bridge-tool-routes.json', import.meta.url), 'utf8'));
-const bridgeRuntimeSource = readFileSync(new URL('../../mcp-bridge/src/runtime/bridge-runtime.ts', import.meta.url), 'utf8');
-const bridgeServerSource = readFileSync(new URL('../src/mcp/bridge-client.ts', import.meta.url), 'utf8');
-const definitionNames = new Set(definitions.map((definition) => definition.name));
+const readJson = (url) => JSON.parse(readFileSync(url, 'utf8'));
+const definitions = readJson(new URL('../src/resources/mcp-tool-definitions.json', import.meta.url));
+const contract = readJson(new URL('../../contracts/bridge-contract.json', import.meta.url));
+const serverContract = readJson(new URL('../src/resources/bridge-contract.json', import.meta.url));
+const bridgeContract = readJson(new URL('../../mcp-bridge/src/resources/bridge-contract.json', import.meta.url));
 
-function findVariableInitializer(sourceFile, variableName) {
-  let initializer;
-  const visit = (node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === variableName) {
-      initializer = node.initializer;
-      return;
-    }
-    if (!initializer) {
-      ts.forEachChild(node, visit);
-    }
-  };
-  visit(sourceFile);
-  assert.ok(initializer, `Bridge runtime is missing ${variableName}`);
-  return initializer;
+assert.deepEqual(serverContract, contract, 'Server contract resource differs from contracts/bridge-contract.json');
+assert.deepEqual(bridgeContract, contract, 'Bridge contract resource differs from contracts/bridge-contract.json');
+assert.equal(contract.contractVersion, '2.3.0', 'Contract version must match the 2.3.0 release');
+
+const definitionNames = new Set(definitions.map(definition => definition.name));
+const publicOperations = new Map(contract.operations.map(operation => [operation.toolName, operation]));
+const allPaths = new Set([...contract.operations, ...contract.internalOperations].map(operation => operation.path));
+
+assert.equal(publicOperations.size, contract.operations.length, 'Public tool names must be unique');
+assert.equal(allPaths.size, contract.operations.length + contract.internalOperations.length, 'Bridge paths must be unique');
+for (const definitionName of definitionNames) {
+  assert.ok(publicOperations.has(definitionName), `Tool definition has no contract operation: ${definitionName}`);
 }
-
-function readStringLiteral(node, label) {
-  assert.ok(ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node), `${label} must be a string literal`);
-  return node.text;
-}
-
-function readHandlerRoutes(runtimeSource) {
-  const sourceFile = ts.createSourceFile('bridge-runtime.ts', runtimeSource, ts.ScriptTarget.Latest, true);
-  const handlers = findVariableInitializer(sourceFile, 'BRIDGE_TASK_HANDLERS');
-  assert.ok(ts.isObjectLiteralExpression(handlers), 'BRIDGE_TASK_HANDLERS must be an object literal');
-  return new Set(handlers.properties.map((property) => {
-    assert.ok(ts.isPropertyAssignment(property), 'BRIDGE_TASK_HANDLERS may only contain property assignments');
-    return readStringLiteral(property.name, 'BRIDGE_TASK_HANDLERS property name');
-  }));
-}
-
-function readInternalRoutes(runtimeSource) {
-  const sourceFile = ts.createSourceFile('bridge-runtime.ts', runtimeSource, ts.ScriptTarget.Latest, true);
-  const internalRoutes = findVariableInitializer(sourceFile, 'BRIDGE_INTERNAL_ROUTES');
-  assert.ok(ts.isNewExpression(internalRoutes) && ts.isIdentifier(internalRoutes.expression) && internalRoutes.expression.text === 'Set', 'BRIDGE_INTERNAL_ROUTES must be a Set');
-  const values = internalRoutes.arguments?.[0];
-  assert.ok(values && ts.isArrayLiteralExpression(values), 'BRIDGE_INTERNAL_ROUTES must initialize Set with an array literal');
-  return new Set(values.elements.map((element) => readStringLiteral(element, 'BRIDGE_INTERNAL_ROUTES entry')));
-}
-
-const handlerRoutes = readHandlerRoutes(bridgeRuntimeSource);
-const declaredInternalRoutes = readInternalRoutes(bridgeRuntimeSource);
-assert.deepEqual(routes, canonicalRoutes, 'Server route resource differs from canonical contracts manifest');
-const bridgeRoutes = JSON.parse(readFileSync(new URL('../../mcp-bridge/src/resources/bridge-tool-routes.json', import.meta.url), 'utf8'));
-assert.deepEqual(bridgeRoutes, canonicalRoutes, 'Bridge route resource differs from canonical contracts manifest');
-const internalBridgeRoutes = [
-  '/bridge/jlceda/component/place/start',
-  '/bridge/jlceda/component/place/check',
-  '/bridge/jlceda/component/place/close',
-];
-
-for (const toolName of definitionNames) {
-  assert.ok(routes[toolName], `Tool definition has no canonical route: ${toolName}`);
-}
-for (const toolName of Object.keys(routes)) {
-  assert.ok(definitionNames.has(toolName), `Dispatcher route has no tool definition: ${toolName}`);
-}
-for (const [toolName, path] of Object.entries(routes)) {
-  if (path.startsWith('/bridge/admin/')) {
-    assert.ok(
-      bridgeServerSource.includes(`'${path}'`) || bridgeServerSource.includes(`\`${path}\``),
-      `Dispatcher admin route has no server implementation: ${toolName} -> ${path}`,
-    );
-    continue;
+for (const operation of contract.operations) {
+  assert.ok(definitionNames.has(operation.toolName), `Contract operation has no tool definition: ${operation.toolName}`);
+  assert.match(operation.path, /^\/bridge\//, `Invalid Bridge path: ${operation.path}`);
+  assert.ok(['server', 'bridge'].includes(operation.owner), `Invalid operation owner: ${operation.toolName}`);
+  if (operation.timeoutPolicy) {
+    assert.ok(contract.timeoutPolicies[operation.timeoutPolicy], `Unknown timeout policy: ${operation.timeoutPolicy}`);
   }
-  assert.ok(handlerRoutes.has(path), `Dispatcher route has no bridge handler: ${toolName} -> ${path}`);
 }
-for (const path of internalBridgeRoutes) {
-  assert.ok(declaredInternalRoutes.has(path), `Internal orchestration route is not allowlisted: ${path}`);
-  assert.ok(handlerRoutes.has(path), `Internal orchestration route has no bridge handler: ${path}`);
+for (const operation of contract.internalOperations) {
+  assert.equal(operation.owner, 'bridge', `Internal operation must be Bridge-owned: ${operation.path}`);
+  assert.ok(contract.timeoutPolicies[operation.timeoutPolicy], `Unknown internal timeout policy: ${operation.path}`);
 }
-const expectedHandlerRoutes = new Set([
-  ...Object.values(routes).filter((path) => !path.startsWith('/bridge/admin/')),
-  ...internalBridgeRoutes,
-]);
-assert.deepEqual(handlerRoutes, expectedHandlerRoutes, 'Bridge task handlers must exactly match public and internal route contracts');
-assert.deepEqual(declaredInternalRoutes, new Set(internalBridgeRoutes), 'Bridge internal route allowlist must exactly match orchestration routes');
 
-process.stdout.write(`Verified ${Object.keys(routes).length} synchronized MCP tool routes\n`);
+process.stdout.write(`Verified ${contract.operations.length} public tools and ${contract.internalOperations.length} internal Bridge operations from one contract\n`);

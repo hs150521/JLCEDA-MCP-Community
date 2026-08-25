@@ -8,7 +8,8 @@
     "jlceda-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "npm run clean && tsc && node scripts/copy-resources.mjs",
+    "sync:contract": "node ../tool/sync-bridge-contract.mjs",
+    "build": "npm run sync:contract && npm run clean && tsc && node scripts/copy-resources.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",

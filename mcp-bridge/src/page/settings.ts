@@ -21,6 +21,7 @@ import { bridgeLogPipeline } from '../logging/log.ts';
 import { BridgeStateManager } from '../state/state-manager.ts';
 import {
 	isConnectionStatusSnapshot,
+	MCP_CONNECTION_STATUS_CHANGED_TOPIC,
 	readConnectionStatus,
 } from '../state/status-store.ts';
 import { toSafeErrorMessage } from '../utils.ts';
@@ -96,17 +97,30 @@ function applyBridgeStatus(snapshot: ConnectionStatusSnapshot): void {
 // 快照过期阈值：超过此时长未更新则视为历史遗留数据，不予展示。
 const STALE_STATUS_MS = 3000;
 
-// 启动连接状态实时刷新，每秒轮询固定存储键并展示状态。
+function isFreshStatusSnapshot(snapshot: ConnectionStatusSnapshot): boolean {
+	const updatedAt = new Date(snapshot.updatedAt).getTime();
+	const age = Date.now() - updatedAt;
+	return Number.isFinite(updatedAt) && age >= 0 && age <= STALE_STATUS_MS;
+}
+
+// 启动连接状态实时刷新，并在设置页打开时使用新鲜的持久化快照回退。
 function startStatusMonitor(): void {
-	globalThis.setInterval(() => {
-		const snapshot = readConnectionStatus();
-		if (isConnectionStatusSnapshot(snapshot)) {
-			const age = Date.now() - new Date(snapshot.updatedAt).getTime();
-			if (age <= STALE_STATUS_MS) {
-				applyBridgeStatus(snapshot);
+	const snapshot = readConnectionStatus();
+	if (isConnectionStatusSnapshot(snapshot) && isFreshStatusSnapshot(snapshot)) {
+		applyBridgeStatus(snapshot);
+	}
+
+	try {
+		eda.sys_MessageBus.subscribe(MCP_CONNECTION_STATUS_CHANGED_TOPIC, (message: unknown) => {
+			if (isConnectionStatusSnapshot(message) && isFreshStatusSnapshot(message)) {
+				applyBridgeStatus(message);
 			}
-		}
-	}, 1000);
+		});
+	}
+	catch (error: unknown) {
+		const message = toSafeErrorMessage(error);
+		writeSettingsWarningLog('settings.status.subscribe.failed', BRIDGE_STATUS_TEXT.settings.statusInitFailed, message, message, 'settings_status_subscribe_failed');
+	}
 }
 
 // 保存服务端配置，并通知桥接进程应用新地址。
