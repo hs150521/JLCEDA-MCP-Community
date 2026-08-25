@@ -65,7 +65,7 @@
 					},
 					{
 						"id": "About",
-						"title": "About...",
+						"title": "关于...",
 						"registerFn": "about"
 					}
 				]
@@ -103,7 +103,7 @@
 					},
 					{
 						"id": "About",
-						"title": "About...",
+						"title": "关于...",
 						"registerFn": "about"
 					}
 				]
@@ -141,7 +141,7 @@
 					},
 					{
 						"id": "About",
-						"title": "About...",
+						"title": "关于...",
 						"registerFn": "about"
 					}
 				]

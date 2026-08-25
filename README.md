@@ -1,8 +1,8 @@
 # JLCEDA MCP 社区版
 
-当前开发版本：Bridge `2.2.0`，MCP Server `2.3.0`。本版本完成工具路由单一事实源、Bridge 协议校验、请求生命周期保护和旧运行时清理；本机 token 认证保持可选。
+当前发布版本：Bridge `2.2.0`，MCP Server `2.3.0`。本版本完成工具路由单一事实源、Bridge 协议校验、请求生命周期保护和旧运行时清理；本机 token 认证保持可选。
 
-## 2.1 开发工具
+## 功能与工具
 
 - `bridge_clients` 和 `bridge_select_client` 用于在已连接的 EDA 页面客户端之间切换 MCP 路由；它们不会切换同一个 EDA 进程中的可见标签页。如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。
 - `bridge_recover_client`：不可取消 EDA 修改超时时，以显式确认请求新的 Bridge 运行时，再对新客户端执行文档身份校验和只读回读；回读确认前始终阻止写操作，并明确提示超时修改可能已完成。
@@ -29,7 +29,7 @@
 - `manufacture_export`：生成受限的 BOM、Gerber、网表、贴片坐标等制造文件。
 - `manufacture_templates_query`：列出 PCB BOM 模板或原理图装配变体；`manufacture_export` 可使用返回的装配变体。
 
-当前开发版会拒绝空的自动布局/自动布线 UUID；EDA 操作超时后仍保持串行，直到底层 API 真正结束；网络标签修改同时支持普通标签和组件形式的电源/地标识。
+当前版本会拒绝空的自动布局/自动布线 UUID；EDA 操作超时后仍保持串行，直到底层 API 真正结束；网络标签修改同时支持普通标签和组件形式的电源/地标识。
 
 社区维护的嘉立创 EDA 专业版 MCP 集成基于 [`sengbin/JLCEDA-MCP`](https://github.com/sengbin/JLCEDA-MCP) 改进。本项目不是嘉立创官方插件，也不代表上游维护者。
 
