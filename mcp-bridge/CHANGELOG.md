@@ -4,7 +4,7 @@
 
 - 新增共享 `contracts/bridge-contract.json`，统一工具路由、内部交互路由、超时策略和 Bridge 消息字段契约。
 - Bridge handler 映射收敛为受契约验证的注册表，运行时只负责连接、租约、串行执行和超时隔离。
-- 设置页状态改为 MessageBus 推送，扩展存储保留最新状态快照供首次显示回退。
+- 设置页状态优先改为 MessageBus 推送；当 MessageBus 不可用时，使用最新持久化快照轮询回退。
 
 - 集中维护 Bridge 工具路由清单，避免 MCP Server 与扩展路由漂移。
 - 增强 Bridge 消息校验、请求队列上限和超时保护。

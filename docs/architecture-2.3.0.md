@@ -13,4 +13,4 @@ MCP client -> stdio Server -> EdaBridgeServer coordinator -> active EDA Bridge
                     +-- component placement orchestration              EDA API
 ```
 
-`EdaBridgeServer` 保持监听、主从接管、租约、请求生命周期和受控恢复协调；`bridge-wire` 只处理 WebSocket 编码、负载上限和 token 常量时间比较。Bridge 状态以 MessageBus 推送给设置页，扩展存储的去重快照只用于设置页首次打开时的回退显示。
+`EdaBridgeServer` 保持监听、主从接管、租约、请求生命周期和受控恢复协调；`bridge-wire` 只处理 WebSocket 编码、负载上限和 token 常量时间比较。Bridge 状态优先以 MessageBus 推送给设置页；当 MessageBus 不可用时，扩展存储的去重快照会提供轮询回退显示。

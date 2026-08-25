@@ -2,7 +2,7 @@
 
 ## 2.3.0
 
-本版本以共享 `contracts/bridge-contract.json` 集中维护 Bridge 工具路由、内部交互路由、超时策略和消息字段契约。处理器注册表在加载时校验每个处理器都已声明；设置页使用 MessageBus 接收状态更新，持久化最新快照仅作为首次显示回退。`JLCEDA_BRIDGE_TOKEN` 仍为可选配置。
+本版本以共享 `contracts/bridge-contract.json` 集中维护 Bridge 工具路由、内部交互路由、超时策略和消息字段契约。处理器注册表在加载时校验每个处理器都已声明；设置页优先使用 MessageBus 接收状态更新，当 MessageBus 不可用时使用持久化最新快照轮询回退。`JLCEDA_BRIDGE_TOKEN` 仍为可选配置。
 
 ## 2.1 PCB 工具
 
