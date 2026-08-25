@@ -8,14 +8,14 @@
 
 需要 Node.js 20 或更高版本，以及嘉立创 EDA 专业版。
 
-1. 从 GitHub Release 下载并安装 `jlceda-mcp-server-2.2.0.tgz`：
+1. 从 GitHub Release 下载并安装 `jlceda-mcp-server-2.3.0.tgz`：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.2.0.tgz
+   npm install --global .\jlceda-mcp-server-2.3.0.tgz
    Get-Command jlceda-mcp
    ```
 
-2. 在嘉立创 EDA 扩展管理器中安装本项目发布的 `mcp-bridge-community-2.1.0.eext`。
+2. 在嘉立创 EDA 扩展管理器中安装本项目发布的 `mcp-bridge-community-2.2.0.eext`。
 
 3. 打开 Bridge 设置页，确认地址为 `ws://127.0.0.1:8765/bridge/ws`。如果服务器使用 `JLCEDA_BRIDGE_TOKEN`，在地址后追加同一个 token：`ws://127.0.0.1:8765/bridge/ws?token=YOUR_RANDOM_TOKEN`。
 

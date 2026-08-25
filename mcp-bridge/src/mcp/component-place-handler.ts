@@ -181,6 +181,13 @@ async function cleanupPlaceSession(sessionId: string): Promise<void> {
 	}
 }
 
+/** Clear interactive placement listeners when a Bridge generation is recovered. */
+export async function cleanupAllComponentPlaceSessions(): Promise<void> {
+	for (const sessionId of [...activePlaceSessions.keys()]) {
+		await cleanupPlaceSession(sessionId);
+	}
+}
+
 /**
  * 处理器件放置任务。
  * @param payload 任务参数。

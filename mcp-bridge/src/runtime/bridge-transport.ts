@@ -34,6 +34,7 @@ const HEARTBEAT_INTERVAL_MS = 1000;
 const SERVER_IDLE_TIMEOUT_MS = 60000;
 // 检查服务端无活动状态的轮询间隔。
 const SERVER_IDLE_CHECK_INTERVAL_MS = 500;
+const BRIDGE_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 const BRIDGE_STATUS_TEXT = BridgeStateManager.text;
 
 export function shouldLogTransportMessage(messageType: BridgeClientMessage['type']): boolean {
@@ -418,7 +419,25 @@ export class BridgeTransport {
 			debugLog('[DEBUG] bridge-transport sendMessage blocked: connection closed');
 			throw new Error(BRIDGE_STATUS_TEXT.transport.closed);
 		}
-		const payload = JSON.stringify(message);
+		let payload = JSON.stringify(message);
+		if (new TextEncoder().encode(payload).byteLength > BRIDGE_MAX_PAYLOAD_BYTES) {
+			if (message.type === 'bridge/result') {
+				payload = JSON.stringify({
+					type: 'bridge/result',
+					clientId: message.clientId,
+					requestId: message.requestId,
+					leaseTerm: message.leaseTerm,
+					error: { message: `Bridge result exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} byte payload limit.` },
+				});
+			}
+			else if (message.type === 'bridge/log') {
+				console.warn(`Dropping Bridge log entry that exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} bytes.`);
+				return;
+			}
+			else {
+				throw new Error(`Bridge ${message.type} message exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} byte payload limit.`);
+			}
+		}
 		if (logRoutineMessage) {
 			debugLog('[DEBUG] bridge-transport sendMessage sending, size:', payload.length);
 		}

@@ -1,4 +1,7 @@
 ## 未发布
+- 受控恢复现在会等待不可取消的 EDA 任务实际结束，再创建新的 Bridge generation 并清理遗留的交互式放置会话。
+- 对出站 Bridge 消息执行 16 MiB UTF-8 限制；超大任务结果返回结构化错误，超大日志被丢弃。
+- 离线 API 文档已按锁定的 `@jlceda/pro-api-types@0.4.15` 重新生成。
 - Bridge task 超时结果现在包含结构化 `BRIDGE_TASK_TIMEOUT` 标记和 `timeoutMs`，Server 可在客户端先超时时建立受控恢复诊断。
 
 ## [2.1.3] - 2026-08-25

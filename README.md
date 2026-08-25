@@ -43,10 +43,10 @@
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.2.2
+       JLCEDA MCP Server 2.3.0
                   | 本机 WebSocket
                   v
-       MCP Bridge 社区版 2.1.3
+       MCP Bridge 社区版 2.2.0
                   | JLCEDA 扩展 API
                   v
            嘉立创 EDA 专业版
@@ -54,15 +54,15 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.1.3
+## 安装 2.2.0
 
 需要 Node.js 20 或更高版本。
 
-1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.1.3.eext`。
+1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.2.0.eext`。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.2.2.tgz
+   npm install --global .\jlceda-mcp-server-2.3.0.tgz
    Get-Command jlceda-mcp
    ```
 

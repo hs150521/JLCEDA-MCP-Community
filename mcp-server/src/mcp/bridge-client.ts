@@ -102,6 +102,8 @@ const READ_ONLY_PATHS = new Set([
   '/bridge/jlceda/manufacture/templates-query',
   '/bridge/jlceda/netlist/compare',
   '/bridge/jlceda/design/compare',
+  '/bridge/jlceda/component/place/check',
+  '/bridge/jlceda/component/place/close',
 ]);
 
 function isReadOnlyRequest(path: string, payload: unknown): boolean {
@@ -1026,6 +1028,9 @@ export class EdaBridgeServer {
     const socket = this.internalClient;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error('Not connected to main server');
+    }
+    if (this.pendingRequests.size >= BRIDGE_MAX_PENDING_REQUESTS) {
+      throw new Error(`Bridge request queue is full (maximum ${String(BRIDGE_MAX_PENDING_REQUESTS)} pending requests)`);
     }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {

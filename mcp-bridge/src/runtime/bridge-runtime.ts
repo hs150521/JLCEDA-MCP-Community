@@ -23,6 +23,7 @@ import { handleAutoRoutingTask } from '../mcp/auto-routing-handler.ts';
 import { handleCanvasSnapshotTask } from '../mcp/canvas-snapshot-handler.ts';
 import { handleComponentPlaceAutoTask } from '../mcp/component-place-auto-handler.ts';
 import {
+	cleanupAllComponentPlaceSessions,
 	handleComponentPlaceCheckTask,
 	handleComponentPlaceCloseTask,
 	handleComponentPlaceStartTask,
@@ -131,6 +132,7 @@ const taskQuarantine = new BridgeTaskQuarantine();
 let currentRole: BridgeRole = 'standby';
 let currentLeaseTerm = 0;
 let currentActiveClientId = '';
+let controlledRecoveryPending = false;
 // 每次建立新连接时递增，确保每次调用 eda.sys_WebSocket.register 使用唯一 socketId。
 let socketSequence = 0;
 
@@ -253,6 +255,12 @@ function applyRole(message: BridgeServerRoleMessage): void {
 // 调度任务执行并回传结果。
 function enqueueTask(task: { requestId: string; path: string; payload: unknown; leaseTerm: number }, currentTransport: BridgeTransport): void {
 	debugLog('[DEBUG] enqueueTask called, path:', task.path, 'requestId:', task.requestId);
+	if (controlledRecoveryPending) {
+		currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+			message: 'Bridge client is awaiting controlled recovery after a timed-out task settles.',
+		});
+		return;
+	}
 	const activeQuarantine = taskQuarantine.getActive();
 	if (activeQuarantine) {
 		currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
@@ -262,6 +270,12 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 	}
 	taskChain = taskChain.then(async () => {
 		debugLog('[DEBUG] executing task, path:', task.path);
+		if (controlledRecoveryPending) {
+			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
+				message: 'Bridge client is awaiting controlled recovery after a timed-out task settles.',
+			});
+			return;
+		}
 		const activeQuarantine = taskQuarantine.getActive();
 		if (activeQuarantine) {
 			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
@@ -410,26 +424,36 @@ async function ensureConnected(): Promise<void> {
 }
 
 function startControlledRecovery(): void {
-	// The underlying EDA Promise remains uncancellable. The server will keep
-	// writes blocked until a fresh connection has been read back and acknowledged.
-	taskQuarantine.releaseForControlledRecovery();
-	taskChain = Promise.resolve();
-	clientId = '';
-	clearReconnectTimer();
-	stopTransport();
-	currentRole = 'standby';
-	currentLeaseTerm = 0;
-	currentActiveClientId = '';
+	if (controlledRecoveryPending) {
+		return;
+	}
+	controlledRecoveryPending = true;
 	statusReporter.markConnecting();
-	void isEditablePage().then((editable) => {
+
+	// An EDA API task cannot be cancelled. Keep the current generation isolated
+	// until it settles, then clean up any interactive state before reconnecting.
+	const settle = taskQuarantine.waitForSettlement() ?? Promise.resolve();
+	void settle.then(
+		() => cleanupAllComponentPlaceSessions(),
+		() => cleanupAllComponentPlaceSessions(),
+	).then(() => {
+		clientId = '';
+		clearReconnectTimer();
+		stopTransport();
+		currentRole = 'standby';
+		currentLeaseTerm = 0;
+		currentActiveClientId = '';
+		return isEditablePage();
+	}).then((editable) => {
 		if (editable) {
-			void ensureConnected();
+			return ensureConnected();
 		}
-		else {
-			statusReporter.markNotOnEditablePage();
-		}
+		statusReporter.markNotOnEditablePage();
+		return undefined;
 	}).catch((error: unknown) => {
 		statusReporter.markFailed(toSafeErrorMessage(error));
+	}).finally(() => {
+		controlledRecoveryPending = false;
 	});
 }
 
