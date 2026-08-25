@@ -76,7 +76,7 @@ export function saveConnectionStatus(snapshot: ConnectionStatusSnapshot): void {
 		// EDA may expose the storage object before its backing runtime is ready.
 		// Consume both synchronous throws and rejected promises so reconnect logic
 		// cannot fail with an unhandled rejection during EDA startup.
-		void Promise.resolve(storage.setExtensionUserConfig.call(storage, MCP_CONNECTION_STATUS_KEY, snapshot)).catch(() => undefined);
+		void Promise.resolve(storage.setExtensionUserConfig(MCP_CONNECTION_STATUS_KEY, snapshot)).catch(() => undefined);
 	}
 	catch {
 		// Storage is best-effort; connection state is recomputed on the next tick.
@@ -93,7 +93,7 @@ export function readConnectionStatus(): ConnectionStatusSnapshot | undefined {
 		if (!storage || typeof storage.getExtensionUserConfig !== 'function') {
 			return undefined;
 		}
-		const raw = storage.getExtensionUserConfig.call(storage, MCP_CONNECTION_STATUS_KEY);
+		const raw = storage.getExtensionUserConfig(MCP_CONNECTION_STATUS_KEY);
 		return isConnectionStatusSnapshot(raw) ? raw : undefined;
 	}
 	catch {

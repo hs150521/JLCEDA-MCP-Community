@@ -111,6 +111,14 @@ const BRIDGE_TASK_HANDLERS: Record<string, (payload: unknown) => Promise<unknown
 	'/bridge/jlceda/workspace/query': handleWorkspaceQueryTask,
 };
 
+// Internal steps used by the interactive component placement orchestration.
+// They are intentionally excluded from the public MCP route manifest.
+const BRIDGE_INTERNAL_ROUTES = new Set([
+	'/bridge/jlceda/component/place/start',
+	'/bridge/jlceda/component/place/check',
+	'/bridge/jlceda/component/place/close',
+]);
+
 let started = false;
 let connecting = false;
 let clientId = '';
@@ -274,7 +282,7 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 			});
 			return;
 		}
-		if (!Object.values(BRIDGE_TOOL_ROUTES).includes(task.path)) {
+		if (!Object.values(BRIDGE_TOOL_ROUTES).includes(task.path) && !BRIDGE_INTERNAL_ROUTES.has(task.path)) {
 			currentTransport.completeTask(task.requestId, task.leaseTerm, undefined, {
 				message: `${BRIDGE_STATUS_TEXT.runtime.taskPathUnsupportedPrefix}${task.path}`,
 			});

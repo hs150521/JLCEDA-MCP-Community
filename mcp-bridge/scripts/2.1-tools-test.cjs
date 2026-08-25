@@ -982,10 +982,10 @@ async function main() {
 	assert.equal(apiIndex.index.length, apiIndex.total);
 	assert.equal(new Set(apiIndex.index.map(entry => entry.fullName)).size, apiIndex.index.length);
 	assert.ok(apiIndex.index.some(entry => entry.fullName === 'eda.sch_Document.autoRouting'));
-	const apiSearch = await handleApiSearchTask({ query: 'getRealTimeDrcStatus', scope: 'callable' });
-	assert.ok(apiSearch.items.some(item => item.fullName === 'eda.pcb_Drc.getRealTimeDrcStatus'));
-	const renderImageSearch = await handleApiSearchTask({ query: 'getRenderImage', scope: 'callable', owner: 'lib_Symbol' });
-	assert.ok(renderImageSearch.items.some(item => item.fullName === 'eda.lib_Symbol.getRenderImage'));
+	const apiSearch = await handleApiSearchTask({ query: 'getCurrentRuleConfigurationName', scope: 'callable' });
+	assert.ok(apiSearch.items.some(item => item.fullName === 'eda.pcb_Drc.getCurrentRuleConfigurationName'));
+	const symbolApiSearch = await handleApiSearchTask({ query: 'search', scope: 'callable', owner: 'lib_Symbol' });
+	assert.ok(symbolApiSearch.items.some(item => item.fullName === 'eda.lib_Symbol.search'));
 	const lcscSearch = await handleLibrarySearchTask({ kind: 'device', lcscIds: ['C1523', 'C17168'], allowMultiMatch: true });
 	assert.equal(lcscSearch.searchMode, 'lcsc_ids');
 	assert.equal(lcscSearch.items.length, 2);

@@ -10,6 +10,11 @@ const definitionNames = new Set(definitions.map((definition) => definition.name)
 assert.deepEqual(routes, canonicalRoutes, 'Server route resource differs from canonical contracts manifest');
 const bridgeRoutes = JSON.parse(readFileSync(new URL('../../mcp-bridge/src/resources/bridge-tool-routes.json', import.meta.url), 'utf8'));
 assert.deepEqual(bridgeRoutes, canonicalRoutes, 'Bridge route resource differs from canonical contracts manifest');
+const internalBridgeRoutes = [
+  '/bridge/jlceda/component/place/start',
+  '/bridge/jlceda/component/place/check',
+  '/bridge/jlceda/component/place/close',
+];
 
 for (const toolName of definitionNames) {
   assert.ok(routes[toolName], `Tool definition has no canonical route: ${toolName}`);
@@ -24,5 +29,9 @@ for (const [toolName, path] of Object.entries(routes)) {
     `Dispatcher route has no bridge implementation: ${toolName} -> ${path}`,
   );
 }
+for (const path of internalBridgeRoutes) {
+  assert.ok(bridgeRuntimeSource.includes(`'${path}'`), `Internal orchestration route has no bridge implementation: ${path}`);
+}
+assert.ok(bridgeRuntimeSource.includes('BRIDGE_INTERNAL_ROUTES'), 'Interactive component placement routes are not explicitly allowlisted');
 
 process.stdout.write(`Verified ${Object.keys(routes).length} synchronized MCP tool routes\n`);
