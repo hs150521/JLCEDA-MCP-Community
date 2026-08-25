@@ -1,158 +1,112 @@
-# PR #6 native MCP architecture audit
+# PR #6 原生 MCP 架构历史审计
 
-Audit date: 2026-08-16  
-Audited head: `090d441` (`sengbin/JLCEDA-MCP#6`)  
-Community contact: `hs150521@proton.me`
+审计日期：2026-08-16
+审计基线：`090d441`（`sengbin/JLCEDA-MCP#6`）
+社区联系：`hs150521@proton.me`
 
-## Verdict
+> 本文是 2026-08-16 的历史记录，描述当时上游 PR #6 和社区 `native-mcp-v2` 分支的状态，不代表当前 `v2.2.0` 发布结论。
 
-The architectural direction is useful, but this branch is not ready to merge
-into a release branch or publish to the JLCEDA extension marketplace. It should
-be treated as a prototype and selectively rebuilt behind tests.
+## 当时结论
 
-## Community remediation status
+该架构方向可行，但当时的上游分支尚不能合并到发布分支或上传嘉立创扩展广场。应将其视为原型，并在自动化测试保护下选择性重建。
 
-Status at community commit `efc54e7` on `native-mcp-v2`:
+## 社区整改状态
 
-Resolved:
+以下能力已在当时社区提交 `efc54e7` 的 `native-mcp-v2` 分支落实：
 
-- build output now copies required runtime resources and is executed by smoke tests;
-- stdio EOF shuts down the process and releases the bridge listener;
-- WebSocket listening is restricted to `127.0.0.1` and exact paths;
-- optional shared-token authentication covers EDA and internal MCP routes, with log redaction;
-- EDA hello/welcome, heartbeat expiry, ready, active/standby lease, result validation and takeover are implemented;
-- request IDs include a process UUID and multi-MCP routing is integration-tested;
-- EDA peers report official project/document/page identity, and MCP tools can list and explicitly select the target client;
-- community Bridge 2.0.1 passed read-only integration testing in JLCEDA Professional desktop 3.2.181;
-- surviving MCP processes can compete to take over the listener after the owner exits;
-- the handwritten MCP implementation was replaced by the official TypeScript Server SDK 2.0;
-- tests cover legacy initialize, 2026-07-28 server/discover, tools/list, bridge routing, path/auth rejection and EDA takeover;
-- Linux, Windows and packaged-extension GitHub Actions jobs pass;
-- temporary packages, duplicate server-side API data, backup transport and unreachable server handlers were removed; and
-- the community extension has a new UUID, name, publisher, repository metadata and original artwork.
+- 构建产物会复制必需运行时资源，并由冒烟测试执行；
+- STDIO EOF 会关闭进程并释放 Bridge 监听器；
+- WebSocket 仅监听 `127.0.0.1`，且校验精确路径；
+- 可选共享 token 认证覆盖 EDA 与内部 MCP 路由，并对日志脱敏；
+- 已实现 EDA `hello`/`welcome`、心跳过期、就绪状态、活动/备用租约、结果校验与接管；
+- 请求 ID 包含进程 UUID，多 MCP 路由有集成测试；
+- EDA 客户端上报官方工程、文档、页面身份，MCP 工具可列出并精确选择目标客户端；
+- 社区 Bridge 2.0.1 已在嘉立创 EDA 专业版 3.2.181 中完成只读集成测试；
+- 原始监听器退出后，存活的 MCP 进程可竞争接管；
+- 手写 MCP 实现已替换为官方 TypeScript Server SDK 2.0；
+- 测试覆盖旧版初始化、2026-07-28 `server/discover`、`tools/list`、Bridge 路由、路径/认证拒绝和 EDA 接管；
+- Linux、Windows 和扩展打包 GitHub Actions 任务通过；
+- 已删除临时包、重复服务端 API 数据、备用传输实现和不可达处理器；
+- 社区扩展使用独立 UUID、名称、发布者、仓库元数据和原创图标。
 
-Still open before release:
+当时仍建议继续加强 TypeScript 严格性、建立仓库级 lint 基线，并逐项审查原始或可写 EDA 工具的用户可见安全边界。原审计建议将共享 token 设为强制或提供安全的首次启动交换；该建议未被采纳，当前社区版的既定策略是仅监听 localhost，`JLCEDA_BRIDGE_TOKEN` 保持可选。
 
-- make shared-token authentication mandatory or provide a safe first-run token exchange;
-- enable stricter TypeScript and establish a practical repository-wide lint baseline;
-- review every raw or mutating EDA tool for user-visible safety boundaries.
+## 当时验证结果
 
-## Verification performed
+- `mcp-server` 的 `npm ci`、`npm run build` 通过；
+- `mcp-bridge` 的 `npm ci`、`npm run build` 通过并生成 EEXT；
+- 针对 `registry.npmjs.org` 的生产依赖审计在两个包中均未发现已知漏洞；
+- 当时 `mcp-server` 尚无可运行的 ESLint 配置；
+- 当时 Bridge 源码 lint 报告 222 个错误，完整 lint 还会受生成 JSON 缩进影响；
+- 当时编译后的 MCP Server 因未复制运行时资源而无法在初始化前启动。
 
-- `mcp-server`: `npm ci` passed; `npm run build` passed.
-- `mcp-bridge`: `npm ci` passed; `npm run build` produced an EEXT.
-- Production dependency audit against `registry.npmjs.org`: zero known
-  vulnerabilities in both packages.
-- `mcp-server` lint did not run because no ESLint configuration exists.
-- `mcp-bridge` source lint reported 222 errors; full lint additionally reports
-  thousands of generated-JSON indentation errors.
-- Starting the compiled MCP server failed before initialization because required
-  runtime resources were not copied to `dist/resources`.
+## 当时的发布阻断项
 
-## Release blockers
+### 严重：编译后的 MCP Server 无法运行
 
-### Critical: compiled MCP server is not runnable
-
-`npm run build` only runs `tsc`. Runtime code reads resources relative to
-`dist`, but the build does not copy them. Startup failed successively for:
+当时 `npm run build` 只执行 `tsc`。运行时代码从 `dist` 的相对路径读取资源，但构建没有复制它们，先后缺少：
 
 - `dist/resources/agent-instructions.md`
 - `dist/resources/mcp-tool-definitions.json`
 
-The build command therefore gives a false-positive success result.
+因此构建曾出现假阳性。当前构建已通过 `scripts/copy-resources.mjs` 复制这些资源，并由冒烟测试验证。
 
-### Critical: unauthenticated WebSocket may listen beyond localhost
+### 严重：未认证 WebSocket 可能监听到 localhost 之外
 
-`EdaBridgeServer.startAsMainServer()` creates `WebSocketServer({ port })`
-without an explicit host. It also accepts every URL path and has no origin,
-token, role, or protocol handshake. Because the bridge exposes raw EDA API
-invocation, accepting an unintended client can mutate the open EDA project.
+当时 `EdaBridgeServer.startAsMainServer()` 仅使用端口创建 WebSocketServer，未显式指定主机，也没有校验路径、来源、token、角色或协议握手。Bridge 暴露原始 EDA API 调用，意外连接可能修改已打开的工程。
 
-The server must bind explicitly to `127.0.0.1` (and optionally `::1`), validate
-the exact endpoint path, and authenticate both EDA and internal MCP peers with
-an installation-scoped secret.
+当前实现显式绑定 `127.0.0.1`、校验精确端点，并允许用户按本机环境选择是否设置共享 token。
 
-### High: no deterministic EDA page selection
+### 高：没有确定的 EDA 页面选择
 
-Resolved on the community `native-mcp-v2` branch. The bridge now carries the
-official API's project, document and page identifiers in hello/heartbeat
-messages. `bridge_clients` lists every ready peer and `bridge_select_client`
-changes the active lease by exact client ID. Selection rejects missing or
-unready clients and refuses to switch away while an active task is pending.
+当时所有 EDA 套接字存放在一个 `Set` 中，请求发送给第一个套接字，缺少客户端身份、工程/页面上下文、就绪状态、活动/备用租约和显式页面选择。多个 EDA 标签页打开时，任务可能执行到错误工程或页面。
 
-All EDA sockets are stored in a `Set`, and requests go to the first socket.
-There is no client identity, project/page context, ready state, active/standby
-lease, or explicit page-selection operation. With multiple EDA tabs open, a
-task may execute in the wrong project or page.
+该项已在社区 `native-mcp-v2` 分支解决：Bridge 在 `hello`/心跳消息中上报官方工程、文档和页面身份；`bridge_clients` 列出就绪客户端，`bridge_select_client` 按准确客户端 ID 变更活动租约，并拒绝缺失、未就绪或存在活动任务的切换。
 
-### High: multi-process routing is not session-safe
+### 高：多进程路由缺少会话安全
 
-Additional MCP processes connect to `/mcp-internal` without authentication.
-Request IDs are generated independently by each process and are not namespaced;
-the main process stores all requests in one map. Collisions can misroute or
-drop responses. There is also no robust promotion path when the original main
-process exits.
+当时附加 MCP 进程连接 `/mcp-internal` 时未认证，请求 ID 独立生成且未命名空间化，主进程用一个映射保存全部请求，碰撞可能误路由或丢失响应；原主进程退出后也没有稳健的晋升路径。
 
-### High: lifecycle and reconnection are incomplete
+### 高：生命周期与重连不完整
 
-- The MCP process does not shut down when stdio reaches EOF, so an abandoned
-  server can retain the fixed port.
-- The EDA transport defines disconnect/error handlers but does not register a
-  close callback with the transport used by this branch.
-- There is no heartbeat or stale-connection detection.
-- The server URL is hard-coded even though the UI describes connection settings.
+- STDIO EOF 不会关闭 MCP 进程，遗留进程可能继续占用固定端口；
+- EDA 传输定义了断开/错误处理器，却未在当时分支实际使用的传输上注册关闭回调；
+- 缺少心跳和陈旧连接检测；
+- Server 地址被硬编码，尽管界面提供连接设置。
 
-### High: publishing metadata impersonates upstream/official identities
+### 高：发布元数据冒充上游或官方身份
 
-The extension retains the upstream UUID, name, logo, publisher and links. The
-MCP package declares its author as `JLCEDA`. A community release must use a new
-UUID, unique package name, original icon, community publisher identity, correct
-repository links, and a clear non-official disclaimer.
+当时扩展沿用了上游 UUID、名称、图标、发布者和链接，MCP 包作者仍为 `JLCEDA`。社区发布必须使用独立 UUID、包名、原创图标、社区发布者身份、正确仓库链接和明确的非官方声明。
 
-## Quality and maintainability findings
+## 当时的质量与可维护性发现
 
-- TypeScript strictness is disabled in the MCP server.
-- There is no automated test suite or CI quality gate.
-- The MCP server declares a lint command without a lint configuration.
-- Bridge source currently has 222 lint errors.
-- Backup implementations and multiple client/server transport variants coexist,
-  making the runtime path difficult to establish.
-- Generated API documents are duplicated in multiple locations.
-- Temporary packages, compiled JavaScript, a ZIP, a large GIF, and extensive
-  one-off debugging notes are committed under `build/temp_check` and `build`.
-- The PR combines architecture replacement, new tools, generated data,
-  documentation, packaging and behavior changes in one review unit.
+- MCP Server 未启用 TypeScript 严格模式；
+- 缺少自动化测试套件与 CI 质量门禁；
+- MCP Server 声明了 lint 命令但没有 lint 配置；
+- Bridge 源码存在大量 lint 错误；
+- 备用实现和多套客户端/服务端传输并存，运行路径难以确定；
+- 生成 API 文档在多个位置重复；
+- `build/temp_check` 与 `build` 下提交了临时包、编译 JavaScript、ZIP、大型 GIF 和大量一次性调试记录；
+- 同一个 PR 混合了架构替换、新工具、生成数据、文档、打包和行为变更。
 
-## MCP protocol findings
+## 当时的 MCP 协议发现
 
-The server implements a small handwritten subset of MCP and always returns
-protocol version `2024-11-05`. It does not track initialization state or
-negotiate the client-requested version. A maintained implementation should use
-the official TypeScript SDK where practical, or include conformance tests for
-initialization, notifications, cancellation, errors and shutdown.
+当时 Server 仅实现少量手写 MCP 子集，固定返回协议版本 `2024-11-05`，未跟踪初始化状态或协商客户端请求的版本。建议使用官方 TypeScript SDK，或至少补充初始化、通知、取消、错误与关闭的一致性测试。
 
-References:
+参考：
 
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle
 - https://modelcontextprotocol.io/specification/draft/basic/transports
 
-## Recommended community migration plan
+## 当时建议的社区迁移计划
 
-1. Keep the upstream 1.5.x architecture available as a stable compatibility
-   branch while the native server is rebuilt.
-2. Start a clean `native-mcp-v2` branch with only `mcp-server`, `mcp-bridge`,
-   essential documentation and reproducible packaging inputs.
-3. Replace the WebSocket layer with an authenticated localhost-only broker that
-   has explicit EDA page identities and active-client selection.
-4. Use the official MCP SDK and add protocol/lifecycle tests.
-5. Add unit tests for routing, request timeouts, disconnect takeover and request
-   ID isolation; add an integration smoke test that starts the compiled server.
-6. Make builds copy all resources and verify the packaged artifacts by executing
-   them after build.
-7. Reintroduce PR #6 tools one at a time after API and safety review.
-8. Rebrand as **JLCEDA MCP Community**, retain Apache-2.0 attribution, and meet
-   the marketplace requirements before publishing.
+1. 在原生 Server 重建期间保留上游 1.5.x 架构作为稳定兼容分支；
+2. 新建只含 `mcp-server`、`mcp-bridge`、必要文档和可复现打包输入的 `native-mcp-v2` 分支；
+3. 以仅限 localhost 的 Broker 替换 WebSocket 层，并加入 EDA 页面身份和活动客户端选择；
+4. 使用官方 MCP SDK，补充协议与生命周期测试；
+5. 为路由、请求超时、断线接管和请求 ID 隔离添加单元测试，并加入启动编译后 Server 的集成冒烟测试；
+6. 构建时复制资源，并在构建后实际执行打包产物验证；
+7. 在 API 和安全审查后逐项重新引入 PR #6 工具；
+8. 重塑为 **JLCEDA MCP Community**，保留 Apache-2.0 署名，并在发布前满足扩展广场要求。
 
-Marketplace reference:
-
-- https://prodocs.easyeda.com/cn/api/guide/extensions-marketplace.html
+扩展广场参考：<https://prodocs.easyeda.com/cn/api/guide/extensions-marketplace.html>

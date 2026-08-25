@@ -10,7 +10,7 @@
 
 `bridge_select_client` 在已连接的 EDA 页面客户端之间选择 MCP 路由目标。它不会切换同一个 EDA 进程中的可见标签页；如需在进程内切换标签页，请通过 `api_invoke` 调用 `eda.dmt_EditorControl.activateDocument(tabId)`。
 
-Server 通过 `bridge_recover_client` 请求受控恢复时，Bridge 会创建新的运行时 generation；底层不可取消 EDA Promise 不会被终止，Server 会在文档身份和只读回读确认前阻止写入。
+Server 通过 `bridge_recover_client` 请求受控恢复时，Bridge 会创建新的运行时世代；底层不可取消 EDA Promise 不会被终止，Server 会在文档身份和只读回读确认前阻止写入。
 
 2.1 版本新增 `schematic_document_action`，用于受限地检查原理图坐标/区域、选中对象、图元、导航、保存和导入。
 
@@ -36,7 +36,7 @@ Server 通过 `bridge_recover_client` 请求受控恢复时，Bridge 会创建�
 
 `pcb_constraints_manage` 是约束组的受确认保护写入工具，支持单个网类、差分对、等长组和 Pad 对组修改，只校验当前操作相关字段并读取验证受影响项目；不支持批量替换规则配置。
 
-当前开发版会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
+当前版本会拒绝显式传入的空 UUID 选择；EDA 操作超时后仍保持修改队列锁定，
 直到底层 Promise 真正结束；网络标签修改同时支持普通标签和电源/地网络标识。
 
 > 本扩展不是嘉立创官方插件，也不代表嘉立创或原项目维护者。

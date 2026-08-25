@@ -1,48 +1,36 @@
-# Real JLCEDA integration test: community bridge 2.0.1
+# 嘉立创 EDA 实机集成测试：社区 Bridge 2.0.1
 
-Date: 2026-08-16
+测试日期：2026-08-16
 
-Environment:
+## 环境
 
-- JLCEDA Professional desktop 3.2.181 on Windows
+- Windows 上的嘉立创 EDA 专业版 3.2.181
 - JLCEDA MCP Community Bridge 2.0.1
-- native MCP server 2.1.0
-- project `2026`, schematic page `POWER DISTRIBUTION`
+- 原生 MCP Server 2.1.0
+- 工程 `2026`，原理图页 `POWER DISTRIBUTION`
 
-## Discovery and fix
+## 发现与修复
 
-The first real installation of 2.0.0 connected at the TCP/WebSocket layer but
-never registered a ready peer. The packaged extension entry still imported the
-obsolete client-mode runtime, so the native hello/ready/heartbeat
-implementation was not running in the EDA process.
+首次安装 2.0.0 时，TCP/WebSocket 连接已建立，但 EDA 进程始终没有注册就绪客户端。原因是打包后的扩展入口仍导入废弃的客户端模式运行时，原生的 `hello`、`ready` 与心跳实现没有实际运行。
 
-Version 2.0.1 switches the real extension entry to `bridge-runtime.ts`, restores
-the settings iframe, implements stop/restart lifecycle exports, and adds a
-build-time bundle assertion. The build now fails if required native protocol
-markers are absent or the obsolete client-mode entry is present.
+2.0.1 将真实扩展入口切换到 `bridge-runtime.ts`，恢复设置页 iframe，补齐停止/重启生命周期导出，并加入构建期包内容断言。缺少所需原生协议标识或仍包含废弃入口时，构建会失败。
 
-## Read-only verification
+## 只读验证
 
-All checks below passed in the installed desktop application:
+以下检查均在已安装的桌面应用中通过：
 
-- `bridge_clients` reported one ready, active 2.0.1 peer.
-- Bridge identity reported project `2026`, document type 1 and page
-  `POWER DISTRIBUTION`.
-- `eda_context` returned the same project, document and page identities from
-  the official context APIs and listed all seven schematic pages.
-- `schematic_review` returned a 3,717-character whole-project netlist.
-- `api_search` found the exact official signature for
-  `eda.dmt_Schematic.getCurrentSchematicPageInfo`.
-- `api_invoke` called that read-only API with no arguments and returned the same
-  current page identity.
-- GitHub CI passed on Ubuntu, Windows and EEXT packaging for the 2.0.1 fix.
+- `bridge_clients` 返回一个就绪且活动的 2.0.1 客户端；
+- Bridge 身份返回工程 `2026`、文档类型 `1` 与页面 `POWER DISTRIBUTION`；
+- `eda_context` 返回相同的工程、文档和页面身份，并列出全部七张原理图页；
+- `schematic_review` 返回 3,717 字符的全工程网表；
+- `api_search` 找到 `eda.dmt_Schematic.getCurrentSchematicPageInfo` 的官方精确签名；
+- `api_invoke` 以空参数调用该只读 API，并返回相同的当前页面身份；
+- GitHub CI 在 Ubuntu、Windows 与 EEXT 打包任务上均通过。
 
-The existing project returned `drcCheckPassed: false`. This was recorded as
-project state; no warning was ignored and no automatic modification was made.
+既有工程返回 `drcCheckPassed: false`。该结果仅记录为工程当前状态，未忽略警告，也没有执行自动修改。
 
-## Not covered
+## 未覆盖范围
 
-- No mutating EDA API was invoked.
-- Multi-page selection is covered by automated bridge tests, but only one live
-  EDA page was connected during this desktop test.
-- Shared-token authentication was not enabled for this compatibility test.
+- 未调用任何会修改 EDA 文档的 API；
+- 自动化 Bridge 测试覆盖了多页面选择，但本次桌面实测仅连接一个 EDA 页面；
+- 此兼容性测试未启用共享 token 认证。
