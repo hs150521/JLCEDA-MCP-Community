@@ -1,6 +1,7 @@
 # 更新日志
 
 ## 未发布
+- 修复 client-mode 内部转发在主 Server 排队期间过早按执行超时失败的问题；辅助 Server 现在等待主 Server 的 `bridge/task-started` 回执后才开始执行超时计时。
 - 修复交互式 `component_place` 轮询和关闭控制路径被误判为写操作的问题，避免短暂读取超时触发不必要的恢复隔离。
 - 对 client-mode 内部转发应用与主 Server 相同的 pending 请求上限。
 - 修复 Bridge 客户端先于 Server 超时时未创建 recovery diagnostic 的问题；超时结果现在携带结构化 `BRIDGE_TASK_TIMEOUT` 标记和超时时间，并进入同一写隔离流程。
