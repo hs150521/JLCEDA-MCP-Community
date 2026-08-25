@@ -1,3 +1,5 @@
+/* eslint-disable style/max-statements-per-line -- compact EDA state sampling keeps related reads together. */
+
 import { getEdaRuntime, getSyncState, isPlainObjectRecord, toSerializableAsync } from '../utils.ts';
 
 interface Rect { left: number; right: number; top: number; bottom: number }
@@ -279,7 +281,7 @@ export async function handleSchematicLayoutCheckTask(payload: unknown): Promise<
 			const dy = Number(item.suggestedY) - target.y;
 			const proposedRect: Rect = { left: target.rect.left + dx, right: target.rect.right + dx, top: target.rect.top + dy, bottom: target.rect.bottom + dy };
 			const outsidePage = pageBounds && (proposedRect.left < pageBounds.left || proposedRect.right > pageBounds.right || proposedRect.bottom < pageBounds.bottom || proposedRect.top > pageBounds.top);
-			const createsCollision = primitives.some(other => {
+			const createsCollision = primitives.some((other) => {
 				if (other.id === target.id || (target.parentId && other.id === target.parentId) || (other.parentId && other.parentId === target.id) || !other.pageKnown || !target.pageKnown || other.pageKey !== target.pageKey)
 					return false;
 				if ((other.kind === 'wire' && target.kind === 'pin' && endpointTouchesRect(other.endpoints, proposedRect)) || (target.kind === 'wire' && other.kind === 'pin' && endpointTouchesRect(target.endpoints, other.rect)))

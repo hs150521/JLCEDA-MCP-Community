@@ -125,6 +125,7 @@ async function main() {
 	const quarantine = new BridgeTaskQuarantine();
 	quarantine.enter('/bridge/jlceda/component/place-auto', timedTask.settled);
 	assert.equal(quarantine.getActive().path, '/bridge/jlceda/component/place-auto', 'timed-out mutations must quarantine the bridge client');
+	assert.equal(quarantine.waitForSettlement(), timedTask.settled, 'controlled recovery must wait for the original EDA task to settle');
 	resolveBackgroundTask('late result');
 	await timedTask.settled;
 	assert.equal(backgroundSettled, true);

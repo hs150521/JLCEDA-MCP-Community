@@ -55,8 +55,8 @@
 - ✅ `src/index.ts` → 启动服务器而非连接
 
 ### EDA插件
-- ✅ `src/runtime/bridge-transport-client.ts` → 新建客户端传输层
-- ✅ `src/runtime/bridge-runtime-client.ts` → 新建客户端运行时
+- ✅ `src/runtime/bridge-transport.ts` → 统一 Bridge 传输层
+- ✅ `src/runtime/bridge-runtime.ts` → 统一 Bridge 运行时
 - ✅ `src/index.ts` → 使用客户端模式
 
 ---

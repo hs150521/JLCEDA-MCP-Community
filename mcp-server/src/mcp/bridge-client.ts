@@ -35,6 +35,7 @@ interface PendingRequest {
   clientId?: string;
   leaseTerm?: number;
   mcpSocket?: WebSocket;
+  internalRequestId?: string;
   edaSocket?: WebSocket;
   path?: string;
   payload?: unknown;
@@ -73,6 +74,12 @@ interface BridgeTask {
 }
 
 const BRIDGE_QUEUE_TIMEOUT_MS = 15 * 60 * 1000;
+const INTERNAL_QUEUE_RESPONSE_GRACE_MS = 5_000;
+const BRIDGE_MAX_PENDING_REQUESTS = 64;
+// Keep Bridge messages bounded even on localhost.  This protects both the
+// server and the EDA extension from accidentally serialising unbounded data
+// (for example, a malformed API response or an oversized image).
+const BRIDGE_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 const RECOVERY_READBACK_TIMEOUT_MS = 15_000;
 const RECOVERY_DIAGNOSTIC_TTL_MS = 15 * 60 * 1000;
 const READ_ONLY_PATHS = new Set([
@@ -97,6 +104,8 @@ const READ_ONLY_PATHS = new Set([
   '/bridge/jlceda/manufacture/templates-query',
   '/bridge/jlceda/netlist/compare',
   '/bridge/jlceda/design/compare',
+  '/bridge/jlceda/component/place/check',
+  '/bridge/jlceda/component/place/close',
 ]);
 
 function isReadOnlyRequest(path: string, payload: unknown): boolean {
@@ -154,7 +163,11 @@ function sendJson(socket: WebSocket, message: unknown): void {
   if (socket.readyState !== WebSocket.OPEN) {
     throw new Error('WebSocket is not open');
   }
-  socket.send(JSON.stringify(message));
+  const payload = JSON.stringify(message);
+  if (Buffer.byteLength(payload, 'utf8') > BRIDGE_MAX_PAYLOAD_BYTES) {
+    throw new Error(`WebSocket payload exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} bytes`);
+  }
+  socket.send(payload);
 }
 
 function secureEquals(left: string, right: string): boolean {
@@ -247,7 +260,11 @@ export class EdaBridgeServer {
   private async startAsMainServer(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      const server = new WebSocketServer({ host: '127.0.0.1', port: this.port });
+      const server = new WebSocketServer({
+        host: '127.0.0.1',
+        port: this.port,
+        maxPayload: BRIDGE_MAX_PAYLOAD_BYTES,
+      });
       this.wss = server;
 
       server.once('listening', () => {
@@ -296,7 +313,7 @@ export class EdaBridgeServer {
     await new Promise<void>((resolve, reject) => {
       const tokenQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
       const url = `ws://127.0.0.1:${this.port}/mcp-internal${tokenQuery}`;
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url, { maxPayload: BRIDGE_MAX_PAYLOAD_BYTES });
       this.internalClient = socket;
       let settled = false;
       const timer = setTimeout(() => {
@@ -594,7 +611,7 @@ export class EdaBridgeServer {
   private markPendingRequestStarted(peer: BridgePeer, message: Record<string, unknown>): void {
     const requestId = String(message.requestId ?? '');
     const pending = this.pendingRequests.get(requestId);
-    if (!pending || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
+    if (!pending || pending.started || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
       return;
     }
 
@@ -602,6 +619,12 @@ export class EdaBridgeServer {
     pending.startedAt = Date.now();
     this.clearPendingTimeout(pending);
     const executionTimeoutMs = pending.executionTimeoutMs ?? 30000;
+    if (pending.mcpSocket && pending.internalRequestId) {
+      this.trySend(pending.mcpSocket, {
+        type: 'bridge/task-started',
+        requestId: pending.internalRequestId,
+      });
+    }
     pending.timeout = setTimeout(() => {
       // The EDA handler cannot be cancelled when the server-side timeout wins.
       // Keep this client quarantined for the execution window before admitting
@@ -635,12 +658,36 @@ export class EdaBridgeServer {
       }
       const requestId = String(message.requestId ?? '');
       const path = String(message.path ?? '');
+      if (!requestId || !path) {
+        this.trySend(socket, {
+          type: 'bridge/result',
+          requestId,
+          error: 'bridge/task requires non-empty requestId and path',
+        });
+        return;
+      }
+      if (this.pendingRequests.has(requestId)) {
+        this.trySend(socket, {
+          type: 'bridge/result',
+          requestId,
+          error: 'Duplicate bridge requestId',
+        });
+        return;
+      }
       const forwardedTimeoutMs = Number(message.timeoutMs);
       const timeoutMs = Number.isInteger(forwardedTimeoutMs) && forwardedTimeoutMs > 0
-        ? forwardedTimeoutMs
+        ? Math.min(forwardedTimeoutMs, BRIDGE_QUEUE_TIMEOUT_MS)
         : 30000;
-      void this.dispatchRequest(path, message.payload, timeoutMs, socket).then(
-        (result) => this.trySend(socket, { type: 'bridge/result', requestId, result }),
+      void this.dispatchRequest(path, message.payload, timeoutMs, socket, requestId).then(
+        (result) => {
+          if (!this.trySend(socket, { type: 'bridge/result', requestId, result })) {
+            this.trySend(socket, {
+              type: 'bridge/result',
+              requestId,
+              error: 'Bridge result exceeded the WebSocket payload limit',
+            });
+          }
+        },
         (error) => this.trySend(socket, {
           type: 'bridge/result',
           requestId,
@@ -659,12 +706,19 @@ export class EdaBridgeServer {
   private handleInternalMessage(data: RawData): void {
     try {
       const message = decodeMessage(data);
-      if (!isRecord(message) || message.type !== 'bridge/result') {
+      if (!isRecord(message)) {
         return;
       }
       const requestId = String(message.requestId ?? '');
       const pending = this.pendingRequests.get(requestId);
       if (!pending) {
+        return;
+      }
+      if (message.type === 'bridge/task-started') {
+        this.markInternalPendingRequestStarted(pending, requestId);
+        return;
+      }
+      if (message.type !== 'bridge/result') {
         return;
       }
       this.clearPendingTimeout(pending);
@@ -689,7 +743,7 @@ export class EdaBridgeServer {
     return this.dispatchRequest(path, payload, timeoutMs);
   }
 
-  private async dispatchRequest(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket): Promise<unknown> {
+  private async dispatchRequest(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket, internalRequestId?: string): Promise<unknown> {
     if (path === '/bridge/admin/clients') {
       return this.getClientSnapshot();
     }
@@ -701,7 +755,7 @@ export class EdaBridgeServer {
     if (path === '/bridge/admin/recover-client') {
       return this.recoverClient(payload, timeoutMs);
     }
-    return this.dispatchToEda(path, payload, timeoutMs, mcpSocket);
+    return this.dispatchToEda(path, payload, timeoutMs, mcpSocket, false, undefined, internalRequestId);
   }
 
   private getClientSnapshot(): Record<string, unknown> {
@@ -920,7 +974,7 @@ export class EdaBridgeServer {
     };
   }
 
-  private async dispatchToEda(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket, recoveryReadback = false, targetClientId?: string): Promise<unknown> {
+  private async dispatchToEda(path: string, payload: unknown, timeoutMs: number, mcpSocket?: WebSocket, recoveryReadback = false, targetClientId?: string, internalRequestId?: string): Promise<unknown> {
     this.pruneRecoveryDiagnostics();
     const routedClientId = targetClientId ?? this.activeClientId;
     const peer = this.peers.get(routedClientId);
@@ -935,6 +989,9 @@ export class EdaBridgeServer {
     if (reconnectBarrier) {
       const remainingMs = Math.max(1, reconnectBarrier.until - Date.now());
       throw new Error(`EDA client is quarantined after reconnect while ${reconnectBarrier.path} may still be settling; retry in ${String(remainingMs)}ms`);
+    }
+    if (this.pendingRequests.size >= BRIDGE_MAX_PENDING_REQUESTS) {
+      throw new Error(`Bridge request queue is full (maximum ${String(BRIDGE_MAX_PENDING_REQUESTS)} pending requests)`);
     }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {
@@ -952,6 +1009,7 @@ export class EdaBridgeServer {
         context: peer.context,
         leaseTerm: this.leaseTerm,
         mcpSocket,
+        internalRequestId,
         edaSocket: peer.socket,
         path,
         payload,
@@ -987,13 +1045,39 @@ export class EdaBridgeServer {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error('Not connected to main server');
     }
+    if (this.pendingRequests.size >= BRIDGE_MAX_PENDING_REQUESTS) {
+      throw new Error(`Bridge request queue is full (maximum ${String(BRIDGE_MAX_PENDING_REQUESTS)} pending requests)`);
+    }
     const requestId = this.createRequestId();
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve, reject });
+      // The main server owns the Bridge queue. Do not apply the caller's
+      // execution timeout until it acknowledges that the task actually began.
+      const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? Math.min(Math.floor(timeoutMs), BRIDGE_QUEUE_TIMEOUT_MS)
+        : 30_000;
+      const queueTimeoutMs = BRIDGE_QUEUE_TIMEOUT_MS + INTERNAL_QUEUE_RESPONSE_GRACE_MS;
+      const timeout = setTimeout(() => {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending) {
+          return;
+        }
+        this.pendingRequests.delete(requestId);
+        this.clearPendingTimeout(pending);
+        reject(new Error(`Internal bridge request queue timeout after ${String(queueTimeoutMs)}ms awaiting task-started acknowledgement`));
+      }, queueTimeoutMs);
+      this.pendingRequests.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+        path,
+        payload,
+        executionTimeoutMs: effectiveTimeoutMs,
+      });
       try {
-        const request: BridgeTask = { type: 'bridge/task', requestId, path, payload, timeoutMs };
+        const request: BridgeTask = { type: 'bridge/task', requestId, path, payload, timeoutMs: effectiveTimeoutMs };
         sendJson(socket, request);
       } catch (error) {
+        clearTimeout(timeout);
         this.pendingRequests.delete(requestId);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
@@ -1005,12 +1089,31 @@ export class EdaBridgeServer {
     return `req_${this.instanceId}_${this.requestIdCounter}_${Date.now()}`;
   }
 
-  private trySend(socket: WebSocket, message: unknown): void {
+  private trySend(socket: WebSocket, message: unknown): boolean {
     try {
       sendJson(socket, message);
+      return true;
     } catch (error) {
       process.stderr.write(`WebSocket send failed: ${String(error)}\n`);
+      return false;
     }
+  }
+
+  private markInternalPendingRequestStarted(pending: PendingRequest, requestId: string): void {
+    if (pending.started) {
+      return;
+    }
+    pending.started = true;
+    pending.startedAt = Date.now();
+    this.clearPendingTimeout(pending);
+    const executionTimeoutMs = pending.executionTimeoutMs ?? 30_000;
+    pending.timeout = setTimeout(() => {
+      if (this.pendingRequests.get(requestId) !== pending) {
+        return;
+      }
+      this.pendingRequests.delete(requestId);
+      pending.reject(new Error(`Internal bridge request execution timeout after ${String(executionTimeoutMs)}ms`));
+    }, executionTimeoutMs);
   }
 
   private rejectPendingForClient(clientId: string, reason: string): void {

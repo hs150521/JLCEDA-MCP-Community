@@ -203,6 +203,146 @@ try {
     { source: 'red', path: '/bridge/test/shared' },
   );
 
+  const forwardingPort = await reservePort();
+  const forwardingMain = new EdaBridgeServer(forwardingPort);
+  const forwardingSecondary = new EdaBridgeServer(forwardingPort);
+  let forwardingEda;
+  try {
+    await forwardingMain.start();
+    forwardingEda = await registerEda(
+      `ws://127.0.0.1:${forwardingPort}/bridge/ws${tokenQuery}`,
+      'forwarding-page',
+    );
+    await forwardingSecondary.start();
+    assert.equal(forwardingSecondary.getMode(), 'client');
+
+    let receivedFirstForwardedTask = false;
+    let receivedSecondForwardedTask = false;
+    let firstForwardedRequest;
+    let secondForwardedRequest;
+    let forwardedTaskCount = 0;
+    forwardingEda.socket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.type !== 'bridge/task') {
+        return;
+      }
+      const taskIndex = forwardedTaskCount;
+      forwardedTaskCount += 1;
+      if (taskIndex === 0) {
+        firstForwardedRequest = message;
+        receivedFirstForwardedTask = true;
+        forwardingEda.socket.send(JSON.stringify({
+          type: 'bridge/task-started',
+          clientId: 'forwarding-page',
+          requestId: message.requestId,
+          leaseTerm: message.leaseTerm,
+          startedAt: Date.now(),
+        }));
+        setTimeout(() => {
+          forwardingEda.socket.send(JSON.stringify({
+            type: 'bridge/result',
+            clientId: 'forwarding-page',
+            requestId: message.requestId,
+            leaseTerm: message.leaseTerm,
+            result: { task: 'first' },
+          }));
+          forwardingEda.socket.send(JSON.stringify({
+            type: 'bridge/task-started',
+            clientId: 'forwarding-page',
+            requestId: secondForwardedRequest.requestId,
+            leaseTerm: secondForwardedRequest.leaseTerm,
+            startedAt: Date.now(),
+          }));
+          setTimeout(() => {
+            forwardingEda.socket.send(JSON.stringify({
+              type: 'bridge/result',
+              clientId: 'forwarding-page',
+              requestId: secondForwardedRequest.requestId,
+              leaseTerm: secondForwardedRequest.leaseTerm,
+              result: { task: 'second' },
+            }));
+          }, 15);
+        }, 140);
+        return;
+      }
+      if (taskIndex === 1) {
+        secondForwardedRequest = message;
+        receivedSecondForwardedTask = true;
+        return;
+      }
+      forwardingEda.socket.send(JSON.stringify({
+        type: 'bridge/task-started',
+        clientId: 'forwarding-page',
+        requestId: message.requestId,
+        leaseTerm: message.leaseTerm,
+        startedAt: Date.now(),
+      }));
+      setTimeout(() => {
+        forwardingEda.socket.send(JSON.stringify({
+          type: 'bridge/task-started',
+          clientId: 'forwarding-page',
+          requestId: message.requestId,
+          leaseTerm: message.leaseTerm,
+          startedAt: Date.now(),
+        }));
+      }, 20);
+      if (taskIndex === 2) {
+        setTimeout(() => {
+          forwardingEda.socket.send(JSON.stringify({
+            type: 'bridge/result',
+            clientId: 'forwarding-page',
+            requestId: message.requestId,
+            leaseTerm: message.leaseTerm,
+            result: { task: 'late-after-duplicate-started' },
+          }));
+        }, 60);
+      }
+    });
+
+    const firstForwarded = forwardingMain.request('/bridge/jlceda/api/invoke', { marker: 'first' }, 500);
+    await waitUntil(() => receivedFirstForwardedTask);
+    const secondForwarded = forwardingSecondary.request('/bridge/jlceda/api/invoke', { marker: 'second' }, 50);
+    let secondForwardedOutcome = 'pending';
+    void secondForwarded.then(
+      () => { secondForwardedOutcome = 'resolved'; },
+      () => { secondForwardedOutcome = 'rejected'; },
+    );
+    await waitUntil(() => receivedSecondForwardedTask);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(secondForwardedOutcome, 'pending', 'client mode must not apply execution timeout while the main server queues the task');
+    assert.deepEqual(await firstForwarded, { task: 'first' });
+    assert.deepEqual(await secondForwarded, { task: 'second' });
+    const duplicateStartedSocket = new WebSocket(`ws://127.0.0.1:${forwardingPort}/mcp-internal${tokenQuery}`);
+    const duplicateStartedReady = waitForMessage(duplicateStartedSocket, (message) => message.type === 'bridge/internal-ready');
+    await new Promise((resolve, reject) => {
+      duplicateStartedSocket.once('open', resolve);
+      duplicateStartedSocket.once('error', reject);
+    });
+    await duplicateStartedReady;
+    const duplicateStartedResult = waitForMessage(
+      duplicateStartedSocket,
+      (message) => message.type === 'bridge/result' && message.requestId === 'duplicate-started-request',
+    );
+    duplicateStartedSocket.send(JSON.stringify({
+      type: 'bridge/task',
+      requestId: 'duplicate-started-request',
+      path: '/bridge/jlceda/context',
+      payload: { marker: 'duplicate-started' },
+      timeoutMs: 50,
+    }));
+    assert.match(String((await duplicateStartedResult).error), /Request execution timeout after 50ms/);
+    duplicateStartedSocket.close();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await assert.rejects(
+      forwardingSecondary.request('/bridge/jlceda/context', { marker: 'started-without-result' }, 50),
+      /(?:Internal bridge request execution timeout|Request execution timeout) after 50ms/,
+    );
+  } finally {
+    forwardingEda?.socket.close();
+    forwardingSecondary.close();
+    forwardingMain.close();
+  }
+
   const queuePort = await reservePort();
   queueServer = new EdaBridgeServer(queuePort);
   await queueServer.start();

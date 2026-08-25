@@ -1,6 +1,9 @@
 # 更新日志
 
 ## 未发布
+- 修复 client-mode 内部转发在主 Server 排队期间过早按执行超时失败的问题；辅助 Server 现在等待主 Server 的 `bridge/task-started` 回执后才开始执行超时计时。
+- 修复交互式 `component_place` 轮询和关闭控制路径被误判为写操作的问题，避免短暂读取超时触发不必要的恢复隔离。
+- 对 client-mode 内部转发应用与主 Server 相同的 pending 请求上限。
 - 修复 Bridge 客户端先于 Server 超时时未创建 recovery diagnostic 的问题；超时结果现在携带结构化 `BRIDGE_TASK_TIMEOUT` 标记和超时时间，并进入同一写隔离流程。
 - 加固受控恢复：恢复绑定显式超时 `requestId`，拒绝 `layout-check mode=fix` 回读写入，断开源客户端仍可通过 quarantine 诊断恢复；目标客户端断开后可由新连接世代重新绑定，同 ID 重连也会校验连接世代；未确认完成的写诊断不会因 TTL 自动解除写阻断。
 
@@ -73,3 +76,10 @@
 - 增加社区仓库、问题反馈、Apache-2.0 许可证和安全联系方式。
 - 文档改为社区版原生 MCP 架构，移除过时的上游仓库和本地路径。
 - 包含原生交互放置编排、工具路由同步检查、多客户端和 Bridge Token 保护。
+# 变更日志
+
+## 2.3.0 - 2026-08-25
+
+- 使用共享 Bridge 路由清单注册和分发 MCP 工具。
+- 增加内部请求超时、重复 requestId 检查、消息大小限制和有限 pending 队列。
+- 增强多客户端 Bridge 消息校验，保持可选的本机 token 认证。

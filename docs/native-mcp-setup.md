@@ -4,10 +4,10 @@
 
 ## 1. 安装 Server
 
-需要 Node.js 20 或更高版本。从对应的 GitHub Release 下载 jlceda-mcp-server-2.2.0.tgz，然后执行：
+需要 Node.js 20 或更高版本。从对应的 GitHub Release 下载 jlceda-mcp-server-2.3.0.tgz，然后执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.2.0.tgz
+npm install --global .\jlceda-mcp-server-2.3.0.tgz
 Get-Command jlceda-mcp
 ```
 
@@ -23,7 +23,9 @@ npm test
 
 构建过程会将运行时资源复制到 dist/resources。不要使用未执行上述步骤生成的旧 dist 目录。
 
-## 2. 创建 Bridge Token
+## 2. 可选：创建 Bridge Token
+
+`JLCEDA_BRIDGE_TOKEN` 仅用于需要本机额外认证的场景；未设置时，Server 仍只监听 `127.0.0.1`，Bridge 地址不需要携带 token。需要认证时再生成并在 MCP 客户端与 Bridge 设置中使用同一个值。
 
 请使用至少 32 字节的随机值。PowerShell 示例：
 

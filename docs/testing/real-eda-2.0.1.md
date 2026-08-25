@@ -13,7 +13,7 @@ Environment:
 
 The first real installation of 2.0.0 connected at the TCP/WebSocket layer but
 never registered a ready peer. The packaged extension entry still imported the
-obsolete `bridge-runtime-client.ts`, so the native hello/ready/heartbeat
+obsolete client-mode runtime, so the native hello/ready/heartbeat
 implementation was not running in the EDA process.
 
 Version 2.0.1 switches the real extension entry to `bridge-runtime.ts`, restores

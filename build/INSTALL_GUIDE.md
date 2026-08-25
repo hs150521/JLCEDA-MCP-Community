@@ -14,8 +14,8 @@ D:\jlc-assistant\JLCEDA-MCP\build\jlceda-mcp-bridge-1.6.0.eext
 ## 🔄 主要改动
 
 ### 新增文件
-1. `src/runtime/bridge-transport-server.ts` - WebSocket服务器传输层
-2. `src/runtime/bridge-runtime-server.ts` - 服务器模式运行时
+1. `src/runtime/bridge-transport.ts` - WebSocket传输层
+2. `src/runtime/bridge-runtime.ts` - Bridge运行时
 
 ### 修改文件
 1. `src/index.ts` - 使用新的服务器模式运行时

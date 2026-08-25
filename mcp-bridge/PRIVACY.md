@@ -9,4 +9,3 @@ EDA 扩展会在本地保存 Bridge WebSocket 地址。包含 token 的地址、
 API 透传工具仅应对可信 MCP 客户端启用。
 
 隐私和安全问题请联系：hs150521@proton.me。
-

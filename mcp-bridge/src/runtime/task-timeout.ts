@@ -52,14 +52,14 @@ export class BridgeTaskTimeoutError extends Error {
 }
 
 export class BridgeTaskQuarantine {
-	private active: { path: string; startedAt: number } | undefined;
+	private active: { path: string; startedAt: number; settled: Promise<void> } | undefined;
 
 	public getActive(): { path: string; startedAt: number } | undefined {
 		return this.active;
 	}
 
 	public enter(path: string, settled: Promise<void>): void {
-		const quarantine = { path, startedAt: Date.now() };
+		const quarantine = { path, startedAt: Date.now(), settled };
 		this.active = quarantine;
 		void settled.then(() => {
 			if (this.active === quarantine) {
@@ -68,10 +68,8 @@ export class BridgeTaskQuarantine {
 		});
 	}
 
-	public releaseForControlledRecovery(): { path: string; startedAt: number } | undefined {
-		const active = this.active;
-		this.active = undefined;
-		return active;
+	public waitForSettlement(): Promise<void> | undefined {
+		return this.active?.settled;
 	}
 }
 

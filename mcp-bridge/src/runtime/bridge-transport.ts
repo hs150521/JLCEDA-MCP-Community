@@ -34,6 +34,7 @@ const HEARTBEAT_INTERVAL_MS = 1000;
 const SERVER_IDLE_TIMEOUT_MS = 60000;
 // 检查服务端无活动状态的轮询间隔。
 const SERVER_IDLE_CHECK_INTERVAL_MS = 500;
+const BRIDGE_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 const BRIDGE_STATUS_TEXT = BridgeStateManager.text;
 
 export function shouldLogTransportMessage(messageType: BridgeClientMessage['type']): boolean {
@@ -104,6 +105,59 @@ async function parseServerMessage(data: unknown): Promise<BridgeServerMessage> {
 
 	if (!VALID_SERVER_MESSAGE_TYPES.has(messageType)) {
 		throw new Error(`${BRIDGE_STATUS_TEXT.transport.unknownTypePrefix}${messageType}。`);
+	}
+
+	const requiredString = (field: string): void => {
+		if (typeof parsed[field] !== 'string' || parsed[field].trim().length === 0) {
+			throw new TypeError(`Bridge message ${messageType} requires non-empty ${field}`);
+		}
+	};
+	const requiredFiniteNumber = (field: string): void => {
+		if (typeof parsed[field] !== 'number' || !Number.isFinite(parsed[field])) {
+			throw new TypeError(`Bridge message ${messageType} requires finite ${field}`);
+		}
+	};
+
+	switch (messageType) {
+		case 'bridge/welcome':
+			requiredString('clientId');
+			requiredString('connectedAt');
+			break;
+		case 'bridge/role':
+			requiredString('clientId');
+			requiredString('role');
+			if (parsed.role !== 'active' && parsed.role !== 'standby') {
+				throw new TypeError('Bridge role must be active or standby');
+			}
+			requiredString('activeClientId');
+			requiredFiniteNumber('leaseTerm');
+			break;
+		case 'bridge/task':
+			requiredString('requestId');
+			requiredString('path');
+			requiredFiniteNumber('createdAt');
+			requiredFiniteNumber('leaseTerm');
+			break;
+		case 'bridge/recover':
+			requiredString('recoveryId');
+			requiredString('reason');
+			break;
+		case 'bridge/error':
+			requiredString('message');
+			break;
+		case 'bridge/heartbeat-ack':
+			requiredString('clientId');
+			requiredFiniteNumber('sentAt');
+			requiredString('receivedAt');
+			break;
+		case 'bridge/debug-switch':
+			requiredString('clientId');
+			if (!isPlainObjectRecord(parsed.debugSwitch)
+				|| typeof parsed.debugSwitch.enableSystemLog !== 'boolean'
+				|| typeof parsed.debugSwitch.enableConnectionList !== 'boolean') {
+				throw new Error('Bridge debug-switch contains an invalid debugSwitch object');
+			}
+			break;
 	}
 
 	return parsed as unknown as BridgeServerMessage;
@@ -365,7 +419,25 @@ export class BridgeTransport {
 			debugLog('[DEBUG] bridge-transport sendMessage blocked: connection closed');
 			throw new Error(BRIDGE_STATUS_TEXT.transport.closed);
 		}
-		const payload = JSON.stringify(message);
+		let payload = JSON.stringify(message);
+		if (new TextEncoder().encode(payload).byteLength > BRIDGE_MAX_PAYLOAD_BYTES) {
+			if (message.type === 'bridge/result') {
+				payload = JSON.stringify({
+					type: 'bridge/result',
+					clientId: message.clientId,
+					requestId: message.requestId,
+					leaseTerm: message.leaseTerm,
+					error: { message: `Bridge result exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} byte payload limit.` },
+				});
+			}
+			else if (message.type === 'bridge/log') {
+				console.warn(`Dropping Bridge log entry that exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} bytes.`);
+				return;
+			}
+			else {
+				throw new Error(`Bridge ${message.type} message exceeds ${String(BRIDGE_MAX_PAYLOAD_BYTES)} byte payload limit.`);
+			}
+		}
 		if (logRoutineMessage) {
 			debugLog('[DEBUG] bridge-transport sendMessage sending, size:', payload.length);
 		}

@@ -1,5 +1,9 @@
 # MCP Bridge 社区版
 
+## 2.2.0
+
+本版本集中维护 Bridge 工具路由，强化 WebSocket 消息校验与请求保护，并移除未使用的旧版运行时实现。`JLCEDA_BRIDGE_TOKEN` 仍为可选配置。
+
 ## 2.1 PCB 工具
 
 `schematic_layout_check` 读取结构化原理图图元并返回稳定 primitive ID、估算矩形、碰撞类型/严重度、密集区域和能力缺失说明。`mode: "fix"` 配合 `confirm: true` 时仅应用属性文本建议位置。
@@ -88,10 +92,10 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 2. 原生 MCP Server
 
-从同一 Release 下载匹配的 `jlceda-mcp-server-2.2.2.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.0.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.2.2.tgz
+npm install --global .\jlceda-mcp-server-2.3.0.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。
