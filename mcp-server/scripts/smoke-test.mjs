@@ -7,6 +7,21 @@ import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+function findPropertySchemas(schema, propertyName, matches = []) {
+  if (!schema || typeof schema !== 'object') {
+    return matches;
+  }
+  if (!Array.isArray(schema) && schema.properties?.[propertyName]) {
+    matches.push(schema.properties[propertyName]);
+  }
+  for (const value of Object.values(schema)) {
+    if (value && typeof value === 'object') {
+      findPropertySchemas(value, propertyName, matches);
+    }
+  }
+  return matches;
+}
+
 async function testProtocolVersion(protocolVersion) {
   const child = spawn(process.execPath, ['dist/index.js'], {
     cwd: packageRoot,
@@ -76,6 +91,12 @@ async function testProtocolVersion(protocolVersion) {
     assert.equal(toolsResponse.id, 2);
     assert.ok(Array.isArray(toolsResponse.result?.tools));
     assert.ok(toolsResponse.result.tools.some((tool) => tool.name === 'eda_context'));
+    const recoverTool = toolsResponse.result.tools.find((tool) => tool.name === 'bridge_recover_client');
+    assert.ok(recoverTool?.inputSchema, 'bridge_recover_client must publish an input schema');
+    const confirmSchemas = findPropertySchemas(recoverTool.inputSchema, 'confirm');
+    assert.ok(confirmSchemas.some((schema) => schema.const === true), 'bridge_recover_client must require confirm=true');
+    const readbackPayloadSchemas = findPropertySchemas(recoverTool.inputSchema, 'readbackPayload');
+    assert.ok(readbackPayloadSchemas.some((schema) => JSON.stringify(schema.default) === '{}'), 'bridge_recover_client must publish the empty readbackPayload default');
 
     child.stdin.end();
     const exitTimeout = new Promise((_, reject) => {

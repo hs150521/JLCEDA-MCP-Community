@@ -230,7 +230,10 @@ export class ToolDispatcher {
   }
 
   private async dispatchInteractiveComponentPlace(args: Record<string, unknown>): Promise<ToolCallResult> {
-    const descriptorResult = await this.bridgeServer.request('/bridge/jlceda/component/place', args);
+    // The orchestration paths are private Bridge implementation details. Derive
+    // them from the public manifest route so a manifest rename cannot drift.
+    const placementPath = this.getBridgePath('component_place');
+    const descriptorResult = await this.bridgeServer.request(placementPath, args);
     if (!isPlainObjectRecord(descriptorResult) || !isPlainObjectRecord(descriptorResult.placement)) {
       throw new Error('Bridge did not return a component placement descriptor');
     }
@@ -256,7 +259,7 @@ export class ToolDispatcher {
         attempts = attempt + 1;
         let sessionId = '';
         try {
-          const startResult = await this.bridgeServer.request('/bridge/jlceda/component/place/start', {
+          const startResult = await this.bridgeServer.request(`${placementPath}/start`, {
             component,
             timeoutSeconds,
           });
@@ -272,7 +275,7 @@ export class ToolDispatcher {
           const deadline = Date.now() + timeoutSeconds * 1000;
           while (Date.now() < deadline) {
             await delay(250);
-            const checkResult = await this.bridgeServer.request('/bridge/jlceda/component/place/check', { sessionId }, 5000);
+            const checkResult = await this.bridgeServer.request(`${placementPath}/check`, { sessionId }, 5000);
             if (!isPlainObjectRecord(checkResult) || checkResult.ok !== true) {
               throw new Error(String(isPlainObjectRecord(checkResult) ? checkResult.error ?? 'placement check failed' : 'placement check returned invalid data'));
             }
@@ -294,7 +297,7 @@ export class ToolDispatcher {
         } finally {
           if (sessionId) {
             try {
-              await this.bridgeServer.request('/bridge/jlceda/component/place/close', { sessionId }, 5000);
+              await this.bridgeServer.request(`${placementPath}/close`, { sessionId }, 5000);
             } catch {
               // The check handler may already have cleaned up a completed session.
             }

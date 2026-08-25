@@ -25,7 +25,7 @@ function createToolInputSchema(
         '/bridge/jlceda/pcb/drc-check',
         '/bridge/jlceda/schematic/drc-check',
       ]).default('/bridge/jlceda/context'),
-      readbackPayload: z.record(z.string(), z.unknown()).optional(),
+      readbackPayload: z.record(z.string(), z.unknown()).default({}),
     };
     const recover = z.object({ ...common, action: z.literal('recover').default('recover'), requestId: z.string().min(1) }).strict();
     const readback = z.object({
