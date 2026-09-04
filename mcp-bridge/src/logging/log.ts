@@ -9,6 +9,8 @@
  * ------------------------------------------------------------------------
  */
 
+import { BRIDGE_BUILD_DATE, BRIDGE_BUILD_WATERMARK, BRIDGE_VERSION } from '../build-info.ts';
+
 /**
  * 统一日志级别。
  */
@@ -39,6 +41,11 @@ export interface BridgeLogBuildInput {
 	event: string;
 	summary: string;
 	message: string;
+	toolName?: string;
+	bridgePath?: string;
+	edaApi?: string;
+	requestId?: string;
+	phase?: string;
 	runtimeStatus?: string;
 	bridgeStatus?: string;
 	bridgeWebSocketUrl?: string;
@@ -51,6 +58,8 @@ export interface BridgeLogBuildInput {
 	bridgeClientCount?: string;
 	detail?: string;
 	errorCode?: string;
+	errorName?: string;
+	errorStack?: string;
 }
 
 type BridgeLogListener = (logEntry: UnifiedLogEntry) => void;
@@ -59,10 +68,18 @@ const LOG_FIELD_ORDER = [
 	'timestamp',
 	'level',
 	'source',
+	'version',
+	'buildDate',
+	'buildWatermark',
 	'module',
 	'event',
 	'summary',
 	'message',
+	'toolName',
+	'bridgePath',
+	'edaApi',
+	'requestId',
+	'phase',
 	'runtimeStatus',
 	'bridgeStatus',
 	'bridgeWebSocketUrl',
@@ -75,16 +92,26 @@ const LOG_FIELD_ORDER = [
 	'bridgeClientCount',
 	'detail',
 	'errorCode',
+	'errorName',
+	'errorStack',
 ] as const;
 
 const LOG_FIELD_LABELS: Record<string, string> = {
 	timestamp: '时间',
 	level: '级别',
 	source: '来源',
+	version: '版本',
+	buildDate: '构建日期',
+	buildWatermark: '版本日期水印',
 	module: '模块',
 	event: '事件',
 	summary: '摘要',
 	message: '消息',
+	toolName: '工具',
+	bridgePath: 'Bridge 路由',
+	edaApi: 'EDA 函数',
+	requestId: '请求 ID',
+	phase: '执行阶段',
 	runtimeStatus: '运行时状态',
 	bridgeStatus: '桥接状态',
 	bridgeWebSocketUrl: '桥接地址',
@@ -97,6 +124,8 @@ const LOG_FIELD_LABELS: Record<string, string> = {
 	bridgeClientCount: '客户端数量',
 	detail: '详情',
 	errorCode: '错误码',
+	errorName: '异常类型',
+	errorStack: '异常堆栈',
 };
 
 const BRIDGE_LOG_LIMIT = 200;
@@ -198,10 +227,18 @@ export class BridgeLogPipeline {
 			timestamp: displayTime,
 			level: input.level,
 			source: 'bridge',
+			version: BRIDGE_VERSION,
+			buildDate: BRIDGE_BUILD_DATE,
+			buildWatermark: BRIDGE_BUILD_WATERMARK,
 			module: input.module,
 			event: input.event,
 			summary: input.summary,
 			message: input.message,
+			toolName: input.toolName,
+			bridgePath: input.bridgePath,
+			edaApi: input.edaApi,
+			requestId: input.requestId,
+			phase: input.phase,
 			runtimeStatus: input.runtimeStatus,
 			bridgeStatus: input.bridgeStatus,
 			bridgeWebSocketUrl: redactBridgeWebSocketUrl(input.bridgeWebSocketUrl),
@@ -214,6 +251,8 @@ export class BridgeLogPipeline {
 			bridgeClientCount: input.bridgeClientCount,
 			detail: input.detail,
 			errorCode: input.errorCode,
+			errorName: input.errorName,
+			errorStack: input.errorStack,
 		});
 
 		return {

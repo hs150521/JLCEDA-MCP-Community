@@ -80,7 +80,10 @@ function loadToolDefinitions(): readonly ToolDefinition[] {
 const TOOL_DEFINITIONS = loadToolDefinitions();
 
 export class ToolDispatcher {
-  constructor(private readonly bridgeServer: EdaBridgeServer) {}
+  constructor(
+    private readonly bridgeServer: EdaBridgeServer,
+    private readonly serverVersion = 'unknown',
+  ) {}
 
   /**
    * 返回工具定义列表
@@ -112,6 +115,29 @@ export class ToolDispatcher {
       // 包装为MCP响应格式
       return this.toToolContent(result);
     } catch (error) {
+      let bridgePath: string | undefined;
+      try {
+        bridgePath = bridgePathForTool(toolCallParams.name);
+      }
+      catch {
+        bridgePath = undefined;
+      }
+      const buildDate = new Date().toISOString().slice(0, 10);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      process.stderr.write(`${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        source: 'mcp-server',
+        version: this.serverVersion,
+        buildDate,
+        buildWatermark: `v${this.serverVersion} | ${buildDate}`,
+        toolName: toolCallParams.name,
+        bridgePath,
+        phase: 'dispatch',
+        message: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorStack: errorStack && errorStack.length > 8000 ? `${errorStack.slice(0, 8000)}...` : errorStack,
+      })}\n`);
       throw new Error(`工具 ${toolCallParams.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

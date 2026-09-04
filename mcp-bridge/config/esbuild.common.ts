@@ -1,4 +1,5 @@
 import type esbuild from 'esbuild';
+import process from 'node:process';
 
 // Bridge 通用 esbuild 构建配置。
 export default {
@@ -18,6 +19,8 @@ export default {
 	globalName: 'edaEsbuildExportName', // 用于内部方法调用，请勿修改
 	treeShaking: true,
 	ignoreAnnotations: true,
-	define: {},
+	define: {
+		__MCP_BRIDGE_BUILD_DATE__: JSON.stringify(process.env.MCP_BRIDGE_BUILD_DATE?.trim() || new Date().toISOString().slice(0, 10)),
+	},
 	external: [],
 } satisfies Parameters<(typeof esbuild)['build']>[0];

@@ -453,6 +453,8 @@ export class EdaBridgeServer {
       return;
     }
     if (type === 'bridge/log') {
+      const log = isRecord(rawMessage.log) ? rawMessage.log : {};
+      process.stderr.write(`[BridgeLog] ${JSON.stringify(log)}\n`);
       return;
     }
     throw new Error(`Unsupported bridge message type: ${type}`);

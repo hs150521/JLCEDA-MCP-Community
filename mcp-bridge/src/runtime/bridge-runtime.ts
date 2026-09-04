@@ -49,6 +49,62 @@ let socketSequence = 0;
 const statusReporter = new BridgeStatusReporter();
 const bridgeLogDispatchPipeline = new BridgeLogDispatchPipeline();
 const BRIDGE_STATUS_TEXT = BridgeStateManager.text;
+const MAX_LOG_TEXT_LENGTH = 8000;
+
+function truncateLogText(value: unknown): string | undefined {
+	const text = String(value ?? '').trim();
+	if (text.length === 0) {
+		return undefined;
+	}
+	return text.length > MAX_LOG_TEXT_LENGTH ? `${text.slice(0, MAX_LOG_TEXT_LENGTH)}...` : text;
+}
+
+function getTaskTarget(payload: unknown): { edaApi?: string; detail?: string } {
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+		return {};
+	}
+	const record = payload as Record<string, unknown>;
+	const edaApi = typeof record.apiFullName === 'string' ? record.apiFullName.trim() : '';
+	const action = typeof record.action === 'string' ? record.action.trim() : '';
+	const kind = typeof record.kind === 'string' ? record.kind.trim() : '';
+	const detail = [action ? `action=${action}` : '', kind ? `kind=${kind}` : '']
+		.filter(Boolean)
+		.join(', ');
+	return {
+		edaApi: edaApi || undefined,
+		detail: detail || undefined,
+	};
+}
+
+function writeTaskLog(
+	level: 'info' | 'success' | 'warning' | 'error',
+	event: string,
+	summary: string,
+	task: { requestId: string; path: string; payload: unknown },
+	phase: string,
+	error?: unknown,
+): void {
+	const operation = operationForBridgePath(task.path);
+	const target = getTaskTarget(task.payload);
+	const errorMessage = error instanceof Error ? error.message : error == null ? '' : String(error);
+	const logEntry = bridgeLogPipeline.append(bridgeLogPipeline.createEntry({
+		level,
+		module: 'bridge-runtime',
+		event,
+		summary,
+		message: errorMessage || summary,
+		toolName: operation?.toolName,
+		bridgePath: task.path,
+		edaApi: target.edaApi,
+		requestId: task.requestId,
+		phase,
+		detail: target.detail,
+		errorCode: error instanceof BridgeTaskTimeoutError ? 'BRIDGE_TASK_TIMEOUT' : error ? 'BRIDGE_TASK_FAILED' : undefined,
+		errorName: error instanceof Error ? error.name : error ? typeof error : undefined,
+		errorStack: truncateLogText(error instanceof Error ? error.stack : undefined),
+	}));
+	console.warn(bridgeLogPipeline.format(logEntry));
+}
 
 function writeRuntimeWarningLog(event: string, summary: string, message: string, detail = '', errorCode = ''): void {
 	const logEntry = bridgeLogPipeline.append(bridgeLogPipeline.createEntry({
@@ -223,11 +279,12 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 		}
 
 		let result: unknown;
-		let taskError: { message: string; stack?: string } | undefined;
+		let taskError: { message: string; stack?: string; code?: string; timeoutMs?: number } | undefined;
 		let handlerSettled: Promise<void> | undefined;
 		try {
 			debugLog('[DEBUG] calling handler for path:', task.path);
 			currentTransport.reportTaskStarted(task.requestId, task.leaseTerm);
+			writeTaskLog('info', 'bridge.task.started', 'Bridge 任务开始执行', task, 'handler');
 			// 任务执行前刷新服务端活动时间戳，避免空闲超时误判
 			currentTransport.refreshServerActivity();
 			const timeoutMs = resolveBridgeTaskTimeoutMs(task.path, task.payload);
@@ -241,6 +298,15 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 			// 任务完成后再次刷新，确保结果回传前连接不被断开
 			currentTransport.refreshServerActivity();
 			debugLog('[DEBUG] handler completed successfully, result:', typeof result);
+			const resultRecord = result && typeof result === 'object' && !Array.isArray(result)
+				? result as Record<string, unknown>
+				: undefined;
+			if (resultRecord?.ok === false && typeof resultRecord.error === 'string') {
+				writeTaskLog('error', 'bridge.task.result.failed', 'Bridge 任务返回失败结果', task, 'handler-result', new Error(resultRecord.error));
+			}
+			else {
+				writeTaskLog('success', 'bridge.task.completed', 'Bridge 任务执行完成', task, 'completed');
+			}
 		}
 		catch (error: unknown) {
 			if (error instanceof BridgeTaskTimeoutError) {
@@ -257,6 +323,14 @@ function enqueueTask(task: { requestId: string; path: string; payload: unknown; 
 					? { code: 'BRIDGE_TASK_TIMEOUT', timeoutMs: error.timeoutMs }
 					: {}),
 			};
+			writeTaskLog(
+				error instanceof BridgeTaskTimeoutError ? 'warning' : 'error',
+				error instanceof BridgeTaskTimeoutError ? 'bridge.task.timeout' : 'bridge.task.failed',
+				error instanceof BridgeTaskTimeoutError ? 'Bridge 任务超时' : 'Bridge 任务执行失败',
+				task,
+				error instanceof BridgeTaskTimeoutError ? 'timeout' : 'error',
+				error,
+			);
 		}
 
 		debugLog('[DEBUG] completing task, hasError:', !!taskError);

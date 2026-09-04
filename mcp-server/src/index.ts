@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   await bridgeServer.start();
   process.stderr.write(`Bridge mode: ${bridgeServer.getMode()}\n`);
 
-  const toolDispatcher = new ToolDispatcher(bridgeServer);
+  const toolDispatcher = new ToolDispatcher(bridgeServer, serverVersion);
   const stdioServer = serveStdio(
     () => createMcpServer(toolDispatcher, serverVersion, agentInstructions),
     {

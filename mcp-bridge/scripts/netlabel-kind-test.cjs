@@ -4,6 +4,7 @@ const process = require('node:process');
 process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
+const { bridgeLogPipeline } = require('../src/logging/log.ts');
 const { handleAutoLayoutTask } = require('../src/mcp/auto-layout-handler.ts');
 const { handleAutoRoutingTask } = require('../src/mcp/auto-routing-handler.ts');
 const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-auto-handler.ts');
@@ -15,6 +16,28 @@ const { shouldLogTransportMessage } = require('../src/runtime/bridge-transport.t
 const { BridgeTaskQuarantine, BridgeTaskTimeoutError, resolveBridgeTaskTimeoutMs, startTimedTask } = require('../src/runtime/task-timeout.ts');
 const { startConnectionStatusMonitor } = require('../src/state/status-monitor.ts');
 const { readConnectionStatus, saveConnectionStatus } = require('../src/state/status-store.ts');
+
+const diagnosticLog = bridgeLogPipeline.createEntry({
+	level: 'error',
+	module: 'test',
+	event: 'test.diagnostic',
+	summary: 'diagnostic log',
+	message: 'handler failed',
+	toolName: 'api_invoke',
+	bridgePath: '/bridge/jlceda/api/invoke',
+	edaApi: 'eda.sch_PrimitiveComponent.create',
+	requestId: 'test-request',
+	phase: 'handler',
+	errorName: 'TypeError',
+	errorStack: 'stack',
+});
+assert.equal(diagnosticLog.fields.version, '2.3.0');
+assert.equal(diagnosticLog.fields.buildDate, 'dev');
+assert.equal(diagnosticLog.fields.buildWatermark, 'v2.3.0 | dev');
+assert.equal(diagnosticLog.fields.toolName, 'api_invoke');
+assert.equal(diagnosticLog.fields.edaApi, 'eda.sch_PrimitiveComponent.create');
+assert.equal(diagnosticLog.fields.requestId, 'test-request');
+assert.equal(diagnosticLog.fields.errorStack, 'stack');
 
 for (const name of ['UART_TX', 'SPI_CLK', 'BLUE_LED_DATA']) {
 	assert.equal(detectNetLabelKind(name), 'NetLabel', `${name} must use an ordinary net label`);
