@@ -7,8 +7,11 @@
  * ------------------------------------------------------------------------
  */
 
+import { BRIDGE_BUILD_WATERMARK } from '../build-info.ts';
+
 let logBuffer: string[] = [];
 const MAX_BUFFER_SIZE = 100;
+const DEBUG_REPORT_TEXT_LIMIT = 240;
 
 function persistDebugLog(value: unknown): void {
 	void Promise.resolve()
@@ -32,7 +35,7 @@ export function debugLog(message: string, ...args: unknown[]): void {
 		}
 	}).join(' ');
 
-	const logLine = `[${timestamp}] ${message} ${argsStr}`;
+	const logLine = `[${timestamp}] [${BRIDGE_BUILD_WATERMARK}] ${message} ${argsStr}`;
 
 	// 输出到控制台
 	// eslint-disable-next-line no-console
@@ -68,6 +71,17 @@ export function getDebugLog(): string {
 
 	// 回退到内存缓冲区
 	return logBuffer.join('\n');
+}
+
+/**
+ * 获取 EDA 界面使用的通用调试摘要。
+ */
+export function getDebugLogReport(): string {
+	const detail = getDebugLog();
+	return detail
+		.split('\n')
+		.map(line => line.length > DEBUG_REPORT_TEXT_LIMIT ? `${line.slice(0, DEBUG_REPORT_TEXT_LIMIT)}...` : line)
+		.join('\n');
 }
 
 /**
