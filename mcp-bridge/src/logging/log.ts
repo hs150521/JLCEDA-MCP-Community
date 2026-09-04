@@ -35,6 +35,8 @@ export interface UnifiedLogEntry {
 	fields: Record<string, string>;
 }
 
+export const BRIDGE_DIAGNOSTIC_LOG_STORAGE_KEY = 'mcp_bridge_diagnostic_logs';
+
 export interface BridgeLogBuildInput {
 	level: UnifiedLogLevel;
 	module: string;
@@ -129,6 +131,27 @@ const LOG_FIELD_LABELS: Record<string, string> = {
 };
 
 const BRIDGE_LOG_LIMIT = 200;
+const EDA_LOG_REPORT_LIMIT = 100;
+const EDA_LOG_REPORT_TEXT_LIMIT = 240;
+const EDA_DEFAULT_VISIBLE_FIELDS = [
+	'timestamp',
+	'level',
+	'buildWatermark',
+	'summary',
+	'toolName',
+	'bridgePath',
+	'edaApi',
+	'requestId',
+	'phase',
+	'message',
+	'errorCode',
+] as const;
+
+interface StoredBridgeDiagnosticLogs {
+	schemaVersion: 1;
+	updatedAt: string;
+	logs: UnifiedLogEntry[];
+}
 
 // 统一规范文本输入，避免空值与两端空白影响日志结果。
 function normalizeText(value: unknown): string {
@@ -195,12 +218,46 @@ function compactFields(fields: Record<string, string | undefined>): Record<strin
 	return compacted;
 }
 
+function getExtensionStorage(): {
+	getExtensionUserConfig?: (key: string) => unknown;
+	setExtensionUserConfig?: (key: string, value: unknown) => unknown;
+} | undefined {
+	try {
+		const storage = eda?.sys_Storage;
+		if (!storage || typeof storage !== 'object') {
+			return undefined;
+		}
+		return storage;
+	}
+	catch {
+		return undefined;
+	}
+}
+
+function truncateReportText(value: string | undefined): string | undefined {
+	const text = normalizeText(value);
+	if (text.length === 0) {
+		return undefined;
+	}
+	return text.length > EDA_LOG_REPORT_TEXT_LIMIT
+		? `${text.slice(0, EDA_LOG_REPORT_TEXT_LIMIT)}...`
+		: text;
+}
+
+function formatReportPart(label: string, value: string | undefined): string | undefined {
+	const normalizedValue = truncateReportText(value);
+	return normalizedValue ? `${label}=${normalizedValue}` : undefined;
+}
+
 /**
  * Bridge 日志主管道。
  */
 export class BridgeLogPipeline {
 	private readonly logs: UnifiedLogEntry[] = [];
 	private listener: BridgeLogListener | undefined;
+	private hasLoadedStoredLogs = false;
+	private storageWritePending = false;
+	private storageWriteRequested = false;
 
 	/**
 	 * 获取统一日志字段定义。
@@ -210,7 +267,7 @@ export class BridgeLogPipeline {
 		return {
 			fieldOrder: [...LOG_FIELD_ORDER],
 			fieldLabels: { ...LOG_FIELD_LABELS },
-			defaultVisibleFields: [...LOG_FIELD_ORDER],
+			defaultVisibleFields: [...EDA_DEFAULT_VISIBLE_FIELDS],
 		};
 	}
 
@@ -269,10 +326,12 @@ export class BridgeLogPipeline {
 	 * @returns 原日志实体。
 	 */
 	public append(logEntry: UnifiedLogEntry): UnifiedLogEntry {
+		this.loadStoredLogs();
 		this.logs.push(logEntry);
 		if (this.logs.length > BRIDGE_LOG_LIMIT) {
 			this.logs.splice(0, this.logs.length - BRIDGE_LOG_LIMIT);
 		}
+		this.persistDetailedLogs();
 
 		if (this.listener) {
 			try {
@@ -284,6 +343,59 @@ export class BridgeLogPipeline {
 		}
 
 		return logEntry;
+	}
+
+	/**
+	 * 获取完整诊断日志。该数据包含异常堆栈，仅用于本地存储和程序化诊断。
+	 */
+	public getLogs(): UnifiedLogEntry[] {
+		this.loadStoredLogs();
+		return this.logs.slice();
+	}
+
+	/**
+	 * 清空本地完整诊断日志。
+	 */
+	public clearLogs(): void {
+		this.logs.splice(0, this.logs.length);
+		this.persistDetailedLogs();
+	}
+
+	/**
+	 * 将完整日志转换为 EDA 界面使用的简略报告行。
+	 * @param logEntry 完整日志实体。
+	 * @returns 不包含异常堆栈的摘要文本。
+	 */
+	public formatEdaReportLine(logEntry: UnifiedLogEntry): string {
+		const fields = logEntry.fields;
+		const watermark = fields.buildWatermark || [fields.version, fields.buildDate].filter(Boolean).join(' | ');
+		const context = [
+			formatReportPart('工具', fields.toolName),
+			formatReportPart('路由', fields.bridgePath),
+			formatReportPart('API', fields.edaApi),
+			formatReportPart('阶段', fields.phase),
+			formatReportPart('请求', fields.requestId),
+			formatReportPart('错误码', fields.errorCode),
+			formatReportPart('错误', fields.message),
+		].filter((part): part is string => Boolean(part));
+		const prefix = [
+			fields.timestamp || logEntry.timestamp,
+			`[${logEntry.level}]`,
+			watermark,
+			fields.summary || fields.event || 'Bridge 日志',
+		].filter(Boolean).join(' ');
+		return context.length > 0 ? `${prefix} | ${context.join(' | ')}` : prefix;
+	}
+
+	/**
+	 * 获取 EDA 界面展示的简略报告，不包含异常堆栈等详细字段。
+	 * @returns 最近的摘要报告文本。
+	 */
+	public getEdaReport(): string {
+		return this.getLogs()
+			.slice(-EDA_LOG_REPORT_LIMIT)
+			.map(logEntry => this.formatEdaReportLine(logEntry))
+			.join('\n');
 	}
 
 	/**
@@ -350,6 +462,85 @@ export class BridgeLogPipeline {
 		return ['clientId', 'activeClientId', 'bridgeClientCount', 'leaseTerm']
 			.some(fieldKey => String(fields[fieldKey] ?? '').trim().length > 0);
 	}
+
+	private loadStoredLogs(): void {
+		if (this.hasLoadedStoredLogs) {
+			return;
+		}
+
+		const storage = getExtensionStorage();
+		if (!storage || typeof storage.getExtensionUserConfig !== 'function') {
+			return;
+		}
+		this.hasLoadedStoredLogs = true;
+
+		try {
+			const raw = storage.getExtensionUserConfig(BRIDGE_DIAGNOSTIC_LOG_STORAGE_KEY);
+			if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+				return;
+			}
+			const stored = raw as Partial<StoredBridgeDiagnosticLogs>;
+			if (stored.schemaVersion !== 1 || !Array.isArray(stored.logs)) {
+				return;
+			}
+			const validLogs = stored.logs.filter(logEntry => this.isUnifiedLogEntry(logEntry));
+			const existingIds = new Set(this.logs.map(logEntry => logEntry.id));
+			this.logs.push(...validLogs.filter(logEntry => !existingIds.has(logEntry.id)).slice(-BRIDGE_LOG_LIMIT));
+			if (this.logs.length > BRIDGE_LOG_LIMIT) {
+				this.logs.splice(0, this.logs.length - BRIDGE_LOG_LIMIT);
+			}
+		}
+		catch {
+			this.hasLoadedStoredLogs = false;
+			// 本地日志读取失败不影响 Bridge 运行。
+		}
+	}
+
+	private persistDetailedLogs(): void {
+		if (this.storageWritePending) {
+			this.storageWriteRequested = true;
+			return;
+		}
+
+		const storage = getExtensionStorage();
+		if (!storage || typeof storage.setExtensionUserConfig !== 'function') {
+			return;
+		}
+
+		this.storageWritePending = true;
+		const snapshot: StoredBridgeDiagnosticLogs = {
+			schemaVersion: 1,
+			updatedAt: new Date().toISOString(),
+			logs: this.logs.slice(-BRIDGE_LOG_LIMIT),
+		};
+		let writeResult: unknown;
+		try {
+			writeResult = storage.setExtensionUserConfig(BRIDGE_DIAGNOSTIC_LOG_STORAGE_KEY, snapshot);
+		}
+		catch {
+			this.storageWritePending = false;
+			return;
+		}
+		void Promise.resolve(writeResult)
+			.catch(() => {
+				// 本地日志写入失败不影响 Bridge 运行。
+			})
+			.finally(() => {
+				this.storageWritePending = false;
+				if (this.storageWriteRequested) {
+					this.storageWriteRequested = false;
+					this.persistDetailedLogs();
+				}
+			});
+	}
 }
 
 export const bridgeLogPipeline = new BridgeLogPipeline();
+
+export function getEdaLogReport(): string {
+	return bridgeLogPipeline.getEdaReport();
+}
+
+export function clearEdaDiagnosticLogs(): void {
+	bridgeLogPipeline.clearLogs();
+}

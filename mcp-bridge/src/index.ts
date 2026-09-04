@@ -9,9 +9,10 @@
  * ------------------------------------------------------------------------
  */
 import * as extensionConfig from '../extension.json';
+import { clearEdaDiagnosticLogs, getEdaLogReport } from './logging/log.ts';
 import { restartBridgeServer, startBridgeRuntime, stopBridgeRuntime } from './runtime/bridge-runtime.ts';
 import { readConnectionStatus } from './state/status-store.ts';
-import { clearDebugLog, getDebugLog } from './utils/debug-log.ts';
+import { clearDebugLog, getDebugLogReport } from './utils/debug-log.ts';
 
 /**
  * 激活 Bridge 扩展。
@@ -71,14 +72,13 @@ export function about(): void {
  * 查看调试日志。
  */
 export function viewDebugLog(): void {
-	const log = getDebugLog();
+	const log = getEdaLogReport() || getDebugLogReport();
 	if (!log) {
 		eda.sys_Dialog.showInformationMessage('暂无调试日志', '调试日志');
 		return;
 	}
 
-	// 显示日志内容
-	eda.sys_Dialog.showInformationMessage(log, '调试日志 (最近100条)');
+	eda.sys_Dialog.showInformationMessage(log, '诊断报告 (最近100条)');
 }
 
 /**
@@ -86,5 +86,6 @@ export function viewDebugLog(): void {
  */
 export function clearDebugLogAction(): void {
 	clearDebugLog();
+	clearEdaDiagnosticLogs();
 	eda.sys_Dialog.showInformationMessage('调试日志已清空', '调试日志');
 }
