@@ -115,6 +115,26 @@ async function main() {
 	assert.equal(unknown.commitUnknown, true);
 	assert.equal(unknown.nativeCallSettled, false);
 	assert.equal(requiresHostRestartForResult('/bridge/jlceda/editor/navigate', {}, unknown), true);
+	const originalRpcActivate = globalThis.eda.dmt_EditorControl.activateDocument;
+	for (const operation of ['open', 'activate']) {
+		for (const message of ['WebSocket is not open', 'transport closed', 'ECONNABORTED']) {
+			changeDocument('pcb-2', 'pcb-2@project-1');
+			const method = operation === 'open' ? 'openDocument' : 'activateDocument';
+			globalThis.eda.dmt_EditorControl[method] = async () => {
+				changeDocument('pcb-1', 'pcb-1@project-1');
+				throw new Error(message);
+			};
+			const uncertain = await handleEditorNavigateTask({ operation, projectUuid, documentUuid: 'pcb-1', ...(operation === 'activate' ? { tabId: 'pcb-1@project-1' } : {}) });
+			assert.deepEqual([uncertain.commitUnknown, uncertain.readbackRequired, uncertain.nativeCallSettled], [true, true, false], message);
+			assert.equal(uncertain.reason, 'native_call_result_unknown');
+			assert.equal(uncertain.changed, undefined, 'a failed RPC response does not prove navigation was unapplied');
+			assert.equal(activeDocumentUuid, 'pcb-1', 'the native operation can already have changed the editor');
+			assert.equal(requiresHostRestartForResult('/bridge/jlceda/editor/navigate', {}, uncertain), true, message);
+		}
+	}
+	globalThis.eda.dmt_EditorControl.activateDocument = originalRpcActivate;
+	changeDocument('pcb-2', 'pcb-2@project-1');
+
 	globalThis.eda.dmt_EditorControl.openDocument = originalOpen;
 	globalThis.eda.dmt_EditorControl.openDocument = async () => {
 		throw new Error('Document cannot be opened');

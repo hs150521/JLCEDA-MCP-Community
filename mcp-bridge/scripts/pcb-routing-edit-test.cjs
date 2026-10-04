@@ -94,7 +94,12 @@ async function main() {
 		pcb_PrimitiveArc: routingApi('arc'),
 		pcb_PrimitivePolyline: routingApi('polyline'),
 		pcb_PrimitiveVia: routingApi('via'),
-		pcb_Net: { async getAllNets() { return [{ net: 'GND' }, { net: 'VCC' }]; } },
+		pcb_Net: {
+			async getAllNets() { return [{ net: 'GND' }, { net: 'VCC' }]; },
+			async getAllPrimitivesByNet(net) {
+				return [...states.via.values()].filter(item => item.net === net).map(item => ({ globalIndex: item.primitiveId, pcbItemPrimitiveType: 'Via', ...(item.parentComponentPrimitiveId ? { parentId: item.parentComponentPrimitiveId } : {}) }));
+			},
+		},
 		pcb_Layer: { async getAllLayers() { return [{ id: 1, type: 'SIGNAL', layerStatus: 1, locked: false }, { id: 2, type: 'SIGNAL', layerStatus: 1, locked: false }]; } },
 		pcb_MathPolygon: { createPolygon(source) { return { getSource: () => source }; } },
 	};
@@ -149,6 +154,91 @@ async function main() {
 	assert.equal(states.arc.get('arc-1').interactiveMode, 2);
 	assert.deepEqual(states.polyline.get('polyline-1').polygonSource, [0, 0, 'L', 50, 50]);
 
+	states.via.set('quantized-via', makeState('via', 'quantized-via', { holeDiameter: 15.6, diameter: 47.2 }));
+	const originalViaModify = globalThis.eda.pcb_PrimitiveVia.modify;
+	let observedViaDimensions;
+	globalThis.eda.pcb_PrimitiveVia.modify = async (id, patch) => {
+		await originalViaModify(id, patch);
+		Object.assign(states.via.get(id), observedViaDimensions);
+		return primitive(states.via.get(id));
+	};
+	// 创建与修改使用相同的 EDA Pro 3.2.181 实测格点，不重试已结束的原生写入。
+	for (const [hole, diameter, actualHole, actualDiameter] of [
+		[19.685, 47.244, 19.6, 47.2],
+		[15.748, 31.496, 15.8, 31.4],
+		[19.73, 31.55, 19.8, 31.6],
+		[15.7, 31.5, 15.8, 31.6],
+	]) {
+		observedViaDimensions = { holeDiameter: actualHole, diameter: actualDiameter };
+		const writesBefore = nativeWriteCount;
+		const quantized = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: hole, diameter } }));
+		assert.equal(quantized.ok, true);
+		assert.equal(quantized.verified, true);
+		assert.equal(quantized.commitUnknown, undefined);
+		assert.deepEqual([quantized.primitive.holeDiameter, quantized.primitive.diameter], [actualHole, actualDiameter]);
+		assert.deepEqual(quantized.normalization, {
+			kind: 'via_dimension_quantization',
+			holeDiameter: { requested: hole, actual: actualHole, mode: 'round_0_2_mil' },
+			diameter: { requested: diameter, actual: actualDiameter, mode: 'round_0_2_mil' },
+		});
+		assert.equal(nativeWriteCount, writesBefore + 1);
+	}
+	observedViaDimensions = { holeDiameter: 15.8 };
+	const holeOnly = await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: 15.7 } });
+	assert.equal(holeOnly.ok, true);
+	assert.equal(holeOnly.primitive.holeDiameter, 15.8);
+	assert.deepEqual(holeOnly.normalization, { kind: 'via_dimension_quantization', holeDiameter: { requested: 15.7, actual: 15.8, mode: 'round_0_2_mil' } });
+	for (const [hole, diameter, actualHole, actualDiameter, field] of [
+		[19.685, 47.244, 19.7, 47.2, 'holeDiameter'],
+		[15.748, 31.496, 15.8, 31.5, 'diameter'],
+		[19.73, 31.55, 19.78, 31.6, 'holeDiameter'],
+		[15.7, 31.5, 15.6, 31.6, 'holeDiameter'],
+		[19.685, 47.268, 19.6, 47.3, 'diameter'],
+	]) {
+		observedViaDimensions = { holeDiameter: actualHole, diameter: actualDiameter };
+		const writesBefore = nativeWriteCount;
+		const mismatch = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: hole, diameter } }));
+		assert.equal(mismatch.ok, false, '错误的相邻格点或非格点值仍需回读恢复');
+		assert.equal(mismatch.reason, 'post_write_readback_failed');
+		assert.equal(mismatch.commitUnknown, true);
+		assert.equal(mismatch.nativeCallSettled, true);
+		assert.deepEqual([mismatch.after.holeDiameter, mismatch.after.diameter], [actualHole, actualDiameter]);
+		assert.deepEqual(mismatch.requested, { holeDiameter: hole, diameter });
+		assert.deepEqual(mismatch.mismatches.map(item => item.field), [field]);
+		assert.equal(nativeWriteCount, writesBefore + 1, 'the handler must not retry a settled native modification');
+	}
+	observedViaDimensions = { holeDiameter: 15.8, diameter: 31.6, x: 149.9 };
+	const positionMismatch = await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: 15.7, diameter: 31.5, x: 150 } });
+	assert.equal(positionMismatch.ok, false, '尺寸量化不得放宽坐标校验');
+	assert.deepEqual(positionMismatch.mismatches, [{ field: 'x', requested: 150, actual: 149.9 }]);
+	observedViaDimensions = { holeDiameter: 15.6 };
+	const unchangedHole = await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: 15.6 } });
+	assert.equal(unchangedHole.ok, true);
+	assert.equal(unchangedHole.primitive.holeDiameter, 15.6);
+	assert.equal(unchangedHole.normalization, undefined);
+	states.via.set('quantized-via', makeState('via', 'quantized-via', { holeDiameter: 15.8, diameter: 31.6 }));
+	observedViaDimensions = { holeDiameter: 15.8, diameter: 15.8 };
+	const collapsedRing = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { diameter: 15.81 } }));
+	assert.equal(collapsedRing.ok, false, '量化后的实际外径仍须大于孔径');
+	assert.equal(collapsedRing.verified, undefined);
+	assert.deepEqual([collapsedRing.after.holeDiameter, collapsedRing.after.diameter], [15.8, 15.8]);
+	assert.deepEqual(collapsedRing.mismatches, [{ field: 'annularRing', requested: 'diameter > holeDiameter', actual: 0 }]);
+	assert.equal(collapsedRing.nativeCallSettled, true);
+	globalThis.eda.pcb_PrimitiveVia.modify = originalViaModify;
+	states.via.delete('quantized-via');
+	states.via.set('child-via', makeState('via', 'child-via', { parentComponentPrimitiveId: 'component-1' }));
+	const beforeChildDelete = nativeWriteCount;
+	const childDelete = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'delete', kind: 'via', primitiveId: 'child-via' }));
+	assert.equal(childDelete.ok, false);
+	assert.equal(childDelete.reason, 'footprint_owned_via');
+	assert.equal(childDelete.parentComponentPrimitiveId, 'component-1');
+	assert.equal(childDelete.applied, false);
+	assert.equal(childDelete.deleted, false);
+	assert.equal(childDelete.commitUnknown, undefined);
+	assert.equal(states.via.has('child-via'), true);
+	assert.equal(nativeWriteCount, beforeChildDelete, 'parent-owned vias are rejected before native deletion');
+	states.via.delete('child-via');
+
 	for (const [kind, primitiveId] of [['line', 'line-1'], ['arc', 'arc-1'], ['polyline', 'polyline-1'], ['via', 'via-1']]) {
 		const primitiveApi = globalThis.eda[{ line: 'pcb_PrimitiveLine', arc: 'pcb_PrimitiveArc', polyline: 'pcb_PrimitivePolyline', via: 'pcb_PrimitiveVia' }[kind]];
 		const originalGet = primitiveApi.get;
@@ -162,6 +252,12 @@ async function main() {
 		const deleted = await handlePcbRoutingEditTask({ action: 'delete', kind, primitiveId });
 		assert.equal(deleted.ok, true, `${kind} delete`);
 		assert.equal(deleted.deleted, true);
+		if (kind === 'via') {
+			assert.equal(deleted.ownership, 'unknown', 'a raw via without a parent field does not prove standalone ownership');
+			assert.equal(deleted.verificationScope, 'current_page_memory');
+			assert.equal(deleted.durableDeletionVerified, false);
+			assert.equal(deleted.requiredPersistenceVerification, 'save_and_reopen_pcb');
+		}
 		assert.equal(states[kind].has(primitiveId), false);
 		if (kind === 'arc' || kind === 'polyline') {
 			const missingAfterDelete = await handlePcbRoutingEditTask({ action: 'read', kind, primitiveId });
@@ -172,6 +268,14 @@ async function main() {
 		}
 		primitiveApi.get = originalGet;
 	}
+	states.via.set('unknown-ownership-via', makeState('via', 'unknown-ownership-via'));
+	const originalNetPrimitives = globalThis.eda.pcb_Net.getAllPrimitivesByNet;
+	delete globalThis.eda.pcb_Net.getAllPrimitivesByNet;
+	const unknownOwnershipDelete = await handlePcbRoutingEditTask({ action: 'delete', kind: 'via', primitiveId: 'unknown-ownership-via' });
+	assert.equal(unknownOwnershipDelete.ok, true);
+	assert.equal(unknownOwnershipDelete.ownership, 'unknown');
+	assert.equal(unknownOwnershipDelete.durableDeletionVerified, false, 'missing ownership API must never imply persistent removal');
+	globalThis.eda.pcb_Net.getAllPrimitivesByNet = originalNetPrimitives;
 	const originalArcDelete = globalThis.eda.pcb_PrimitiveArc.delete;
 	globalThis.eda.pcb_PrimitiveArc.delete = async () => true;
 	const arcStillPresent = await handlePcbRoutingEditTask({ action: 'delete', kind: 'arc', primitiveId: newArc.primitiveId });

@@ -1,4 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { comparePcbPolygonSource } from './pcb-polygon-equivalence.ts';
 
 type Action = 'read' | 'create' | 'modify' | 'delete';
 type Kind = 'line' | 'arc' | 'polyline';
@@ -199,15 +200,20 @@ function createPolygon(runtime: Record<string, unknown>, source: PolygonSource):
 function matchesRequested(actual: Primitive, requested: Record<string, unknown>): boolean {
 	return Object.entries(requested).every(([field, wanted]) => {
 		const observed = actual[field];
-		if (field === 'polygonSource') {
-			const source = observed as PolygonSource;
-			return Array.isArray(source) && source.length === (wanted as PolygonSource).length
-				&& source.every((item, index) => typeof item === 'number' && typeof (wanted as PolygonSource)[index] === 'number'
-					? Math.abs(item - ((wanted as PolygonSource)[index] as number)) <= 1e-6
-					: item === (wanted as PolygonSource)[index]);
-		}
+		if (field === 'polygonSource')
+			return comparePcbPolygonSource(observed, wanted, 'polyline').equivalent;
 		return typeof observed === 'number' && typeof wanted === 'number' ? Math.abs(observed - wanted) <= 1e-6 : observed === wanted;
 	});
+}
+
+function polygonNormalization(actual: Primitive, requested: Record<string, unknown>): Record<string, unknown> {
+	if (requested.polygonSource === undefined)
+		return {};
+	const comparison = comparePcbPolygonSource(actual.polygonSource, requested.polygonSource, 'polyline');
+	if (!comparison.equivalent || !comparison.normalized)
+		return {};
+	const { equivalent: _equivalent, normalized: _normalized, ...diagnostic } = comparison;
+	return { normalization: { field: 'polygonSource', ...diagnostic } };
 }
 
 function unknownWrite(action: Exclude<Action, 'read'>, error: unknown, context: Record<string, unknown>, nativeCallSettled: boolean): Record<string, unknown> {
@@ -303,7 +309,7 @@ export async function handlePcbBoardOutlineManageTask(payload: unknown): Promise
 			const requestedMismatches = Object.entries(requested!).filter(([field, expected]) =>
 				!matchesRequested(created, { [field]: expected })).map(([field, expected]) => {
 				const actual = created[field];
-				return { field, expected, actual: Array.isArray(actual) ? [...actual] : actual };
+				return { field, expected, actual: Array.isArray(actual) ? preserveBoundedArray([...actual]) : actual };
 			});
 			if (created.net !== '' && created.net !== null)
 				requestedMismatches.push({ field: 'net', expected: '', actual: created.net });
@@ -323,7 +329,7 @@ export async function handlePcbBoardOutlineManageTask(payload: unknown): Promise
 					requestedMismatches,
 				};
 			}
-			return { ok: true, action, scope: PATH_SCOPE, pageUuid: currentPage, kind: writeKind, primitiveId: created.primitiveId, primitive: created, verified: true };
+			return { ok: true, action, scope: PATH_SCOPE, pageUuid: currentPage, kind: writeKind, primitiveId: created.primitiveId, primitive: created, verified: true, ...polygonNormalization(created, requested!) };
 		}
 		if (action === 'delete') {
 			const ids = await getAllPrimitiveIds(runtime, writeKind, currentPage);
@@ -334,7 +340,7 @@ export async function handlePcbBoardOutlineManageTask(payload: unknown): Promise
 		const observed = await getOne(runtime, writeKind, primitiveId!, currentPage);
 		if (!observed || !matchesRequested(observed, requested!))
 			throw new Error('EDA board outline readback differs from the requested properties.');
-		return { ok: true, action, scope: PATH_SCOPE, pageUuid: currentPage, kind: writeKind, primitiveId, primitive: observed, verified: true };
+		return { ok: true, action, scope: PATH_SCOPE, pageUuid: currentPage, kind: writeKind, primitiveId, primitive: observed, verified: true, ...polygonNormalization(observed, requested!) };
 	}
 	catch (error: unknown) {
 		return unknownWrite(action, error, context, true);

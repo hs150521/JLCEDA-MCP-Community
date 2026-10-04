@@ -16,6 +16,7 @@ import type {
 	BridgeQueueTask,
 	BridgeServerMessage,
 	BridgeServerRoleMessage,
+	SchematicPinAdapter,
 } from '../bridge/protocol.ts';
 import type { UnifiedLogEntry } from '../logging/log.ts';
 import { BRIDGE_PROTOCOL_VERSION, validateBridgeServerMessage } from '../bridge/bridge-contract.ts';
@@ -248,7 +249,7 @@ export class BridgeTransport {
 		this.lastServerActivityAt = Date.now();
 	}
 
-	public reportTaskStarted(requestId: string, leaseTerm: number, context?: BridgeClientContext): void {
+	public reportTaskStarted(requestId: string, leaseTerm: number, context?: BridgeClientContext, schematicPinAdapter?: SchematicPinAdapter): void {
 		this.sendMessage({
 			type: 'bridge/task-started',
 			clientId: this.clientId,
@@ -256,6 +257,7 @@ export class BridgeTransport {
 			leaseTerm,
 			startedAt: Date.now(),
 			...(context ? { context } : {}),
+			...(schematicPinAdapter ? { schematicPinAdapter } : {}),
 		});
 	}
 

@@ -245,6 +245,41 @@ async function main() {
 	assert.equal(rebuiltAll.all, true);
 	assert.equal(rebuiltAll.pouredCount, 2);
 	assert.match(rebuiltAll.poured.find(item => item.pourPrimitiveId === 'new-1').fillGeometryDigest, /^fnv1a64:[0-9a-f]{16}$/);
+	// #70：活跃 PCB 可读但批量重建不存在时，先检查实例能力。
+	const savedBatchRebuild = pourApi.rebuildCopperRegions;
+	const savedPourGetAll = pourApi.getAll;
+	const writeCountBeforeCapability = writeCount;
+	globalThis.eda.sys_Environment = { getEditorCurrentVersion: () => '3.2.181' };
+	delete pourApi.rebuildCopperRegions;
+	assert.equal((await handlePcbPourManageTask({ action: 'read' })).ok, true);
+	const missingRebuild = await handlePcbPourManageTask({ action: 'rebuild', all: true });
+	assert.deepEqual([missingRebuild.reason, missingRebuild.errorCode, missingRebuild.editorVersion, missingRebuild.applied, missingRebuild.commitUnknown], ['unsupported_capability', 'EDA_CAPABILITY_UNAVAILABLE', '3.2.181', false, undefined]);
+	assert.ok(missingRebuild.unavailableApis.includes('eda.pcb_PrimitivePour.rebuildCopperRegions'));
+	assert.doesNotMatch(missingRebuild.error, /Open a PCB first/);
+	assert.equal(writeCount, writeCountBeforeCapability);
+	pourApi.getAll = async function () {
+		return (await savedPourGetAll.call(pourApi)).map(item => ({
+			...item,
+			async rebuildCopperRegion() {
+				return (await savedBatchRebuild.call(pourApi, [this.getState_PrimitiveId()]))[0];
+			},
+		}));
+	};
+	const fallbackSingle = await handlePcbPourManageTask({ action: 'rebuild', primitiveId: 'new-1' });
+	assert.deepEqual([fallbackSingle.ok, fallbackSingle.verified, fallbackSingle.rebuildReturnedCount], [true, true, 1]);
+	const fallbackAll = await handlePcbPourManageTask({ action: 'rebuild', all: true });
+	assert.deepEqual([fallbackAll.ok, fallbackAll.verified, fallbackAll.rebuildReturnedCount], [true, true, 2]);
+	const writesBeforePartialCapability = writeCount;
+	const supportedInstanceGetAll = pourApi.getAll;
+	pourApi.getAll = async function () {
+		const items = await supportedInstanceGetAll.call(pourApi);
+		delete items.at(-1).rebuildCopperRegion;
+		return items;
+	};
+	assert.equal((await handlePcbPourManageTask({ action: 'rebuild', all: true })).applied, false);
+	assert.equal(writeCount, writesBeforePartialCapability, 'all target capabilities must be checked before any native write');
+	pourApi.getAll = savedPourGetAll;
+	pourApi.rebuildCopperRegions = savedBatchRebuild;
 	const nativeAllRebuild = pourApi.rebuildCopperRegions;
 	pourApi.rebuildCopperRegions = async () => [];
 	const emptyAllWithExistingFills = await handlePcbPourManageTask({ action: 'rebuild', all: true });
@@ -327,6 +362,31 @@ async function main() {
 	assert.deepEqual([switched.commitUnknown, switched.nativeCallSettled], [true, true]);
 	pageUuid = 'pcb-1';
 	pourApi.create = nativeCreate;
+	const normalizedSource = [50.123456, 50.123456, 'L', 950.123456, 50.123456, 950.123456, 950.123456, 50.123456, 950.123456, 50.123456, 50.123456];
+	const reversedSource = [50.1235, 50.1235, 'L', 50.1235, 950.1235, 950.1235, 950.1235, 950.1235, 50.1235, 50.1235, 50.1235];
+	pourApi.create = async (...args) => {
+		const result = await nativeCreate(...args);
+		pours.get(result.getState_PrimitiveId()).polygonSource = reversedSource;
+		return result;
+	};
+	const normalizedCreate = await handlePcbPourManageTask({ action: 'create', net: 'GND', layer: 1, polygonSource: normalizedSource });
+	assert.deepEqual([normalizedCreate.ok, normalizedCreate.verified, normalizedCreate.normalization.reversed, normalizedCreate.normalization.precisionAdjusted], [true, true, true, true]);
+	assert.deepEqual(normalizedCreate.pour.polygonSource, reversedSource);
+	pourApi.modify = async (id, patch) => {
+		const result = await nativeModify(id, patch);
+		pours.get(id).polygonSource = reversedSource;
+		return result;
+	};
+	const normalizedModify = await handlePcbPourManageTask({ action: 'modify', primitiveId: normalizedCreate.primitiveId, property: { polygonSource: normalizedSource } });
+	assert.equal(normalizedModify.verified, true);
+	const genuinelyDifferent = [50, 50, 'L', 900, 50, 900, 950, 50, 950, 50, 50];
+	const differentModify = await handlePcbPourManageTask({ action: 'modify', primitiveId: normalizedCreate.primitiveId, property: { polygonSource: genuinelyDifferent } });
+	assert.equal(differentModify.ok, false, 'different geometry must still report the actual mismatch');
+	const serializedMismatch = JSON.parse(JSON.stringify(await toSerializableAsync(differentModify)));
+	assert.deepEqual(serializedMismatch.requestedMismatches[0].actual, reversedSource, 'actual geometry must not become Circular');
+	assert.deepEqual(serializedMismatch.requestedMismatches[0].expected, genuinelyDifferent);
+	pourApi.create = nativeCreate;
+	pourApi.modify = nativeModify;
 	console.log('PCB pour management tests passed');
 }
 

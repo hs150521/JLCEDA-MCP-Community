@@ -1,0 +1,1874 @@
+[
+	{
+		"name": "Clearance Error",
+		"visible": true,
+		"count": 28,
+		"title": [
+			"Clearance Error",
+			"(28)"
+		],
+		"list": [
+			{
+				"name": "Device to Prohibited Region",
+				"list": [
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Prohibited Region",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Prohibited Region",
+							"suffix": ": device-001"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-002"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} and {obj2} overlap",
+							"param": {
+								"obj1": "Object 1",
+								"obj2": "object 2"
+							},
+							"errData": {
+								"globalIndex": "err0",
+								"position": {
+									"x": 10,
+									"y": 10.1
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-001",
+								"obj1Type": "Prohibited Region",
+								"obj2": "native-object-002",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"obj1Suffix": ": device-001",
+								"obj2Suffix": ": device-002"
+							}
+						},
+						"objs": [
+							"native-object-001",
+							"native-object-002"
+						],
+						"globalIndex": "err0",
+						"pos": {
+							"x": 10,
+							"y": 10.1
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Prohibited Region"
+					}
+				],
+				"count": 1,
+				"title": [
+					"Device",
+					"to",
+					"Prohibited Region",
+					"(1)"
+				],
+				"visible": true
+			},
+			{
+				"name": "Device to Device",
+				"list": [
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-003"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-002"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err14",
+								"position": {
+									"x": 10.2,
+									"y": 10.3
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-003",
+								"obj1Type": "Device",
+								"obj2": "native-object-002",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-003",
+								"obj2Suffix": ": device-002"
+							}
+						},
+						"objs": [
+							"native-object-003",
+							"native-object-002"
+						],
+						"globalIndex": "err14",
+						"pos": {
+							"x": 10.2,
+							"y": 10.3
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-004"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-005"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "1.1mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err1",
+								"position": {
+									"x": 10.4,
+									"y": 10.5
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-004",
+								"obj1Type": "Device",
+								"obj2": "native-object-005",
+								"obj2Type": "Device",
+								"minDistance": 0.11179999999995971,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-004",
+								"obj2Suffix": ": device-005"
+							}
+						},
+						"objs": [
+							"native-object-004",
+							"native-object-005"
+						],
+						"globalIndex": "err1",
+						"pos": {
+							"x": 10.4,
+							"y": 10.5
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-006"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-005"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "4.3mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err22",
+								"position": {
+									"x": 10.6,
+									"y": 10.7
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-006",
+								"obj1Type": "Device",
+								"obj2": "native-object-005",
+								"obj2Type": "Device",
+								"minDistance": 0.4286999999999921,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-006",
+								"obj2Suffix": ": device-005"
+							}
+						},
+						"objs": [
+							"native-object-006",
+							"native-object-005"
+						],
+						"globalIndex": "err22",
+						"pos": {
+							"x": 10.6,
+							"y": 10.7
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-007"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-008"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "1.1mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err2",
+								"position": {
+									"x": 10.8,
+									"y": 10.9
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-007",
+								"obj1Type": "Device",
+								"obj2": "native-object-008",
+								"obj2Type": "Device",
+								"minDistance": 0.11180000000001655,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-007",
+								"obj2Suffix": ": device-008"
+							}
+						},
+						"objs": [
+							"native-object-007",
+							"native-object-008"
+						],
+						"globalIndex": "err2",
+						"pos": {
+							"x": 10.8,
+							"y": 10.9
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-009"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-007"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "2.3mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err17",
+								"position": {
+									"x": 11,
+									"y": 11.1
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-009",
+								"obj1Type": "Device",
+								"obj2": "native-object-007",
+								"obj2Type": "Device",
+								"minDistance": 0.231899999999996,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-009",
+								"obj2Suffix": ": device-007"
+							}
+						},
+						"objs": [
+							"native-object-009",
+							"native-object-007"
+						],
+						"globalIndex": "err17",
+						"pos": {
+							"x": 11,
+							"y": 11.1
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-009"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-008"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err18",
+								"position": {
+									"x": 11.2,
+									"y": 11.3
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-009",
+								"obj1Type": "Device",
+								"obj2": "native-object-008",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-009",
+								"obj2Suffix": ": device-008"
+							}
+						},
+						"objs": [
+							"native-object-009",
+							"native-object-008"
+						],
+						"globalIndex": "err18",
+						"pos": {
+							"x": 11.2,
+							"y": 11.3
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-010"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-011"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err3",
+								"position": {
+									"x": 11.4,
+									"y": 11.5
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-010",
+								"obj1Type": "Device",
+								"obj2": "native-object-011",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-010",
+								"obj2Suffix": ": device-011"
+							}
+						},
+						"objs": [
+							"native-object-010",
+							"native-object-011"
+						],
+						"globalIndex": "err3",
+						"pos": {
+							"x": 11.4,
+							"y": 11.5
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-011"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-012"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err27",
+								"position": {
+									"x": 11.6,
+									"y": 11.5
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-011",
+								"obj1Type": "Device",
+								"obj2": "native-object-012",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-011",
+								"obj2Suffix": ": device-012"
+							}
+						},
+						"objs": [
+							"native-object-011",
+							"native-object-012"
+						],
+						"globalIndex": "err27",
+						"pos": {
+							"x": 11.6,
+							"y": 11.5
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-013"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-014"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err4",
+								"position": {
+									"x": 11.7,
+									"y": 11.8
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-013",
+								"obj1Type": "Device",
+								"obj2": "native-object-014",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-013",
+								"obj2Suffix": ": device-014"
+							}
+						},
+						"objs": [
+							"native-object-013",
+							"native-object-014"
+						],
+						"globalIndex": "err4",
+						"pos": {
+							"x": 11.7,
+							"y": 11.8
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-013"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-015"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0.9mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err5",
+								"position": {
+									"x": 11.9,
+									"y": 12
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-013",
+								"obj1Type": "Device",
+								"obj2": "native-object-015",
+								"obj2Type": "Device",
+								"minDistance": 0.08960000000001855,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-013",
+								"obj2Suffix": ": device-015"
+							}
+						},
+						"objs": [
+							"native-object-013",
+							"native-object-015"
+						],
+						"globalIndex": "err5",
+						"pos": {
+							"x": 11.9,
+							"y": 12
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-016"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-013"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err8",
+								"position": {
+									"x": 11.7,
+									"y": 12.1
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-016",
+								"obj1Type": "Device",
+								"obj2": "native-object-013",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-016",
+								"obj2Suffix": ": device-013"
+							}
+						},
+						"objs": [
+							"native-object-016",
+							"native-object-013"
+						],
+						"globalIndex": "err8",
+						"pos": {
+							"x": 11.7,
+							"y": 12.1
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-016"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-014"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err7",
+								"position": {
+									"x": 12.2,
+									"y": 12.3
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-016",
+								"obj1Type": "Device",
+								"obj2": "native-object-014",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-016",
+								"obj2Suffix": ": device-014"
+							}
+						},
+						"objs": [
+							"native-object-016",
+							"native-object-014"
+						],
+						"globalIndex": "err7",
+						"pos": {
+							"x": 12.2,
+							"y": 12.3
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-017"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-014"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "6.7mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err20",
+								"position": {
+									"x": 12.4,
+									"y": 12.5
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-017",
+								"obj1Type": "Device",
+								"obj2": "native-object-014",
+								"obj2Type": "Device",
+								"minDistance": 0.6667999999999665,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-017",
+								"obj2Suffix": ": device-014"
+							}
+						},
+						"objs": [
+							"native-object-017",
+							"native-object-014"
+						],
+						"globalIndex": "err20",
+						"pos": {
+							"x": 12.4,
+							"y": 12.5
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-016"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-018"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "1.9mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err6",
+								"position": {
+									"x": 12.6,
+									"y": 12.7
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-016",
+								"obj1Type": "Device",
+								"obj2": "native-object-018",
+								"obj2Type": "Device",
+								"minDistance": 0.1927000000000021,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-016",
+								"obj2Suffix": ": device-018"
+							}
+						},
+						"objs": [
+							"native-object-016",
+							"native-object-018"
+						],
+						"globalIndex": "err6",
+						"pos": {
+							"x": 12.6,
+							"y": 12.7
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-019"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-018"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err9",
+								"position": {
+									"x": 12.8,
+									"y": 12.9
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-019",
+								"obj1Type": "Device",
+								"obj2": "native-object-018",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-019",
+								"obj2Suffix": ": device-018"
+							}
+						},
+						"objs": [
+							"native-object-019",
+							"native-object-018"
+						],
+						"globalIndex": "err9",
+						"pos": {
+							"x": 12.8,
+							"y": 12.9
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-020"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-018"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err12",
+								"position": {
+									"x": 13,
+									"y": 13.1
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-020",
+								"obj1Type": "Device",
+								"obj2": "native-object-018",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-020",
+								"obj2Suffix": ": device-018"
+							}
+						},
+						"objs": [
+							"native-object-020",
+							"native-object-018"
+						],
+						"globalIndex": "err12",
+						"pos": {
+							"x": 13,
+							"y": 13.1
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-021"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-022"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err10",
+								"position": {
+									"x": 13.2,
+									"y": 13.3
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-021",
+								"obj1Type": "Device",
+								"obj2": "native-object-022",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-021",
+								"obj2Suffix": ": device-022"
+							}
+						},
+						"objs": [
+							"native-object-021",
+							"native-object-022"
+						],
+						"globalIndex": "err10",
+						"pos": {
+							"x": 13.2,
+							"y": 13.3
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-023"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-024"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "1.4mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err11",
+								"position": {
+									"x": 13.4,
+									"y": 13.5
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-023",
+								"obj1Type": "Device",
+								"obj2": "native-object-024",
+								"obj2Type": "Device",
+								"minDistance": 0.14184999999999093,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-023",
+								"obj2Suffix": ": device-024"
+							}
+						},
+						"objs": [
+							"native-object-023",
+							"native-object-024"
+						],
+						"globalIndex": "err11",
+						"pos": {
+							"x": 13.4,
+							"y": 13.5
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-025"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-026"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "6.3mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err13",
+								"position": {
+									"x": 13.6,
+									"y": 13.7
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-025",
+								"obj1Type": "Device",
+								"obj2": "native-object-026",
+								"obj2Type": "Device",
+								"minDistance": 0.628450000000015,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-025",
+								"obj2Suffix": ": device-026"
+							}
+						},
+						"objs": [
+							"native-object-025",
+							"native-object-026"
+						],
+						"globalIndex": "err13",
+						"pos": {
+							"x": 13.6,
+							"y": 13.7
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-027"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-025"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err24",
+								"position": {
+									"x": 13.8,
+									"y": 13.9
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-027",
+								"obj1Type": "Device",
+								"obj2": "native-object-025",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-027",
+								"obj2Suffix": ": device-025"
+							}
+						},
+						"objs": [
+							"native-object-027",
+							"native-object-025"
+						],
+						"globalIndex": "err24",
+						"pos": {
+							"x": 13.8,
+							"y": 13.9
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-028"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-026"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "4.9mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err26",
+								"position": {
+									"x": 14,
+									"y": 14.1
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-028",
+								"obj1Type": "Device",
+								"obj2": "native-object-026",
+								"obj2Type": "Device",
+								"minDistance": 0.4942000000000064,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-028",
+								"obj2Suffix": ": device-026"
+							}
+						},
+						"objs": [
+							"native-object-028",
+							"native-object-026"
+						],
+						"globalIndex": "err26",
+						"pos": {
+							"x": 14,
+							"y": 14.1
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-029"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-030"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "7.3mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err15",
+								"position": {
+									"x": 14.2,
+									"y": 14.3
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-029",
+								"obj1Type": "Device",
+								"obj2": "native-object-030",
+								"obj2Type": "Device",
+								"minDistance": 0.7262000000000626,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-029",
+								"obj2Suffix": ": device-030"
+							}
+						},
+						"objs": [
+							"native-object-029",
+							"native-object-030"
+						],
+						"globalIndex": "err15",
+						"pos": {
+							"x": 14.2,
+							"y": 14.3
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-009"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-031"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err16",
+								"position": {
+									"x": 11,
+									"y": 14.4
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-009",
+								"obj1Type": "Device",
+								"obj2": "native-object-031",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-009",
+								"obj2Suffix": ": device-031"
+							}
+						},
+						"objs": [
+							"native-object-009",
+							"native-object-031"
+						],
+						"globalIndex": "err16",
+						"pos": {
+							"x": 11,
+							"y": 14.4
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-017"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-032"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "6.7mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err19",
+								"position": {
+									"x": 14.5,
+									"y": 14.6
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-017",
+								"obj1Type": "Device",
+								"obj2": "native-object-032",
+								"obj2Type": "Device",
+								"minDistance": 0.6667999999999665,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-017",
+								"obj2Suffix": ": device-032"
+							}
+						},
+						"objs": [
+							"native-object-017",
+							"native-object-032"
+						],
+						"globalIndex": "err19",
+						"pos": {
+							"x": 14.5,
+							"y": 14.6
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-006"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-033"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err21",
+								"position": {
+									"x": 14.7,
+									"y": 14.8
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-006",
+								"obj1Type": "Device",
+								"obj2": "native-object-033",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-006",
+								"obj2Suffix": ": device-033"
+							}
+						},
+						"objs": [
+							"native-object-006",
+							"native-object-033"
+						],
+						"globalIndex": "err21",
+						"pos": {
+							"x": 14.7,
+							"y": 14.8
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-034"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-035"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err23",
+								"position": {
+									"x": 14.9,
+									"y": 15
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-034",
+								"obj1Type": "Device",
+								"obj2": "native-object-035",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-034",
+								"obj2Suffix": ": device-035"
+							}
+						},
+						"objs": [
+							"native-object-034",
+							"native-object-035"
+						],
+						"globalIndex": "err23",
+						"pos": {
+							"x": 14.9,
+							"y": 15
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					},
+					{
+						"visible": true,
+						"errorType": "Clearance Error",
+						"errorObjType": "Device to Device",
+						"ruleName": "otherClearance",
+						"ruleTypeName": "Other Spacing",
+						"obj1": {
+							"typeName": "Device",
+							"suffix": ": device-028"
+						},
+						"obj2": {
+							"typeName": "Device",
+							"suffix": ": device-036"
+						},
+						"layer": "Top Layer",
+						"explanation": {
+							"str": "{obj1} to {obj2} distance is {minDistance}, should be {shouldBe}",
+							"param": {
+								"minDistance": "0mil",
+								"shouldBe": ">= 9.8mil",
+								"obj1": "Object 1",
+								"obj2": "object 2",
+								"type": "ClearanceError"
+							},
+							"errData": {
+								"globalIndex": "err25",
+								"position": {
+									"x": 15.1,
+									"y": 15.2
+								},
+								"name": "otherClearance",
+								"obj1": "native-object-028",
+								"obj1Type": "Device",
+								"obj2": "native-object-036",
+								"obj2Type": "Device",
+								"minDistance": 0,
+								"clearance": 0.98425,
+								"errorType": "Other Spacing",
+								"layerIds": [
+									1
+								],
+								"line": {
+									"_start": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									},
+									"_end": {
+										"x": "[DetailLimitExceeded]",
+										"y": "[DetailLimitExceeded]"
+									}
+								},
+								"obj1Suffix": ": device-028",
+								"obj2Suffix": ": device-036"
+							}
+						},
+						"objs": [
+							"native-object-028",
+							"native-object-036"
+						],
+						"globalIndex": "err25",
+						"pos": {
+							"x": 15.1,
+							"y": 15.2
+						},
+						"parentId": "DRCTab|_|Errors|_|Clearance Error|_|Device to Device"
+					}
+				],
+				"count": 27,
+				"title": [
+					"Device",
+					"to",
+					"Device",
+					"(27)"
+				],
+				"visible": true
+			}
+		]
+	}
+]

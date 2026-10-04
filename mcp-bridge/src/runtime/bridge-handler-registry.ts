@@ -1,3 +1,4 @@
+import type { SchematicPinAdapter } from '../bridge/protocol.ts';
 import { operationForBridgePath } from '../bridge/bridge-contract.ts';
 import { handleApiIndexTask } from '../mcp/api-index-handler.ts';
 import { handleApiSearchTask } from '../mcp/api-search-handler.ts';
@@ -58,7 +59,7 @@ import { handleSchematicWireManageTask } from '../mcp/schematic-wire-manage-hand
 import { handleWorkspaceQueryTask } from '../mcp/workspace-query-handler.ts';
 import { handlePcbImportResolveTask } from './pcb-import-confirm-barrier.ts';
 
-export type BridgeTaskHandler = (payload: unknown) => Promise<unknown>;
+export type BridgeTaskHandler = (payload: unknown, reportPinAdapter?: (adapter: SchematicPinAdapter) => void) => Promise<unknown>;
 
 const handlers: Readonly<Record<string, BridgeTaskHandler>> = {
 	'/bridge/jlceda/api/index': handleApiIndexTask,

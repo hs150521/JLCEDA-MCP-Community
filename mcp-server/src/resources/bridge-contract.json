@@ -37,6 +37,7 @@
 					"startedAt": "finite-number"
 				},
 				"optional": {
+					"schematicPinAdapter": "schematic-pin-adapter",
 					"context": "context"
 				}
 			},

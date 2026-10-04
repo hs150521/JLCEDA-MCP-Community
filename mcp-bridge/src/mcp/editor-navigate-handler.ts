@@ -1,4 +1,4 @@
-import { getEdaRuntime, isPlainObjectRecord, toSafeErrorMessage } from '../utils.ts';
+import { getEdaRuntime, isPlainObjectRecord, isUnknownNativeRpcResult, toSafeErrorMessage } from '../utils.ts';
 
 type EdaApi = Record<string, unknown>;
 type PageKind = 'schematic' | 'pcb';
@@ -19,7 +19,6 @@ interface CurrentDocument {
 }
 
 const READBACK_INTERVAL_MS = 200;
-const NATIVE_RESULT_UNKNOWN = /timed?\s*out|disconnect|connection\s+(?:closed|lost|reset)|socket\s+(?:closed|hang up)|ECONNRESET|EPIPE/i;
 
 function requiredString(value: unknown, field: string): string {
 	if (typeof value !== 'string' || !value.trim())
@@ -182,7 +181,7 @@ export async function handleEditorNavigateTask(payload: unknown): Promise<unknow
 			: await call(editorApi, 'activateDocument', requestedTabId);
 	}
 	catch (error: unknown) {
-		if (!NATIVE_RESULT_UNKNOWN.test(toSafeErrorMessage(error)))
+		if (!isUnknownNativeRpcResult(toSafeErrorMessage(error)))
 			throw error;
 		return uncertainNavigation(operation, target, error, false, requestedTabId);
 	}

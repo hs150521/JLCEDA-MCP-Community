@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [2.3.5] - 2026-10-05
+
+- 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
+- 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
+- 普通 Pin 与 ComponentPin 共用原生 RPC 未确认分类；WebSocket is not open、transport closed、ECONNABORTED 等断连结果均返回 nativeCallSettled:false，并要求原宿主重启后完整回读。已结束但状态不匹配的调用仍区分为 nativeCallSettled:true。三种断连在两条实际处理路径、宿主重启策略与状态漂移分支均有针对性回归，已通过两轮本地复查。 同样统一图页导航与 PCB 直线/过孔创建的断连分类；回归包含原生状态已改变后才抛错的场景，继续要求宿主重启。
+- `pcb_region_manage` 的多点轮廓写入须显式首尾闭合；工具定义、Agent 指引和文档增加 EDA 3.2.181 实机要求与闭合示例。
+- `pcb_text_manage` 的 Attribute 修改参数允许 `value`、`valueVisible`，补全对应的工具契约与分发回归；2.3.5 实机两字段修改及回读已验证。
+- `pcb_drc_check` 工具契约增加 `offset`、`limit`；Bridge 返回 `nextOffset`、原生详情数量及两层截断诊断，以分页获取原生可用详情。
+- 非字符串 Bridge 错误转换为可读错误，同时保留 `code`、`reason`、`field`、`status` 等诊断；主连接、中继和工具分发的回归覆盖完整传输，错误文本不再只剩通用提示或 `[object Object]`。
+- 同步说明器件库解析、名称过滤、ComponentPin 实例修改、覆铜回退、PCB 几何归一化、元数据实际回读与制造导出分支校验；ComponentPin 失败恢复归为完整连接回读，要求目标所属器件全部引脚 ID、位置、旋转及 NC 的真实状态。工具说明补充工程库来源核对、覆铜闭合轮廓等价比较，以及过孔创建/修改的实测 0.2 mil 最近格点规则，过孔创建/修改、工程库来源核对和覆铜轮廓已完成实机验证。
+- 说明过孔删除仅验证当前页内存；缺失父 ID 不证明其独立归属。持久子过孔删除与独立封装上下文仍未解决，继续保留诊断与原生限制；真实 DRC 分类树的 28 条叶子明细已连续读取 14 页，端点完整，两种截断标志均为 false。
+- 源码及配套安装文件更新为 2.3.5；两轮本地全面审查、Server/Bridge 全量构建测试及 lint 通过。2.3.5 Server 与 Bridge 已运行，4 型号自动放置、无效引用预检、NC 切换、名称过滤、NetPort Name 三种查询、原理图 CSV/网表/PDF 及 PCB BOM 导出实测成功；已测 PCB 场景与保留问题详见 [23 项 Issue 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.3.5/docs/issue-validation-2.3.5.md)。
+
 ## [2.3.4] - 2026-09-26
 
 - 新增 `board_setup`：在当前工程一次创建 Board 及关联原理图/PCB，或把现有游离原理图与新 PCB 关联；结果不明时按同工程完整文档目录恢复。

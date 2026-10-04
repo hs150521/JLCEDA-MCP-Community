@@ -36,7 +36,7 @@ interface MessageShape {
   optional?: Record<string, FieldKind>;
 }
 
-type FieldKind = 'any' | 'bridge-path' | 'context' | 'debug-switch' | 'finite-number' | 'non-empty-string' | 'non-negative-integer' | 'positive-integer' | 'record' | 'role' | 'string' | 'task-error';
+type FieldKind = 'any' | 'bridge-path' | 'context' | 'debug-switch' | 'finite-number' | 'non-empty-string' | 'non-negative-integer' | 'positive-integer' | 'record' | 'role' | 'string' | 'task-error' | 'schematic-pin-adapter';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const contractPath = join(currentDirectory, '..', 'resources', 'bridge-contract.json');
@@ -128,6 +128,7 @@ export function isReadOnlyBridgeRequest(path: string, payload: unknown): boolean
 
 function fieldMatches(kind: FieldKind, value: unknown): boolean {
   switch (kind) {
+    case 'schematic-pin-adapter': return value === 'component_pin_instance' || value === 'native_pin';
     case 'any': return true;
     case 'string': return typeof value === 'string';
     case 'non-empty-string': return typeof value === 'string' && value.trim().length > 0;

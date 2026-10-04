@@ -1,4 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { comparePcbPolygonSource } from './pcb-polygon-equivalence.ts';
 
 type Action = 'read' | 'create' | 'modify' | 'delete' | 'rebuild';
 type PolygonSource = Array<'L' | 'ARC' | 'CARC' | 'C' | 'R' | 'CIRCLE' | number>;
@@ -146,7 +147,7 @@ function fillGeometryDigest(fills: unknown[]): string {
 function api(runtime: Record<string, unknown>, name: string, methods: string[]): Record<string, unknown> {
 	const value = runtime[name];
 	if (!isPlainObjectRecord(value) || methods.some(method => typeof value[method] !== 'function'))
-		throw new TypeError(`EDA ${name} ${methods.join('/')} API is unavailable. Open a PCB first.`);
+		throw new TypeError(`EDA ${name}.${methods.filter(method => !isPlainObjectRecord(value) || typeof value[method] !== 'function').join('/')} API is unavailable in this client version.`);
 	return value;
 }
 
@@ -259,20 +260,25 @@ function createPolygon(runtime: Record<string, unknown>, source: PolygonSource):
 	return polygon;
 }
 
-function matchingSource(actual: PolygonSource, expected: PolygonSource): boolean {
-	return actual.length === expected.length && actual.every((item, index) => {
-		const wanted = expected[index];
-		return typeof item === 'number' && typeof wanted === 'number'
-			? Math.abs(item - wanted) <= 1e-6
-			: item === wanted;
-	});
+function polygonNormalization(state: PourState, requested: Record<string, unknown>): Record<string, unknown> {
+	if (requested.polygonSource === undefined)
+		return {};
+	const comparison = comparePcbPolygonSource(state.polygonSource, requested.polygonSource);
+	if (!comparison.equivalent || !comparison.normalized)
+		return {};
+	const { equivalent: _equivalent, normalized: _normalized, ...diagnostic } = comparison;
+	return { normalization: { field: 'polygonSource', ...diagnostic } };
+}
+
+function diagnosticValue(value: unknown): unknown {
+	return Array.isArray(value) ? preserveBoundedArray([...value]) : value;
 }
 
 function matchesRequested(state: PourState, requested: Record<string, unknown>): boolean {
 	return Object.entries(requested).every(([key, value]) => {
 		const actual = state[key as keyof PourState];
 		if (key === 'polygonSource')
-			return matchingSource(state.polygonSource, value as PolygonSource);
+			return comparePcbPolygonSource(state.polygonSource, value).equivalent;
 		if (typeof value === 'number' && typeof actual === 'number')
 			return Math.abs(actual - value) <= 1e-6;
 		return actual === value;
@@ -305,7 +311,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 	const runtime = getEdaRuntime();
 	if (!runtime)
 		throw new TypeError('EDA runtime is unavailable.');
-	const pourApi = api(runtime, 'pcb_PrimitivePour', ['getAll', ...(action === 'read' ? [] : [action === 'rebuild' ? 'rebuildCopperRegions' : action])]);
+	const pourApi = api(runtime, 'pcb_PrimitivePour', ['getAll', ...(action === 'read' || action === 'rebuild' ? [] : [action])]);
 	const pageUuid = await currentPageUuid(runtime);
 	const before = await readSnapshot(runtime, pageUuid);
 	if (action === 'read')
@@ -317,6 +323,43 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 		context.all = payload.all === true;
 	if (primitiveId && !before.pours.some(pour => pour.primitiveId === primitiveId))
 		throw new TypeError(`PCB pour ${primitiveId} does not exist on the current page.`);
+	let rebuildInstances: Record<string, unknown>[] | undefined;
+	if (action === 'rebuild' && typeof pourApi.rebuildCopperRegions !== 'function') {
+		const rawPours = await (pourApi.getAll as () => Promise<unknown>).call(pourApi);
+		if (!Array.isArray(rawPours))
+			throw new TypeError('EDA pcb_PrimitivePour.getAll did not return an array.');
+		const targetIds = new Set(primitiveId ? [primitiveId] : before.pours.map(item => item.primitiveId));
+		const targets = rawPours.filter(item => targetIds.has(requiredId(readState(item, 'getState_PrimitiveId'), 'EDA pour primitiveId')));
+		if (targets.length !== targetIds.size)
+			throw new Error('PCB pour targets changed before rebuild.');
+		await assertSamePage(runtime, pageUuid);
+		if (targets.some(item => !isPlainObjectRecord(item) || typeof item.rebuildCopperRegion !== 'function')) {
+			const environment = runtime.sys_Environment;
+			let editorVersion: string | undefined;
+			try {
+				if (isPlainObjectRecord(environment) && typeof environment.getEditorCurrentVersion === 'function') {
+					const version = await environment.getEditorCurrentVersion();
+					if (typeof version === 'string')
+						editorVersion = version;
+				}
+			}
+			catch { /* 版本读取不影响未写入的能力诊断。 */ }
+			return {
+				ok: false,
+				action,
+				scope: SCOPE,
+				...context,
+				reason: 'unsupported_capability',
+				errorCode: 'EDA_CAPABILITY_UNAVAILABLE',
+				unavailableApis: ['eda.pcb_PrimitivePour.rebuildCopperRegions', 'eda.IPCB_PrimitivePour.rebuildCopperRegion'],
+				...(editorVersion ? { editorVersion } : {}),
+				error: 'The current EDA version exposes neither batch nor per-pour copper rebuilding for the requested pours.',
+				applied: false,
+				verified: false,
+			};
+		}
+		rebuildInstances = targets as Record<string, unknown>[];
+	}
 	if (requested?.net !== undefined)
 		await verifyNet(runtime, requested.net as string);
 	if (requested?.layer !== undefined)
@@ -349,6 +392,16 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 		else if (action === 'delete') {
 			nativeResult = await (pourApi.delete as (...args: unknown[]) => Promise<unknown>).call(pourApi, primitiveId);
 		}
+		else if (rebuildInstances) {
+			const results: unknown[] = [];
+			for (const target of rebuildInstances) {
+				await assertSamePage(runtime, pageUuid);
+				const result = await (target.rebuildCopperRegion as () => Promise<unknown>).call(target);
+				if (result !== undefined && result !== null)
+					results.push(result);
+			}
+			nativeResult = results;
+		}
 		else {
 			nativeResult = await (pourApi.rebuildCopperRegions as (...args: unknown[]) => Promise<unknown>).call(pourApi, payload.all === true ? undefined : [primitiveId]);
 		}
@@ -367,11 +420,11 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 			const requestedMismatches = Object.entries(requested!).filter(([field, expected]) =>
 				!matchesRequested(created, { [field]: expected })).map(([field, expected]) => ({
 				field,
-				expected,
-				actual: created[field as keyof PourState],
+				expected: diagnosticValue(expected),
+				actual: diagnosticValue(created[field as keyof PourState]),
 			}));
 			const sideEffects: Array<{ primitiveId: string; field: string; before: unknown; after: unknown }>
-				= requestedMismatches.map(item => ({ primitiveId: created.primitiveId, field: item.field, before: item.expected, after: item.actual }));
+				= requestedMismatches.map(item => ({ primitiveId: created.primitiveId, field: item.field, before: diagnosticValue(item.expected), after: diagnosticValue(item.actual) }));
 			for (const oldPour of before.pours) {
 				const newPour = after.pours.find(pour => pour.primitiveId === oldPour.primitiveId);
 				if (!newPour) {
@@ -381,7 +434,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 				for (const field of EDITABLE_FIELDS) {
 					const previous = oldPour[field as keyof PourState];
 					if (!matchesRequested(newPour, { [field]: previous }))
-						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: previous, after: newPour[field as keyof PourState] });
+						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: diagnosticValue(previous), after: diagnosticValue(newPour[field as keyof PourState]) });
 				}
 			}
 			if (requestedMismatches.length || sideEffects.length) {
@@ -400,7 +453,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 					sideEffects,
 				};
 			}
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: created.primitiveId, pour: created, verified: true };
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: created.primitiveId, pour: created, verified: true, ...polygonNormalization(created, requested!) };
 		}
 		if (action === 'modify') {
 			const modified = after.pours.find(pour => pour.primitiveId === primitiveId);
@@ -410,8 +463,8 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 			const requestedMismatches = Object.entries(requested!).filter(([field, expected]) =>
 				!matchesRequested(modified, { [field]: expected })).map(([field, expected]) => ({
 				field,
-				expected,
-				actual: modified[field as keyof PourState],
+				expected: diagnosticValue(expected),
+				actual: diagnosticValue(modified[field as keyof PourState]),
 			}));
 			const sideEffects: Array<{ primitiveId: string; field: string; before: unknown; after: unknown }> = [];
 			for (const oldPour of before.pours) {
@@ -425,7 +478,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 						continue;
 					const previous = oldPour[field as keyof PourState];
 					if (!matchesRequested(newPour, { [field]: previous })) {
-						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: previous, after: newPour[field as keyof PourState] });
+						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: diagnosticValue(previous), after: diagnosticValue(newPour[field as keyof PourState]) });
 					}
 				}
 			}
@@ -451,7 +504,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 					sideEffects,
 				};
 			}
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId, pour: modified, verified: true };
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId, pour: modified, verified: true, ...polygonNormalization(modified, requested!) };
 		}
 		if (action === 'delete') {
 			const remainingPoured = after.poured.filter(item => item.pourPrimitiveId === primitiveId);

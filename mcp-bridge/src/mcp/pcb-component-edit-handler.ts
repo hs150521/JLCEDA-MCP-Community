@@ -220,25 +220,86 @@ function requiredProperty(value: unknown): Record<string, unknown> {
 	return value;
 }
 
-function matchesRequested(state: ComponentState, requested: Record<string, unknown>, fullOtherProperty?: Record<string, Scalar>): boolean {
-	for (const [key, value] of Object.entries(requested)) {
+interface FieldMismatch {
+	field: string;
+	requested: unknown;
+	actual: unknown;
+	unchanged: boolean;
+	requestedField: boolean;
+}
+
+function sameField(key: string, actual: unknown, wanted: unknown): boolean {
+	if (typeof wanted === 'number' && typeof actual === 'number') {
+		const difference = key === 'rotation'
+			? ((actual - wanted) % 360 + 540) % 360 - 180
+			: actual - wanted;
+		return Math.abs(difference) <= 1e-6;
+	}
+	return actual === wanted;
+}
+
+function requestedMismatches(state: ComponentState, requested: Record<string, unknown>, fullOtherProperty?: Record<string, Scalar>, before?: ComponentState): FieldMismatch[] {
+	const mismatches: FieldMismatch[] = [];
+	for (const [key, wanted] of Object.entries(requested)) {
 		if (key === 'otherProperty')
 			continue;
 		const actual = state[key as keyof ComponentState];
-		if (typeof value === 'number' && typeof actual === 'number') {
-			if (Math.abs(actual - value) > 1e-6)
-				return false;
-		}
-		else if (actual !== value) {
-			return false;
+		if (!sameField(key, actual, wanted)) {
+			mismatches.push({ field: key, requested: wanted, actual, unchanged: before !== undefined && sameField(key, actual, before[key as keyof ComponentState]), requestedField: true });
 		}
 	}
-	return fullOtherProperty === undefined || Object.entries(fullOtherProperty).every(([key, value]) => Object.hasOwn(state.otherProperty, key) && state.otherProperty[key] === value);
+	for (const [key, wanted] of Object.entries(fullOtherProperty ?? {})) {
+		const actual = state.otherProperty[key];
+		if (!Object.hasOwn(state.otherProperty, key) || actual !== wanted) {
+			mismatches.push({ field: `otherProperty.${key}`, requested: wanted, actual: actual ?? null, unchanged: before !== undefined && actual === before.otherProperty[key], requestedField: isPlainObjectRecord(requested.otherProperty) && Object.hasOwn(requested.otherProperty, key) });
+		}
+	}
+	return mismatches;
+}
+
+function matchesRequested(state: ComponentState, requested: Record<string, unknown>): boolean {
+	return requestedMismatches(state, requested).length === 0;
+}
+
+function rotationNormalization(state: ComponentState, requested: Record<string, unknown>): Record<string, unknown> {
+	return typeof requested.rotation === 'number' && state.rotation !== requested.rotation && sameField('rotation', state.rotation, requested.rotation)
+		? { normalization: { rotation: { requested: requested.rotation, actual: state.rotation, mode: 'modulo_360' } } }
+		: {};
+}
+
+function sourceReference(state: ComponentState, source: Source): LibraryReference | null {
+	return source.kind === 'device' ? state.component : state.footprint;
+}
+
+function sameReference(actual: LibraryReference | null, wanted: LibraryReference | null): boolean {
+	return actual !== null && wanted !== null && actual.libraryUuid === wanted.libraryUuid && actual.uuid === wanted.uuid;
 }
 
 function matchesSource(state: ComponentState, source: Source): boolean {
-	const reference = source.kind === 'device' ? state.component : state.footprint;
-	return reference?.libraryUuid === source.libraryUuid && reference.uuid === source.uuid;
+	return sameReference(sourceReference(state, source), source);
+}
+
+function createdSourceReference(created: unknown, source: Source): LibraryReference | null {
+	const method = source.kind === 'device' ? 'getState_Component' : 'getState_Footprint';
+	const getter = (created as Record<string, unknown> | null)?.[method];
+	return typeof getter === 'function' ? readReference(getter.call(created)) : null;
+}
+
+function creationNormalization(state: ComponentState, source: Source, property: Record<string, unknown>): Record<string, unknown> {
+	const result = rotationNormalization(state, property);
+	if (matchesSource(state, source))
+		return result;
+	return {
+		normalization: {
+			...(result.normalization as Record<string, unknown> | undefined),
+			source: {
+				kind: source.kind,
+				requested: { libraryUuid: source.libraryUuid, uuid: source.uuid },
+				actual: { ...sourceReference(state, source)! },
+				mode: 'native_create_reference',
+			},
+		},
+	};
 }
 
 function unknownNativeWrite(action: Exclude<Action, 'read'>, error: unknown, context: Record<string, unknown>): Record<string, unknown> {
@@ -310,9 +371,12 @@ export async function handlePcbComponentEditTask(payload: unknown): Promise<unkn
 		catch (error: unknown) {
 			return unknownNativeWrite(action, error, context);
 		}
+		let after: ComponentState | undefined;
+		let createdId: string | undefined;
 		try {
 			await assertSamePage(runtime, pageUuid);
-			let createdId = created == null ? undefined : requiredId(readState(created, 'getState_PrimitiveId'), 'EDA created PCB component primitiveId');
+			createdId = created == null ? undefined : requiredId(readState(created, 'getState_PrimitiveId'), 'EDA created PCB component primitiveId');
+			const returnedSource = createdSourceReference(created, source!);
 			if (!createdId) {
 				const afterIds = await readAllIds(api);
 				const delta = afterIds.filter(id => !ids.includes(id));
@@ -325,14 +389,18 @@ export async function handlePcbComponentEditTask(payload: unknown): Promise<unkn
 			const observed = await api.get(createdId);
 			if (observed === undefined || observed === null)
 				throw new Error('EDA created PCB component was not readable.');
-			const after = readComponent(observed);
+			after = readComponent(observed);
 			await assertSamePage(runtime, pageUuid);
-			if (after.primitiveId !== createdId || !matchesSource(after, source!) || !matchesRequested(after, createProperty!))
+			// 原生 create 返回实例可能仍使用公共库引用，同 ID 回读则已使用工程库副本。
+			const actualSource = sourceReference(after, source!);
+			const sourceVerified = actualSource !== null && (sameReference(actualSource, source!)
+				|| sameReference(returnedSource, source!) || sameReference(actualSource, returnedSource));
+			if (after.primitiveId !== createdId || !sourceVerified || !matchesRequested(after, createProperty!))
 				throw new Error('EDA created PCB component differs from the requested source or placement.');
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: createdId, verified: true, after };
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: createdId, verified: true, after, ...creationNormalization(after, source!, createProperty!) };
 		}
 		catch (error: unknown) {
-			return unknownAfterWrite(action, error, context);
+			return unknownAfterWrite(action, error, { ...context, ...(createdId ? { primitiveId: createdId } : {}), ...(after ? { after } : {}) });
 		}
 	}
 	if (!ids.includes(primitiveId!))
@@ -348,26 +416,38 @@ export async function handlePcbComponentEditTask(payload: unknown): Promise<unkn
 	await assertSamePage(runtime, pageUuid);
 	if (action === 'modify') {
 		const fullOtherProperty = { ...before.otherProperty, ...(requested!.otherProperty as Record<string, Scalar> | undefined) };
-		const update = { ...requested!, otherProperty: fullOtherProperty };
+		const update = { ...requested!, otherProperty: { ...fullOtherProperty } };
 		try {
 			await api.modify!.call(api, primitiveId!, update);
 		}
 		catch (error: unknown) {
 			return unknownNativeWrite(action, error, context);
 		}
+		let after: ComponentState | undefined;
 		try {
 			await assertSamePage(runtime, pageUuid);
 			const observed = await api.get(primitiveId!);
 			if (observed === undefined || observed === null)
 				throw new Error('EDA modified PCB component was not readable.');
-			const after = readComponent(observed);
+			after = readComponent(observed);
 			await assertSamePage(runtime, pageUuid);
-			if (after.primitiveId !== primitiveId || !matchesRequested(after, requested!, fullOtherProperty))
-				throw new Error('EDA PCB component state differs from the requested modification.');
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId, verified: true, before, after };
+			const mismatches = requestedMismatches(after, requested!, fullOtherProperty, before);
+			if (after.primitiveId !== primitiveId)
+				mismatches.unshift({ field: 'primitiveId', requested: primitiveId, actual: after.primitiveId, unchanged: false, requestedField: false });
+			if (mismatches.length) {
+				return unknownAfterWrite(action, 'EDA PCB component state differs from the requested modification.', {
+					...context,
+					after,
+					failureKind: 'state_mismatch',
+					mismatches: preserveBoundedArray(mismatches.slice(0, 64)),
+					mismatchCount: mismatches.length,
+					mismatchesComplete: mismatches.length <= 64,
+				});
+			}
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId, verified: true, before, after, ...rotationNormalization(after, requested!) };
 		}
 		catch (error: unknown) {
-			return unknownAfterWrite(action, error, context);
+			return unknownAfterWrite(action, error, { ...context, ...(after ? { after } : {}) });
 		}
 	}
 	try {

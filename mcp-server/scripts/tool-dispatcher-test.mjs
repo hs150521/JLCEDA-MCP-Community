@@ -667,6 +667,12 @@ for (const input of [
   assert.equal(schematicTextSchema.safeParse(input).success, false, `schematic_text_manage should reject ${JSON.stringify(input)}`);
 assert.ok(textDefinition);
 const textSchema = z.fromJSONSchema(textDefinition.inputSchema);
+// #71：独立验证顶层 property，避免只测 Zod 忽略父约束的 oneOf 分支。
+const textPropertySchema = z.fromJSONSchema({ $defs: textDefinition.inputSchema.$defs, ...textDefinition.inputSchema.properties.property });
+assert.equal(textPropertySchema.safeParse({ value: 'NEW' }).success, true);
+assert.equal(textPropertySchema.safeParse({ valueVisible: false }).success, true);
+assert.equal(textPropertySchema.safeParse({ text: 'NEW' }).success, true);
+assert.equal(textPropertySchema.safeParse({ unknown: true }).success, false);
 for (const input of [
   { action: 'read' },
   { action: 'read', kind: 'string' },
@@ -675,6 +681,7 @@ for (const input of [
   { action: 'create', kind: 'string', layer: 3, x: 10, y: 20, text: 'Rev B' },
   { action: 'modify', kind: 'string', primitiveId: 's-1', property: { text: 'Rev C' } },
   { action: 'modify', kind: 'attribute', primitiveId: 'a-1', parentPrimitiveId: 'comp-1', property: { valueVisible: false } },
+  { action: 'modify', kind: 'attribute', primitiveId: 'a-1', parentPrimitiveId: 'comp-1', property: { value: 'NEW', key: 'Value', keyVisible: true } },
   { action: 'delete', kind: 'string', primitiveId: 's-1' },
 ]) {
   assert.equal(textSchema.safeParse(input).success, true, `pcb_text_manage should accept ${JSON.stringify(input)}`);
@@ -684,6 +691,8 @@ for (const input of [
   { action: 'delete', kind: 'attribute', primitiveId: 'a-1' },
   { action: 'modify', kind: 'attribute', primitiveId: 'a-1', property: { value: 'U2' } },
   { action: 'modify', kind: 'string', primitiveId: 's-1', property: { net: 'GND' } },
+  { action: 'modify', kind: 'string', primitiveId: 's-1', property: { value: 'NEW' } },
+  { action: 'modify', kind: 'attribute', primitiveId: 'a-1', parentPrimitiveId: 'comp-1', property: { text: 'NEW' } },
   { action: 'create', kind: 'string', layer: 7, x: 10, y: 20, text: 'bad' },
 ]) {
   assert.equal(textSchema.safeParse(input).success, false, `pcb_text_manage should reject ${JSON.stringify(input)}`);
@@ -744,6 +753,8 @@ assert.ok(manufactureExportDefinition);
 const manufactureExportSchema = z.fromJSONSchema(manufactureExportDefinition.inputSchema);
 for (const input of [
   { domain: 'pcb', kind: 'gerber', unit: 'inch' },
+  { domain: 'schematic', kind: 'bom', fileType: 'csv', includeData: true },
+  { domain: 'pcb', kind: 'bom', fileType: 'xlsx' },
   { domain: 'pcb', kind: 'pick_and_place', unit: 'mil' },
   { domain: 'pcb', kind: 'open_database', unit: 'inch' },
   { domain: 'pcb', kind: 'open_database', unit: 'mm' },

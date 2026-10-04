@@ -1,8 +1,16 @@
 # JLCEDA MCP 社区版
 
-当前源码版本：Bridge `2.3.4`，MCP Server `2.3.4`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+当前源码版本：Bridge `2.3.5`，MCP Server `2.3.5`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
 
 2.3.4 新增 `board_setup`：传当前工程 UUID 和 `confirm:true`，可新建 Board 及关联的原理图、PCB；提供尚未关联 Board 的原理图 UUID 时，会创建 PCB 并将两者关联到新 Board。工具回读三个文档的归属，不会自动打开 PCB 或导入原理图变更。
+
+2.3.5 已通过发布验证：补充器件库引用解析、器件引脚实例修改、覆铜重建回退、PCB 图元等价回读、DRC 分页和结构化错误诊断。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 三种查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。全部 23 个 Issue 的证据、待验证项及未解决限制见 [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)。
+
+发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
+
+普通 Pin 与 ComponentPin 共用原生 RPC 未确认分类；WebSocket is not open、transport closed、ECONNABORTED 等断连结果均返回 nativeCallSettled:false，并要求原宿主重启后完整回读。已结束但状态不匹配的调用仍区分为 nativeCallSettled:true。三种断连在两条实际处理路径、宿主重启策略与状态漂移分支均有针对性回归，已通过两轮本地复查。 同样统一图页导航与 PCB 直线/过孔创建的断连分类；回归包含原生状态已改变后才抛错的场景，继续要求宿主重启。
+
+名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
 
 原理图器件几何修改会核对有名网络和匿名导线连通组；引脚离开匿名导线或移至另一组时会报告连接变化。大图页可为 `schematic_read` 和 `bridge_recover_client` 设置最多 120 秒的 `timeoutMs`。
 
@@ -33,16 +41,16 @@ PCB `autoRouting` 指定网络时使用 `RoutingNets:["网络名"]`；返回值�
 - `pcb_documents_manage`：按当前工程 UUID 完整列出 PCB，或在 `confirm:true` 时创建游离/指定板子的 PCB、复制或重命名已有 PCB。写后核对工程和 PCB UUID；重命名要求目标 PCB 已打开，工具不会切换图页。未知提交须完整回读工程 PCB 目录。
 - `board_setup`：在当前工程创建 Board 和关联的原理图、PCB，也可复用现有游离原理图；结果不明时完整回读同工程的 Board、原理图和 PCB 目录，不自动删除可能留下的游离 PCB。
 - `editor_navigate`：在当前工程中按文档 UUID 打开原理图图页或 PCB；也可按已有 `tabId` 激活，并提供文档 UUID 供切换前后核对。成功时回读工程、文档、图页与标签 ID；结果不明时先按目标文档回读，不要盲目重复切换。
-- `pcb_drc_check`：读取 PCB 设计规则检查结果。
+- `pcb_drc_check`：分页读取 PCB 设计规则检查详情；支持 `offset`、`limit`，返回 `nextOffset`，并区分原生详情缺失与 Bridge 序列化截断。
 - `pcb_net_query`：按条件和数量限制查询当前 PCB 网络；精确网络图元过滤接受官方 `EPCB_PrimitiveType` 名称，由 Bridge 对 EDA 返回的图元筛选。
 - `pcb_read`：一次读取当前 PCB 页选定的语义部分；默认包含器件与网络，可选焊盘、布线、覆铜、板框、区域和文本，`sections:["all"]` 读取全部。所选部分返回不截断的图元数组，并在读取前后核对 PCB UUID。
-- `pcb_component_edit`：完整读取当前 PCB 器件，或按库引用放置器件、按图元 ID 修改层、坐标、角度、锁定状态、位号和 BOM 属性及删除单件；写后核对同板状态，提交状态不明时需完整回读器件后再判断是否重试。
+- `pcb_component_edit`：完整读取当前 PCB 器件，或按库引用放置、按 ID 修改层、坐标、角度、锁定状态、位号和 BOM 属性及删除单件。旋转按模 360 度比较；部分修改失败返回实际 `after`、`failureKind` 和字段差异，按诊断回读后再判断是否重试。
 - `pcb_pour_manage`：读取当前 PCB 的全部覆铜边框、填充关联和几何摘要，使用可序列化的轮廓源数组创建或修改单个覆铜边框，并可删除或明确重建填充。创建和修改后不会自动重建；若 EDA 自动调整优先级等字段，会明确返回请求值、写后状态及副作用。单件重建无目标填充、删除后仍有关联填充时也不会误报成功。结果不明时需在同一 PCB 回读全部边框和填充摘要。
 - `pcb_routing_edit`：完整或按 ID 读取 PCB 铜层直线、圆弧、折线和过孔；创建圆弧或折线，并按 ID 修改或删除上述图元。删除后以同类 `getAll` 的完整 ID 列表核对，不受原生 `get(id)` 删除占位对象影响；结果不明时回读全板布线及网络状态。
 - `pcb_board_outline_manage`：完整或按 ID 读取 PCB 板框层的直线、圆弧和折线，创建、修改或删除单个板框图元；写后核对当前 PCB。允许用多段图元组成板框，不要求每段独立闭合。
-- `pcb_region_manage`：读取当前 PCB 全部禁止区域和约束区域，包括多轮廓区域；按 ID 创建、修改和删除单个区域，创建与修改使用单轮廓源数组。创建未生效或实际属性不同、部分修改时返回已确认的实际状态；删除以完整区域列表确认目标 ID 消失。
+- `pcb_region_manage`：读取当前 PCB 全部禁止区域和约束区域，包括多轮廓区域；按 ID 创建、修改和删除单个区域，创建与修改使用单轮廓源数组，多点轮廓须在末尾重复首点以显式闭合。创建未生效或实际属性不同、部分修改时返回已确认的实际状态；删除以完整区域列表确认目标 ID 消失。
 - `pcb_text_manage`：完整读取当前 PCB 独立文本与器件属性，按 ID 创建、修改或删除独立文本，并修改现有器件的位号、值等属性文字及显示样式；写后核对同板图元，未知提交需完整回读文本与属性。
-- `pcb_connectivity_action`：按当前 PCB 数据单位创建单条直线导线或过孔，并回读创建结果；需要已存在网络，或显式允许新网络。
+- `pcb_connectivity_action`：按当前 PCB 数据单位创建直线走线或过孔。可确认原生拆分或合并后的共线覆盖，以及 EDA 3.2.181 实测的 0.2 mil 网格最近值过孔尺寸归一化；返回实际图元和 `normalization`。需要已存在网络，或显式允许新网络。
 - `schematic_drc_check`、`pcb_constraints_query`、`project_info` 和 `netlist_compare`：提供设计审查和工程身份信息；`project_info` 可选返回受限的 Board 和 Panel 清单。
 - `eda_context`：在客户端支持时返回 JLCEDA/EasyEDA 版本、在线模式、编辑器版本、编译日期和当前画布数据单位。
 - `eda_canvas_snapshot`：读取当前画布元数据，并可在明确请求时返回受限的只读 MCP 图像。
@@ -57,9 +65,9 @@ PCB `autoRouting` 指定网络时使用 `RoutingNets:["网络名"]`；返回值�
 - `pcb_document_action`：读取 PCB 坐标、选中图元、区域图元、过滤器和画布状态；执行视图导航、保存、变更导入以及 Base64 自动布局/布线文件导入。
 - `component_select`：支持精确器件属性查询，包括 LCSC `supplierId`。
 - `library_sources`：列出系统、个人、工程和收藏库。
-- `library_search`：搜索或读取 0.4.15 设备、符号、封装、3D 模型、可复用模块和 Panel 库资源，也支持仿真模型搜索；设备搜索支持精确属性和官方 LCSC C 编号映射。
+- `library_search`：搜索或读取 0.4.15 设备、符号、封装、3D 模型、可复用模块和 Panel 库资源，也支持仿真模型搜索；设备搜索支持精确属性和官方 LCSC C 编号映射。设备名称属性搜索会核对实际名称，各页固定关键词搜索并核对全部请求属性。
 - `pcb_constraints_query`：读取当前规则、规则配置、网络规则、区域规则和约束组。
-- `manufacture_export`：生成受限的 BOM、Gerber、网表、贴片坐标等制造文件。
+- `manufacture_export`：生成受限的 BOM、Gerber、网表、贴片坐标等制造文件；仅校验选定 domain/kind 的参数，BOM、图纸文档、标准与仿真网表使用各自格式，避免其他分支提前校验。
 - `manufacture_templates_query`：列出 PCB BOM 模板或原理图装配变体；`manufacture_export` 可使用返回的装配变体。
 
 `schematic_document_action` 与 `pcb_document_action` 的纯查询和画布导航可在写入隔离期间使用；改变选择状态、飞线计算、保存和导入仍按写操作隔离。
@@ -84,10 +92,10 @@ PCB `import_changes` 返回 `pending_confirmation` 后，全局写入暂停，�
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.3.4
+       JLCEDA MCP Server 2.3.5
                   | 本机 WebSocket
                   v
-       MCP Bridge 社区版 2.3.4
+       MCP Bridge 社区版 2.3.5
                   | JLCEDA 扩展 API
                   v
            嘉立创 EDA 专业版
@@ -95,16 +103,18 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.3.4
+## 安装 2.3.5
+
+以下为 2.3.5 的安装文件名；发布验证完成前，请以发布页实际提供的版本为准，并保持 Bridge 与 Server 版本一致。
 
 需要 Node.js 20 或更高版本。
 
-1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.4.eext`。
+1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.5.eext`。
    安装后在“已安装”的扩展详情中确认已允许“外部交互”，否则 Bridge 无法连接本机 MCP Server。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.3.4.tgz
+   npm install --global .\jlceda-mcp-server-2.3.5.tgz
    Get-Command jlceda-mcp
    ```
 
@@ -152,6 +162,15 @@ codex mcp list
 - 本版扩展仅声明兼容嘉立创 EDA 专业版 3.x，已在 3.2.181 上测试；EDA v4 需等待未来明确支持 v4 的版本。
 - 官方 `createNetLabel` 从 EDA v4 起提供，当前 3.x 版本无法创建普通网络标签。Bridge 直接返回 `EDA_VERSION_UNSUPPORTED`，不会启动可能挂起的 EDA 调用；电源和地网络标识仍可使用。
 
+## 当前操作限制
+
+- 原理图自动放置先查设备库，将裸 UUID 引用解析为完整 DeviceItem；查无设备时停止，避免将无效引用交给原生创建。2.3.5 实机中，无效设备 UUID 立即返回 `DEVICE_NOT_FOUND`，随后自动放置 0603 C23221 及 0805 C96346/C84376/C110775 的 4 型号批次全部成功，合计约 8.9 秒。
+- `api_invoke` 修改原理图 ComponentPin 的 NC 或引脚号时，使用真实器件引脚实例；引脚位置、旋转和其他符号几何不作为该适配器的可写字段。失败后按 `schematic_connectivity_primitives` 诊断，以 `schematic_read includeConnectivityPrimitives:true` 核对所属器件全部引脚的 `pinId/x/y/rotation/noConnected`，只查询上下文不能解除隔离。2.3.5 实机 NC `true`→`false` 两次均 `verified:true`，目标坐标与同器件其他引脚保持不变。
+- 现有点导线改成多线段路径会在写入前返回 `point_wire_path_conversion_unsupported`；可新建目标导线并核对连接，再显式删除原点导线。
+- `pcb_connectivity_action via_create` 与 `pcb_routing_edit` 的过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 `round_0_2_mil` 结果，返回请求值与实际孔径/外径；真实尺寸差异仍失败。创建与修改已实测通过：15.748/31.496→15.8/31.4、15.7/31.5→15.8/31.6。
+- 过孔删除只确认当前页内存中目标消失，返回 `verificationScope:"current_page_memory"` 和 `durableDeletionVerified:false`。已知封装子过孔拒绝删除；缺少父 ID 时归属未知，必须保存并重新打开 PCB 后核对持久性。
+- 独立封装编辑器尚无专用 Bridge 上下文，不能作为普通 PCB 页完整控制。
+
 ## 开发与发布
 
 ```powershell
@@ -168,6 +187,8 @@ npm run build
 - [安全政策](SECURITY.md)
 - [隐私与本地数据流](PRIVACY.md)
 - [发布检查表](docs/publishing.md)
+- [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)
+- [v2.3.5 发布说明草稿](docs/releases/v2.3.5.md)
 - [v2.3.4 发布说明](docs/releases/v2.3.4.md)
 - [v2.3.3 发布说明](docs/releases/v2.3.3.md)
 - [嘉立创扩展广场发布要求](https://prodocs.lceda.cn/cn/api/guide/extensions-marketplace.html)

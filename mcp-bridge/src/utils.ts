@@ -28,7 +28,24 @@ export function getEdaRuntime(): Record<string, unknown> | undefined {
 	return undefined;
 }
 
+/** 原生 RPC 连接或超时错误不能证明 EDA 调用已经结束。 */
+export function isUnknownNativeRpcResult(errorMessage: string): boolean {
+	return /timed?\s*out|ETIMEDOUT|disconnect|connection\s+(?:closed|lost|reset|aborted)|socket\s+(?:closed|hang up)|transport\s+(?:closed|lost)|websocket.*(?:closed|not open)|ECONNRESET|ECONNABORTED|EPIPE/i.test(errorMessage);
+}
+
 const PRESERVE_BOUNDED_ARRAY = Symbol('preserveBoundedArray');
+const PRESERVE_BOUNDED_JSON = Symbol('preserveBoundedJson');
+
+/** Keep a handler-owned JSON DTO whose size, depth and cycles have already been bounded. */
+export function preserveBoundedJson<T extends object>(value: T): T {
+	Object.defineProperty(value, PRESERVE_BOUNDED_JSON, { value: true });
+	return value;
+}
+
+function isBoundedJson(value: unknown): boolean {
+	return typeof value === 'object' && value !== null
+		&& (value as Record<symbol, unknown>)[PRESERVE_BOUNDED_JSON] === true;
+}
 
 /** Mark a handler-owned, already bounded array so final bridge serialization keeps its declared limit. */
 export function preserveBoundedArray<T>(values: T[]): T[] {
@@ -60,8 +77,28 @@ export function getSyncState<T>(obj: unknown, method: string, fallback: T): T {
  * @param error 原始异常对象。
  * @returns 安全文本。
  */
+export function toSafeErrorDetails(error: unknown): { message: string; name?: string; code?: string; reason?: string; field?: string; status?: string | number } {
+	const details: { message: string; name?: string; code?: string; reason?: string; field?: string; status?: string | number } = {
+		message: error instanceof Error ? error.message.slice(0, 2048) : '',
+	};
+	if (isPlainObjectRecord(error)) {
+		for (const key of ['message', 'name', 'code', 'reason', 'field'] as const) {
+			if (typeof error[key] === 'string' && error[key].trim())
+				details[key] = error[key].slice(0, 2048);
+		}
+		if (typeof error.status === 'string' || typeof error.status === 'number')
+			details.status = typeof error.status === 'string' ? error.status.slice(0, 128) : error.status;
+		details.message ||= details.reason || (details.code ? `EDA rejected the operation (${details.code}).` : 'EDA rejected the operation (object error without a message).');
+	}
+	else {
+		details.message ||= String(error).slice(0, 2048);
+	}
+	return details;
+}
+
 export function toSafeErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
+	const details = toSafeErrorDetails(error);
+	return details.code ? `${details.code}: ${details.message}` : details.message;
 }
 
 /**
@@ -117,6 +154,8 @@ export function encodeAsciiToBase64(value: string): string {
  * @returns 可 JSON 序列化值。
  */
 export function toSerializable(value: unknown, depth = 0, seen?: WeakSet<object>): unknown {
+	if (isBoundedJson(value))
+		return value;
 	if (value === null || value === undefined) {
 		return value;
 	}
@@ -200,6 +239,8 @@ async function serializeBlobLike(value: Blob): Promise<Record<string, unknown>> 
  * @returns 可 JSON 序列化值。
  */
 export async function toSerializableAsync(value: unknown, depth = 0, seen?: WeakSet<object>): Promise<unknown> {
+	if (isBoundedJson(value))
+		return value;
 	if (value === null || value === undefined) {
 		return value;
 	}

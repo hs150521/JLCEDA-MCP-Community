@@ -10,7 +10,7 @@
  * ------------------------------------------------------------------------
  */
 
-import { getSyncState, safeCall } from '../utils';
+import { getSyncState, isPlainObjectRecord, safeCall } from '../utils';
 
 class PageNotReadyError extends Error {}
 
@@ -282,6 +282,20 @@ function propagateNetworkNamesViaBFS(
 	}
 }
 
+function readPinNcState(pin: unknown): boolean | null {
+	const getter = isPlainObjectRecord(pin) ? pin.getState_NoConnected : undefined;
+	if (typeof getter !== 'function')
+		return null;
+	try {
+		// SDK 允许已存在的 getter 返回 undefined，表示没有 NC 标记。
+		const value = getter.call(pin);
+		return value === undefined ? false : typeof value === 'boolean' ? value : null;
+	}
+	catch {
+		return null;
+	}
+}
+
 // 扫描原理图并输出电路语义 JSON 字符串。
 async function readSchematicCircuit(): Promise<{ ok: true; data: string; componentIds: string[] } | { ok: false; error: string }> {
 	// ── 第一步：仅获取当前图页的器件实例 ──────────────────────────────────
@@ -371,6 +385,11 @@ async function readSchematicCircuit(): Promise<{ ok: true; data: string; compone
 	// ── 第三步：遍历器件，组装语义输出结构 ──────────────────────────────────
 	interface PinSemanticInfo {
 		pinNumber: string;
+		pinId: string | null;
+		x: number | null;
+		y: number | null;
+		rotation: number | null;
+		noConnected: boolean | null;
 		pinSignalName: string;
 		pinElectricalType: string;
 		connectedNetworkName: string;
@@ -414,6 +433,11 @@ async function readSchematicCircuit(): Promise<{ ok: true; data: string; compone
 				schematicSubPartName: '',
 				pins: [{
 					pinNumber: '1',
+					pinId: null,
+					x: null,
+					y: null,
+					rotation: null,
+					noConnected: null,
 					pinSignalName: netFlagNetworkName,
 					pinElectricalType: 'power',
 					connectedNetworkName: netFlagNetworkName,
@@ -429,10 +453,15 @@ async function readSchematicCircuit(): Promise<{ ok: true; data: string; compone
 		for (const rawPin of pinsByComponentId.get(primitiveId) ?? []) {
 			const pinNumber = getSyncState<string>(rawPin, 'getState_PinNumber', '');
 			const pinSignalName = getSyncState<string>(rawPin, 'getState_PinName', '');
-			const pinElectricalType = getSyncState<string>(rawPin, 'getState_PinType', '');
+			const pinElectricalType = getSyncState<string>(rawPin, 'getState_pinType', getSyncState<string>(rawPin, 'getState_PinType', ''));
 			const pinConnectionX = getSyncState<number>(rawPin, 'getState_X', 0);
 			const pinConnectionY = getSyncState<number>(rawPin, 'getState_Y', 0);
-			const hasNoConnectMark = getSyncState<boolean>(rawPin, 'getState_NoConnected', false);
+			const noConnected = readPinNcState(rawPin);
+			const hasNoConnectMark = noConnected ?? false;
+			const pinId = getSyncState<unknown>(rawPin, 'getState_PrimitiveId', undefined);
+			const rawX = getSyncState<unknown>(rawPin, 'getState_X', undefined);
+			const rawY = getSyncState<unknown>(rawPin, 'getState_Y', undefined);
+			const rawRotation = getSyncState<unknown>(rawPin, 'getState_Rotation', undefined);
 
 			const coordinateKey = buildPinCoordinateKey(pinConnectionX, pinConnectionY);
 			const connectedNetworkName = coordinateToNetworkNameMap.get(coordinateKey) ?? '';
@@ -447,7 +476,18 @@ async function readSchematicCircuit(): Promise<{ ok: true; data: string; compone
 				networkPinSet.add(pinRef);
 			}
 
-			pins.push({ pinNumber, pinSignalName, pinElectricalType, connectedNetworkName, hasNoConnectMark });
+			pins.push({
+				pinNumber,
+				pinSignalName,
+				pinElectricalType,
+				connectedNetworkName,
+				hasNoConnectMark,
+				pinId: typeof pinId === 'string' && pinId ? pinId : null,
+				x: typeof rawX === 'number' && Number.isFinite(rawX) ? rawX : null,
+				y: typeof rawY === 'number' && Number.isFinite(rawY) ? rawY : null,
+				rotation: typeof rawRotation === 'number' && Number.isFinite(rawRotation) ? rawRotation : null,
+				noConnected,
+			});
 		}
 
 		components.push({

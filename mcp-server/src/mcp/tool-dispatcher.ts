@@ -141,6 +141,10 @@ export class ToolDispatcher {
       const errorStack = error instanceof Error ? error.stack : undefined;
       const errorCode = optionalErrorString(error, 'code');
       const errorTimeoutMs = optionalErrorTimeoutMs(error);
+      const errorReason = optionalErrorString(error, 'reason');
+      const errorField = optionalErrorString(error, 'field');
+      const errorStatus = isPlainObjectRecord(error) && (typeof error.status === 'string' || typeof error.status === 'number') ? error.status : undefined;
+      const errorMessage = error instanceof Error ? error.message : String(error);
       process.stderr.write(`${JSON.stringify({
         timestamp: new Date().toISOString(),
         level: 'error',
@@ -151,13 +155,28 @@ export class ToolDispatcher {
         toolName: toolCallParams.name,
         bridgePath,
         phase: 'dispatch',
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage,
         errorName: error instanceof Error ? error.name : typeof error,
         errorCode,
         errorTimeoutMs,
+        errorReason,
+        errorField,
+        errorStatus,
         errorStack: errorStack && errorStack.length > 8000 ? `${errorStack.slice(0, 8000)}...` : errorStack,
       })}\n`);
-      throw new Error(`工具 ${toolCallParams.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
+      const diagnosticFields = [
+        errorReason && errorReason !== errorMessage ? `reason: ${errorReason}` : undefined,
+        errorField ? `field: ${errorField}` : undefined,
+        errorStatus === undefined ? undefined : `status: ${String(errorStatus)}`,
+      ].filter((value) => value !== undefined);
+      const diagnosticSuffix = diagnosticFields.length ? ` (${diagnosticFields.join('; ')})` : '';
+      throw Object.assign(new Error(`工具 ${toolCallParams.name} 执行失败: ${errorCode ? `[${errorCode}] ` : ''}${errorMessage}${diagnosticSuffix}`), {
+        code: errorCode,
+        timeoutMs: errorTimeoutMs,
+        reason: errorReason,
+        field: errorField,
+        status: errorStatus,
+      });
     }
   }
 

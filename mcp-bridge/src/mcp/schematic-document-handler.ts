@@ -83,6 +83,64 @@ async function serializeArray(values: unknown[], limit: number): Promise<unknown
 	return preserveBoundedArray(await Promise.all(values.slice(0, limit).map(value => toSerializableAsync(value))));
 }
 
+function primitiveState(value: unknown, field: string): unknown {
+	if (!isPlainObjectRecord(value))
+		return undefined;
+	const getter = value[`getState_${field.charAt(0).toUpperCase()}${field.slice(1)}`];
+	return typeof getter === 'function' ? getter.call(value) : value[field];
+}
+
+function textOrAttributeType(value: unknown): boolean {
+	return value === 'Text' || value === 'TEXT' || value === 'Attribute' || value === 'ATTR';
+}
+
+async function inspectedAttributes(eda: Record<string, unknown>, ids: string[]): Promise<Map<string, Record<string, unknown>>> {
+	const result = new Map<string, Record<string, unknown>>();
+	const api = eda.sch_PrimitiveAttribute;
+	if (!ids.length || !isPlainObjectRecord(api))
+		return result;
+	// 通用 Primitive 查询会把绑定 ATTR 包装成 Text；无父 ID 的 getAll 又可能漏掉它。
+	// 优先按候选 ID 批量读取真实 Attribute，核对类型及身份，保留原生父图元关系。
+	const requested = new Set(ids);
+	let attributes: unknown;
+	let method: string;
+	if (typeof api.get === 'function') {
+		method = 'get';
+		attributes = await api.get([...requested]);
+	}
+	else if (typeof api.getAll === 'function') {
+		method = 'getAll';
+		attributes = await api.getAll();
+	}
+	else {
+		return result;
+	}
+	if (!Array.isArray(attributes))
+		throw new TypeError(`EDA sch_PrimitiveAttribute.${method} did not return an array.`);
+	for (const attribute of attributes) {
+		const id = primitiveState(attribute, 'primitiveId');
+		const type = primitiveState(attribute, 'primitiveType');
+		if (typeof id !== 'string' || !requested.has(id) || (type !== 'Attribute' && type !== 'ATTR'))
+			continue;
+		const resolved: Record<string, unknown> = { primitiveType: 'Attribute', primitiveId: id };
+		for (const field of ['key', 'value', 'parentPrimitiveId', 'x', 'y', 'rotation', 'color', 'fontName', 'fontSize', 'bold', 'italic', 'underLine', 'alignMode', 'fillColor', 'keyVisible', 'valueVisible']) {
+			const value = primitiveState(attribute, field);
+			if (value !== undefined)
+				resolved[field] = value;
+		}
+		result.set(id, resolved);
+	}
+	return result;
+}
+
+async function resolvedPrimitives(eda: Record<string, unknown>, values: unknown[]): Promise<unknown[]> {
+	const candidates = values.filter(value => textOrAttributeType(primitiveState(value, 'primitiveType')))
+		.map(value => primitiveState(value, 'primitiveId'))
+		.filter((id): id is string => typeof id === 'string');
+	const attributes = await inspectedAttributes(eda, candidates);
+	return values.map(value => attributes.get(String(primitiveState(value, 'primitiveId'))) ?? value);
+}
+
 export async function handleSchematicDocumentTask(payload: unknown): Promise<unknown> {
 	if (!isPlainObjectRecord(payload))
 		throw new TypeError('schematic_document_action payload must be an object.');
@@ -210,14 +268,16 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 		if (typeof primitive.getPrimitiveTypeByPrimitiveId !== 'function')
 			throw new TypeError('EDA sch_Primitive.getPrimitiveTypeByPrimitiveId API is unavailable in this client version.');
 		const id = requiredId(payload, 'id');
-		const value = await primitive.getPrimitiveTypeByPrimitiveId(id);
+		const nativeType = await primitive.getPrimitiveTypeByPrimitiveId(id);
+		const attributes = textOrAttributeType(nativeType) ? await inspectedAttributes(eda, [id]) : undefined;
+		const value = attributes?.has(id) ? 'Attribute' : nativeType;
 		return { ok: true, action, id, primitiveType: await toSerializableAsync(value) };
 	}
 	if (action === 'primitive_by_id') {
 		if (typeof primitive.getPrimitiveByPrimitiveId !== 'function')
 			throw new TypeError('EDA sch_Primitive.getPrimitiveByPrimitiveId API is unavailable in this client version.');
 		const id = requiredId(payload, 'id');
-		const value = await primitive.getPrimitiveByPrimitiveId(id);
+		const [value] = await resolvedPrimitives(eda, [await primitive.getPrimitiveByPrimitiveId(id)]);
 		return { ok: true, action, id, primitive: await toSerializableAsync(value) };
 	}
 	if (action === 'primitives_by_id') {
@@ -225,7 +285,7 @@ export async function handleSchematicDocumentTask(payload: unknown): Promise<unk
 			throw new TypeError('EDA sch_Primitive.getPrimitivesByPrimitiveId API is unavailable in this client version.');
 		const ids = requiredIds(payload);
 		const result = await primitive.getPrimitivesByPrimitiveId(ids);
-		return { ok: true, action, ids, primitives: await serializeArray(Array.isArray(result) ? result : [], MAX_INSPECT_ITEMS) };
+		return { ok: true, action, ids, primitives: await serializeArray(await resolvedPrimitives(eda, Array.isArray(result) ? result : []), MAX_INSPECT_ITEMS) };
 	}
 	if (typeof primitive.getPrimitivesBBox !== 'function')
 		throw new TypeError('EDA sch_Primitive.getPrimitivesBBox API is unavailable in this client version.');

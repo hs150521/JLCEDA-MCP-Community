@@ -12,7 +12,7 @@ export interface BridgeOperation {
 	readOnlyIfCurrentPageArgsApiFullNames?: string[];
 }
 
-type FieldKind = 'any' | 'bridge-path' | 'context' | 'debug-switch' | 'finite-number' | 'non-empty-string' | 'non-negative-integer' | 'positive-integer' | 'record' | 'role' | 'string' | 'task-error';
+type FieldKind = 'any' | 'bridge-path' | 'context' | 'debug-switch' | 'finite-number' | 'non-empty-string' | 'non-negative-integer' | 'positive-integer' | 'record' | 'role' | 'string' | 'task-error' | 'schematic-pin-adapter';
 interface MessageShape {
 	required: Record<string, FieldKind>;
 	optional?: Record<string, FieldKind>;
@@ -89,6 +89,7 @@ export function resolveContractTimeoutMs(path: string, payload: unknown): number
 
 function fieldMatches(kind: FieldKind, value: unknown): boolean {
 	switch (kind) {
+		case 'schematic-pin-adapter': return value === 'component_pin_instance' || value === 'native_pin';
 		case 'any': return true;
 		case 'string': return typeof value === 'string';
 		case 'non-empty-string': return typeof value === 'string' && value.trim().length > 0;

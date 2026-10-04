@@ -164,40 +164,40 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 	if (domain === 'pcb') {
 		if (!PCB_METHODS.has(kind))
 			throw new TypeError(`Unsupported PCB export kind: ${kind}.`);
-		const calls: Record<string, { method: string; args: unknown[] }> = {
-			'gerber': { method: 'getGerberFile', args: [fileName, undefined, unit] },
-			'bom': { method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template] },
-			'netlist': { method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] },
-			'pick_and_place': { method: 'getPickAndPlaceFile', args: [fileName, optionalEnum(input, 'fileType', PICK_AND_PLACE_FILE_TYPES), unit] },
-			'3d': { method: 'get3DFile', args: [fileName, optionalEnum(input, 'fileType', THREE_D_FILE_TYPES)] },
-			'3d_shell': { method: 'get3DShellFile', args: [fileName, optionalEnum(input, 'fileType', THREE_D_SHELL_FILE_TYPES)] },
-			'test_point': { method: 'getTestPointFile', args: [fileName, optionalEnum(input, 'fileType', TEST_POINT_FILE_TYPES)] },
-			'flying_probe_test': { method: 'getFlyingProbeTestFile', args: [fileName] },
-			'dxf': { method: 'getDxfFile', args: [fileName] },
-			'pdf': { method: 'getPdfFile', args: [fileName] },
-			'ipc_d356a': { method: 'getIpcD356AFile', args: [fileName] },
-			'open_database': { method: 'getOpenDatabaseDoublePlusFile', args: [fileName, unit] },
-			'interactive_bom': { method: 'getInteractiveBomFile', args: [fileName] },
-			'dsn': { method: 'getDsnFile', args: [fileName] },
-			'auto_route_json': { method: 'getAutoRouteJsonFile', args: [fileName] },
-			'auto_layout_json': { method: 'getAutoLayoutJsonFile', args: [fileName] },
-			'altium': { method: 'getAltiumDesignerFile', args: [fileName] },
-			'pads': { method: 'getPadsFile', args: [fileName] },
-			'pcb_info': { method: 'getPcbInfoFile', args: [fileName] },
-			'idx': { method: 'getIdxFile', args: [fileName] },
-			'manufacture_data': { method: 'getManufactureData', args: [] },
+		const calls: Record<string, () => { method: string; args: unknown[] }> = {
+			'gerber': () => ({ method: 'getGerberFile', args: [fileName, undefined, unit] }),
+			'bom': () => ({ method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template] }),
+			'netlist': () => ({ method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] }),
+			'pick_and_place': () => ({ method: 'getPickAndPlaceFile', args: [fileName, optionalEnum(input, 'fileType', PICK_AND_PLACE_FILE_TYPES), unit] }),
+			'3d': () => ({ method: 'get3DFile', args: [fileName, optionalEnum(input, 'fileType', THREE_D_FILE_TYPES)] }),
+			'3d_shell': () => ({ method: 'get3DShellFile', args: [fileName, optionalEnum(input, 'fileType', THREE_D_SHELL_FILE_TYPES)] }),
+			'test_point': () => ({ method: 'getTestPointFile', args: [fileName, optionalEnum(input, 'fileType', TEST_POINT_FILE_TYPES)] }),
+			'flying_probe_test': () => ({ method: 'getFlyingProbeTestFile', args: [fileName] }),
+			'dxf': () => ({ method: 'getDxfFile', args: [fileName] }),
+			'pdf': () => ({ method: 'getPdfFile', args: [fileName] }),
+			'ipc_d356a': () => ({ method: 'getIpcD356AFile', args: [fileName] }),
+			'open_database': () => ({ method: 'getOpenDatabaseDoublePlusFile', args: [fileName, unit] }),
+			'interactive_bom': () => ({ method: 'getInteractiveBomFile', args: [fileName] }),
+			'dsn': () => ({ method: 'getDsnFile', args: [fileName] }),
+			'auto_route_json': () => ({ method: 'getAutoRouteJsonFile', args: [fileName] }),
+			'auto_layout_json': () => ({ method: 'getAutoLayoutJsonFile', args: [fileName] }),
+			'altium': () => ({ method: 'getAltiumDesignerFile', args: [fileName] }),
+			'pads': () => ({ method: 'getPadsFile', args: [fileName] }),
+			'pcb_info': () => ({ method: 'getPcbInfoFile', args: [fileName] }),
+			'idx': () => ({ method: 'getIdxFile', args: [fileName] }),
+			'manufacture_data': () => ({ method: 'getManufactureData', args: [] }),
 		};
-		return calls[kind];
+		return calls[kind]();
 	}
 	if (!SCHEMATIC_METHODS.has(kind))
 		throw new TypeError(`Unsupported schematic export kind: ${kind}.`);
-	const calls: Record<string, { method: string; args: unknown[] }> = {
-		bom: { method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] },
-		netlist: { method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] },
-		simulation_netlist: { method: 'getSimulationNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', SIMULATION_NETLIST_TYPES)] },
-		document: { method: 'getExportDocumentFile', args: [fileName, optionalEnum(input, 'fileType', DOCUMENT_FILE_TYPES), undefined, optionalString(input, 'documentScope')] },
+	const calls: Record<string, () => { method: string; args: unknown[] }> = {
+		bom: () => ({ method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] }),
+		netlist: () => ({ method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] }),
+		simulation_netlist: () => ({ method: 'getSimulationNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', SIMULATION_NETLIST_TYPES)] }),
+		document: () => ({ method: 'getExportDocumentFile', args: [fileName, optionalEnum(input, 'fileType', DOCUMENT_FILE_TYPES), undefined, optionalString(input, 'documentScope')] }),
 	};
-	return calls[kind];
+	return calls[kind]();
 }
 
 export async function handleManufactureExportTask(payload: unknown): Promise<unknown> {

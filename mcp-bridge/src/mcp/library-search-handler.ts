@@ -57,6 +57,19 @@ function normalizeProperties(kind: LibrarySearchKind, raw: unknown): Record<stri
 	return properties;
 }
 
+// EDA 3.x 可能忽略 name 属性筛选；名称必须由返回记录精确确认。
+function matchesDeviceProperties(item: unknown, properties: Record<string, string>): boolean {
+	if (!isPlainObjectRecord(item))
+		return false;
+	const property = isPlainObjectRecord(item.property) ? item.property : {};
+	const otherProperty = isPlainObjectRecord(item.otherProperty) ? item.otherProperty : isPlainObjectRecord(property.otherProperty) ? property.otherProperty : {};
+	return Object.entries(properties).every(([key, expected]) => {
+		const association = key === 'symbolName' ? item.symbol : key === 'footprintName' ? item.footprint : undefined;
+		const actual = item[key] ?? property[key] ?? otherProperty[key] ?? (isPlainObjectRecord(association) ? association.name : undefined);
+		return actual !== undefined && actual !== null && String(actual).trim() === expected;
+	});
+}
+
 function normalizeLcscIds(raw: unknown): string[] | undefined {
 	if (raw === undefined || raw === null)
 		return undefined;
@@ -111,6 +124,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	const page = parseBoundedIntegerValue(payload.page, 1, 1, 9999);
 	const api = getApi(kind);
 	let rawResults: unknown;
+	let searchImplementation: string | undefined;
 	if (uuid) {
 		if (kind === 'simulation_model')
 			throw new TypeError('simulation_model only supports keyword search because the official get API requires a private deployment.');
@@ -131,12 +145,17 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 			throw new TypeError('EDA lib_Device.getByLcscIds API is unavailable in this client version.');
 		rawResults = await (api.getByLcscIds as (...args: unknown[]) => Promise<unknown>).call(api, lcscIds, libraryUuid, allowMultiMatch);
 	}
+	else if (properties?.name) {
+		if (typeof api.search !== 'function')
+			throw new TypeError('EDA lib_Device.search API is unavailable in this client version.');
+		// 名称查询每页固定同一搜索后端，避免依据当前页命中情况切换分页序列。
+		rawResults = await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, properties.name, libraryUuid, undefined, undefined, limit, page);
+		searchImplementation = 'keyword_name_filter';
+	}
 	else if (properties) {
 		if (typeof api.searchByProperties !== 'function')
 			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.searchByProperties API is unavailable in this client version.`);
-		rawResults = kind === 'device'
-			? await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid, undefined, undefined, limit, page)
-			: await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid);
+		rawResults = await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid, undefined, undefined, limit, page);
 	}
 	else {
 		if (typeof api.search !== 'function')
@@ -147,7 +166,15 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 				? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
 				: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
 	}
-	const allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
+	let allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
+	let excludedNameMismatches = 0;
+	if (properties?.name)
+		excludedNameMismatches = allRawItems.filter(item => !matchesDeviceProperties(item, { name: properties.name })).length;
+	const rawPageLength = allRawItems.length;
+	if (properties?.name) {
+		// 关键词候选仍须核对全部请求属性。
+		allRawItems = allRawItems.filter(item => matchesDeviceProperties(item, properties));
+	}
 	const items = await toSerializableAsync(allRawItems.slice(0, limit));
 	const response = {
 		ok: true,
@@ -156,6 +183,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
 		...(simulationModelType ? { simulationModelType } : {}),
 		libraryUuid: libraryUuid ?? '',
+		...(properties?.name ? { exactNameVerified: true, searchImplementation, excludedNameMismatches } : {}),
 		returned: Array.isArray(items) ? items.length : 0,
 		items,
 	};
@@ -174,6 +202,6 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		page,
 		pageSize: limit,
 		totalKnown: false,
-		mayHaveMore: allRawItems.length >= limit,
+		mayHaveMore: rawPageLength >= limit,
 	};
 }

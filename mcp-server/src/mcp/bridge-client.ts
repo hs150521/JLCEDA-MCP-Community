@@ -38,6 +38,8 @@ interface BridgeClientContext {
   pageName?: string;
 }
 
+type SchematicPinAdapter = 'component_pin_instance' | 'native_pin';
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -53,6 +55,7 @@ interface PendingRequest {
   payload?: unknown;
   startedAt?: number;
   context?: BridgeClientContext;
+  schematicPinAdapter?: SchematicPinAdapter;
 }
 
 interface RecoveryDiagnostic {
@@ -70,6 +73,8 @@ interface RecoveryDiagnostic {
   targetSchematicUuid?: string;
   targetSchematicMayBeEmpty?: boolean;
   targetSchematicPageUuid?: string;
+  targetSchematicPinPrimitiveId?: string;
+  schematicPinAdapter?: SchematicPinAdapter;
   sourceSchematicPageUuid?: string;
   targetPageMayBeAbsent?: boolean;
   targetPcbUuid?: string;
@@ -107,18 +112,44 @@ export interface BridgeTaskErrorDetails {
   stack?: string;
   code?: string;
   timeoutMs?: number;
+  reason?: string;
+  field?: string;
+  status?: string | number;
+}
+
+/** Keep diagnostic fields without echoing native document source or request payloads. */
+export function normalizeBridgeTaskError(error: unknown): BridgeTaskErrorDetails {
+  if (!isRecord(error)) return { message: String(error).slice(0, 2048) };
+  const details: BridgeTaskErrorDetails = { message: '' };
+  for (const key of ['message', 'name', 'code', 'reason', 'field'] as const) {
+    if (typeof error[key] === 'string' && error[key].trim()) details[key] = error[key].slice(0, 2048);
+  }
+  if (typeof error.stack === 'string') details.stack = error.stack.slice(0, 8000);
+  if (typeof error.status === 'string' || typeof error.status === 'number')
+    details.status = typeof error.status === 'string' ? error.status.slice(0, 128) : error.status;
+  const timeoutMs = Number(error.timeoutMs);
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) details.timeoutMs = timeoutMs;
+  if (!details.message || details.message === '[object Object]')
+    details.message = details.reason || (details.code ? `EDA rejected the operation (${details.code}).` : 'EDA rejected the operation (object error without a message).');
+  return details;
 }
 
 /** Error raised from a Bridge task while retaining the serialized task metadata. */
 export class BridgeTaskError extends Error {
   public readonly code?: string;
   public readonly timeoutMs?: number;
+  public readonly reason?: string;
+  public readonly field?: string;
+  public readonly status?: string | number;
 
   public constructor(details: BridgeTaskErrorDetails) {
     super(details.message);
     this.name = details.name || 'BridgeTaskError';
     this.code = details.code;
     this.timeoutMs = details.timeoutMs;
+    this.reason = details.reason;
+    this.field = details.field;
+    this.status = details.status;
     if (details.stack) {
       this.stack = details.stack;
     }
@@ -213,8 +244,15 @@ function isSchematicComponentDelete(path: string, payload: unknown): boolean {
     && payload.apiFullName.trim().toLowerCase() === 'eda.sch_primitivecomponent.delete';
 }
 
+function isSchematicPinModify(path: string, payload: unknown): boolean {
+  return path === '/bridge/jlceda/api/invoke' && isRecord(payload)
+    && typeof payload.apiFullName === 'string'
+    && payload.apiFullName.trim().toLowerCase() === 'eda.sch_primitivepin.modify';
+}
+
 function isSchematicConnectivityMutation(path: string, payload: unknown): boolean {
   return isSchematicComponentDelete(path, payload)
+    || isSchematicPinModify(path, payload)
     || path === '/bridge/jlceda/netlabel/place'
 	|| (path === '/bridge/jlceda/schematic/wire-manage'
 		&& isRecord(payload) && (payload.action === 'modify' || payload.action === 'delete'))
@@ -437,6 +475,11 @@ function serializeBridgeError(error: unknown): unknown {
   }
   if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
     details.timeoutMs = timeoutMs;
+  }
+  if (error instanceof BridgeTaskError) {
+    details.reason = error.reason;
+    details.field = error.field;
+    details.status = error.status;
   }
   return details;
 }
@@ -911,6 +954,9 @@ export class EdaBridgeServer {
       // A Bridge task timeout or an unknown commit state does not mean the
       // underlying EDA Promise settled. Keep the write quarantine in that case.
       const diagnostic = this.recoveryDiagnostics.get(requestId);
+      if (diagnostic?.clientId === peer.clientId && diagnostic.targetSchematicPinPrimitiveId
+        && isRecord(message.result) && message.result.adapter === 'component_pin_instance')
+        diagnostic.schematicPinAdapter = 'component_pin_instance';
       this.updateAutoLayoutDiagnostic(requestId, message.result, peer.clientId);
       this.updatePcbDocumentDiagnostic(requestId, message.result, peer.clientId);
       const bridgeTimedOut = getBridgeTaskTimeoutMs(message.error) !== undefined
@@ -957,6 +1003,9 @@ export class EdaBridgeServer {
       }
       return;
     }
+    if (isSchematicPinModify(pending.path ?? '', pending.payload)
+      && isRecord(message.result) && message.result.adapter === 'component_pin_instance')
+      pending.schematicPinAdapter = 'component_pin_instance';
     this.clearPendingTimeout(pending);
     this.pendingRequests.delete(requestId);
     const bridgeTimeoutMs = getBridgeTaskTimeoutMs(message.error);
@@ -998,20 +1047,8 @@ export class EdaBridgeServer {
     }
     this.updateAutoLayoutDiagnostic(requestId, message.result, peer.clientId);
     this.updatePcbDocumentDiagnostic(requestId, message.result, peer.clientId);
-    if (isRecord(message.error) && typeof message.error.message === 'string') {
-      const code = typeof message.error.code === 'string' ? message.error.code : undefined;
-      const timeoutMs = Number(message.error.timeoutMs);
-      pending.reject(new BridgeTaskError({
-        message: message.error.message,
-        name: typeof message.error.name === 'string' ? message.error.name : undefined,
-        stack: typeof message.error.stack === 'string' ? message.error.stack : undefined,
-        code,
-        timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined,
-      }));
-      return;
-    }
     if (message.error) {
-      pending.reject(new Error(String(message.error)));
+      pending.reject(isRecord(message.error) ? new BridgeTaskError(normalizeBridgeTaskError(message.error)) : new Error(String(message.error)));
       return;
     }
     pending.resolve(message.result);
@@ -1020,9 +1057,24 @@ export class EdaBridgeServer {
   private markPendingRequestStarted(peer: BridgePeer, message: Record<string, unknown>): void {
     const requestId = String(message.requestId ?? '');
     const pending = this.pendingRequests.get(requestId);
-    if (!pending || pending.started || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
+    if (!pending) {
+      // 识别组件引脚的只读查询可能比 Server 的计时器晚完成；保留已确认的适配器信息。
+      const diagnostic = this.recoveryDiagnostics.get(requestId);
+      if (diagnostic?.clientId === peer.clientId && peer.connectedAt <= Date.parse(diagnostic.startedAt)
+        && diagnostic.targetSchematicPinPrimitiveId
+        && message.schematicPinAdapter === 'component_pin_instance')
+        diagnostic.schematicPinAdapter = 'component_pin_instance';
       return;
     }
+    if (pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
+      return;
+    }
+    if (isSchematicPinModify(pending.path ?? '', pending.payload)
+      && (message.schematicPinAdapter === 'component_pin_instance' || message.schematicPinAdapter === 'native_pin')
+      && pending.schematicPinAdapter !== 'component_pin_instance')
+      pending.schematicPinAdapter = message.schematicPinAdapter;
+    // 第二次 started 只补充实际执行路径，不能延长请求超时或重发内部客户端确认。
+    if (pending.started) return;
 
     pending.started = true;
     pending.startedAt = Date.now();
@@ -1141,17 +1193,8 @@ export class EdaBridgeServer {
       }
       this.clearPendingTimeout(pending);
       this.pendingRequests.delete(requestId);
-      if (isRecord(message.error) && typeof message.error.message === 'string') {
-        const timeoutMs = Number(message.error.timeoutMs);
-        pending.reject(new BridgeTaskError({
-          message: message.error.message,
-          name: typeof message.error.name === 'string' ? message.error.name : undefined,
-          stack: typeof message.error.stack === 'string' ? message.error.stack : undefined,
-          code: typeof message.error.code === 'string' ? message.error.code : undefined,
-          timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined,
-        }));
-      } else if (message.error) {
-        pending.reject(new Error(String(message.error)));
+      if (message.error) {
+        pending.reject(isRecord(message.error) ? new BridgeTaskError(normalizeBridgeTaskError(message.error)) : new Error(String(message.error)));
       } else {
         pending.resolve(message.result);
       }
@@ -1391,6 +1434,8 @@ export class EdaBridgeServer {
         : {}),
       ...(mutating && isSchematicConnectivityMutation(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_connectivity_primitives' as const, hostRestartRequired: !nativeCallSettled } : {}),
+      ...(mutating && isSchematicPinModify(pending.path ?? '', pending.payload) && isRecord(pending.payload) && Array.isArray(pending.payload.args)
+		? { targetSchematicPinPrimitiveId: optionalString(pending.payload.args[0]), schematicPinAdapter: pending.schematicPinAdapter } : {}),
       ...(mutating && isTargetedSchematicPageMutation(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_page_inventory' as const, ...schematicPageMutationTarget(pending.path ?? '', pending.payload) } : {}),
       uncertaintyReason,
@@ -2273,6 +2318,21 @@ export class EdaBridgeServer {
       || !isRecord(semantic) || !Array.isArray(semantic.components) || !Array.isArray(semantic.networks)
       || semantic.componentCount !== semantic.components.length || semantic.networkCount !== semantic.networks.length) {
       throw new Error('Schematic connectivity readback was incomplete or from another page; writes remain blocked.');
+    }
+    if (diagnostic.schematicPinAdapter === 'component_pin_instance' && diagnostic.targetSchematicPinPrimitiveId) {
+      const owner = semantic.components.find(component => isRecord(component) && Array.isArray(component.pins)
+        && component.pins.some(pin => isRecord(pin) && pin.pinId === diagnostic.targetSchematicPinPrimitiveId));
+      if (!isRecord(owner) || !Array.isArray(owner.pins) || !optionalString(owner.componentInstanceId))
+        throw new Error('Schematic target pin was absent from recovery readback; writes remain blocked.');
+      const pinIds = new Set<string>();
+      for (const pin of owner.pins) {
+        if (!isRecord(pin) || !optionalString(pin.pinId) || pinIds.has(pin.pinId as string)
+          || typeof pin.pinNumber !== 'string' || !Number.isFinite(pin.x) || !Number.isFinite(pin.y)
+          || !Number.isFinite(pin.rotation) || typeof pin.noConnected !== 'boolean'
+          || pin.hasNoConnectMark !== pin.noConnected)
+          throw new Error('Schematic component pin state was incomplete in recovery readback; writes remain blocked.');
+        pinIds.add(pin.pinId as string);
+      }
     }
     const ids = new Set<string>();
     for (const wire of primitives.wires) {

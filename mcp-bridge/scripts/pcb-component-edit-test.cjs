@@ -163,6 +163,52 @@ async function main() {
 	assert.equal((await handlePcbComponentEditTask({ action: 'delete', primitiveId: 'new-1' })).reason, 'component_not_found');
 
 	const originalModify = api.modify;
+	api.modify = async (id, patch) => {
+		await originalModify(id, patch);
+		const state = parts.get(id);
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+	};
+	for (const [requested, actual] of [[-90, 270], [360, 0], [720, 0], [-450, 270]]) {
+		const rotated = await toSerializableAsync(await handlePcbComponentEditTask({ action: 'modify', primitiveId: 'r1', property: { x: 155, rotation: requested } }));
+		assert.equal(rotated.ok, true, `equivalent rotation ${requested}`);
+		assert.equal(rotated.verified, true);
+		assert.equal(rotated.after.rotation, actual);
+		assert.equal(rotated.after.x, 155);
+		assert.equal(rotated.normalization.rotation.mode, 'modulo_360');
+	}
+	api.modify = async (id, patch) => {
+		await originalModify(id, patch);
+		parts.get(id).rotation = 90;
+	};
+	const wrongOrientation = await handlePcbComponentEditTask({ action: 'modify', primitiveId: 'r1', property: { rotation: -90 } });
+	assert.equal(wrongOrientation.ok, false);
+	assert.equal(wrongOrientation.commitUnknown, true);
+	assert.equal(wrongOrientation.after.rotation, 90);
+	assert.equal(wrongOrientation.mismatches[0].field, 'rotation');
+	api.modify = originalModify;
+	parts.get('r1').otherProperty['LCSC Part Name'] = 'old part';
+	api.modify = async (id, patch) => {
+		const oldName = parts.get(id).otherProperty['LCSC Part Name'];
+		await originalModify(id, patch);
+		parts.get(id).otherProperty['LCSC Part Name'] = oldName;
+	};
+	const partial = await toSerializableAsync(await handlePcbComponentEditTask({ action: 'modify', primitiveId: 'r1', property: {
+		manufacturerId: 'AOD2610E',
+		supplierId: 'C282428',
+		otherProperty: { 'Device': 'AOD2610E', 'LCSC Part Name': 'new part' },
+	} }));
+	assert.equal(partial.ok, false);
+	assert.equal(partial.reason, 'post_write_readback_failed');
+	assert.equal(partial.failureKind, 'state_mismatch');
+	assert.equal(partial.nativeCallSettled, true);
+	assert.equal(partial.after.manufacturerId, 'AOD2610E');
+	assert.equal(partial.after.otherProperty.Device, 'AOD2610E');
+	assert.deepEqual(partial.mismatches, [{ field: 'otherProperty.LCSC Part Name', requested: 'new part', actual: 'old part', unchanged: true, requestedField: true }]);
+	assert.equal(partial.mismatchCount, 1);
+	assert.equal(partial.mismatchesComplete, true);
+	assert.equal(requiresHostRestartForResult(path, { action: 'modify' }, partial), false, 'settled partial metadata write needs readback, not a host restart');
+	api.modify = originalModify;
+
 	api.modify = async () => {
 		throw new Error('RPC call timed out');
 	};
@@ -191,6 +237,91 @@ async function main() {
 	pageUuid = 'pcb-1';
 	api.modify = originalModify;
 	const originalCreate = api.create;
+	api.create = async (...args) => {
+		const result = await originalCreate(...args);
+		const state = parts.get(result.getState_PrimitiveId());
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+		return primitive(state);
+	};
+	const normalizedCreate = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'device-4' }, layer: 1, x: 10, y: 20, rotation: -90 });
+	assert.equal(normalizedCreate.ok, true);
+	assert.equal(normalizedCreate.after.rotation, 270);
+	assert.equal(normalizedCreate.normalization.rotation.mode, 'modulo_360');
+	const copyCreate = async (...args) => {
+		const result = await originalCreate(...args);
+		const state = parts.get(result.getState_PrimitiveId());
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+		const field = args[0].libraryType === '4' ? 'footprint' : 'component';
+		state[field] = { libraryUuid: 'project-library', uuid: `project-${field}-${state.primitiveId}`, name: 'Native project copy' };
+		return primitive({ ...state, [field]: { ...state[field] } });
+	};
+	api.create = copyCreate;
+	for (const kind of ['device', 'footprint']) {
+		const source = { kind, libraryUuid: kind === 'device' ? 'devices' : 'footprints', uuid: `source-${kind}` };
+		const copied = JSON.parse(JSON.stringify(await toSerializableAsync(await handlePcbComponentEditTask({ action: 'create', source, layer: 1, x: 300, y: 300, rotation: -90 }))));
+		assert.equal(copied.ok, true, `${kind} native creation imports its reference into the project library`);
+		assert.equal(copied.verified, true);
+		assert.equal(copied.commitUnknown, undefined);
+		assert.equal(copied.after.primitiveId, copied.primitiveId);
+		assert.equal(copied.after.x, 300);
+		assert.equal(copied.after.rotation, 270);
+		assert.equal(copied.normalization.rotation.mode, 'modulo_360');
+		assert.equal(copied.normalization.source.mode, 'native_create_reference');
+		assert.equal(copied.normalization.source.kind, kind);
+		assert.deepEqual(copied.normalization.source.requested, { libraryUuid: source.libraryUuid, uuid: source.uuid });
+		assert.deepEqual(copied.normalization.source.actual, copied.after[kind === 'device' ? 'component' : 'footprint']);
+	}
+	api.create = async (...args) => {
+		const created = await originalCreate(...args);
+		const state = parts.get(created.getState_PrimitiveId());
+		const field = args[0].libraryType === '4' ? 'footprint' : 'component';
+		const returned = primitive({ ...state, [field]: { ...state[field] } });
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+		state[field] = { libraryUuid: 'project-library', uuid: `project-${field}-${state.primitiveId}`, name: 'Native project copy' };
+		return returned;
+	};
+	for (const kind of ['device', 'footprint']) {
+		const source = { kind, libraryUuid: kind === 'device' ? 'devices' : 'footprints', uuid: `public-${kind}` };
+		const copied = await toSerializableAsync(await handlePcbComponentEditTask({ action: 'create', source, layer: 1, x: 700, y: 300, rotation: -90 }));
+		assert.equal(copied.ok, true, `${kind} create return can retain its public library reference before readback imports it`);
+		assert.equal(copied.verified, true);
+		assert.equal(copied.after.x, 700);
+		assert.equal(copied.after.y, 300);
+		assert.equal(copied.after.rotation, 270);
+		assert.equal(copied.normalization.source.actual.libraryUuid, 'project-library');
+		assert.equal(copied.normalization.source.requested.uuid, source.uuid);
+	}
+	api.create = async (...args) => {
+		await copyCreate(...args);
+		return undefined;
+	};
+	const copyWithoutReturn = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-without-native-result' }, layer: 1, x: 301, y: 301 });
+	assert.equal(copyWithoutReturn.ok, false, 'different source without native create evidence stays unverified');
+	assert.equal(copyWithoutReturn.commitUnknown, true);
+	api.create = async (...args) => {
+		const result = await copyCreate(...args);
+		const snapshot = { ...parts.get(result.getState_PrimitiveId()), component: { libraryUuid: 'project-library', uuid: 'different-native-return' } };
+		return primitive(snapshot);
+	};
+	const sourceDisagreement = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-disagreement' }, layer: 1, x: 302, y: 302 });
+	assert.equal(sourceDisagreement.ok, false, 'readback reference must agree with the native creation return');
+	assert.equal(sourceDisagreement.commitUnknown, true);
+	api.create = async (...args) => {
+		const result = await copyCreate(...args);
+		parts.get(result.getState_PrimitiveId()).x += 10;
+		return result;
+	};
+	const wrongCopyPlacement = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-wrong-placement' }, layer: 1, x: 303, y: 303 });
+	assert.equal(wrongCopyPlacement.ok, false, 'native reference normalization must not bypass placement verification');
+	assert.equal(wrongCopyPlacement.commitUnknown, true);
+	assert.equal(wrongCopyPlacement.after.x, 313);
+	api.create = copyCreate;
+	api.get = async id => primitive({ ...parts.get(id), primitiveId: 'wrong-readback-id' });
+	const wrongCopyId = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-wrong-id' }, layer: 1, x: 304, y: 304 });
+	assert.equal(wrongCopyId.ok, false, 'native reference normalization must retain exact primitive identity');
+	assert.equal(wrongCopyId.commitUnknown, true);
+	api.get = originalGet;
+	api.create = originalCreate;
 	api.create = async () => {
 		throw new Error('WebSocket connection closed');
 	};
