@@ -2,7 +2,7 @@
 
 ## 2.3.5
 
-当前源码版本为 2.3.5，正在发布验证。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；最新过孔、器件来源和覆铜几何修复正在最终复测。安装包的可用状态以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 为准。完整 Issue 矩阵见 [2.3.5 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.3.5/docs/issue-validation-2.3.5.md)。
+当前源码版本为 2.3.5，已通过发布验证。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。安装包的可用状态以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 为准。完整 Issue 矩阵见 [2.3.5 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.3.5/docs/issue-validation-2.3.5.md)。
 
 2.3.5 改进器件库引用解析、真实 ComponentPin 的 NC 修改、覆铜逐实例重建、PCB 等价几何回读、器件部分修改诊断、PCB 属性文字输入校验、制造导出分支格式校验、DRC 详情分页和非字符串错误传输。原生未解决项及待验证场景见下文。
 
@@ -68,19 +68,19 @@ Bridge 客户端超时会返回带 `BRIDGE_TASK_TIMEOUT` 标记的结果；Serve
 
 ### PCB 原生归一化与诊断
 
-`pcb_component_edit` 按模 360 度核对旋转，因此 `-90` 与 `270` 等价，成功结果可包含 `normalization.rotation`；2.3.5 实机修改 `-90` 后回读 `270` 已验证。实机 `supplierId` 与 `otherProperty` 修改也已按实际状态验证。元数据部分写入不匹配时，返回实际 `after`、`failureKind:"state_mismatch"`、`mismatches`、`mismatchCount` 和 `mismatchesComplete`；`nativeCallSettled:true` 表示原生调用已结束。该失败仍保留 `commitUnknown` 和受控回读要求，按诊断核对后再决定后续操作。创建时若原生将设备或封装复制进工程库，须以创建返回的来源引用和同 ID 回读一致性确认，返回 `normalization.source`；最新来源核对路径正在最终复测。
+`pcb_component_edit` 按模 360 度核对旋转，因此 `-90` 与 `270` 等价，成功结果可包含 `normalization.rotation`；2.3.5 实机修改 `-90` 后回读 `270` 已验证。实机 `supplierId` 与 `otherProperty` 修改也已按实际状态验证。元数据部分写入不匹配时，返回实际 `after`、`failureKind:"state_mismatch"`、`mismatches`、`mismatchCount` 和 `mismatchesComplete`；`nativeCallSettled:true` 表示原生调用已结束。该失败仍保留 `commitUnknown` 和受控回读要求，按诊断核对后再决定后续操作。创建时若原生将设备或封装复制进工程库，须以创建返回的来源引用与请求来源或同 ID 回读的一致性确认，返回 `normalization.source`；实机创建已核对新 ID、实际位置、270° 旋转与工程库来源引用。
 
 `pcb_board_outline_manage` 的闭合轮廓比较支持等价起点循环移动与方向反转；开放折线路径只接受完整路径反向，不接受循环换起点。`pcb_region_manage` 比较已闭合的区域轮廓，允许等价起点及方向变化；多点轮廓写入须显式首尾闭合。比较保留圆弧/曲线语义。对 EDA 3.2.181 已观察的四位小数坐标回读，使用每坐标 `0.00005 mil` 容差；真实几何差异仍报告不匹配。返回值保留实际轮廓及归一化诊断。2.3.5 实机板框反向回读、显式闭合区域反向及四位小数坐标回读均已验证。
 
-`pcb_connectivity_action line_create` 可核对端点反向，以及原生拆分/合并后同网络、同层、同宽的共线图元是否覆盖请求线段；结果返回实际 `primitiveIds`、`returnedPrimitiveId`、`after` 和 `normalization`。2.3.5 实机共线覆盖回读返回 2 个实际 ID 并验证成功。`via_create` 与 `pcb_routing_edit` 过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 0.2 mil 网格最近值（`round_0_2_mil`），返回请求值、实际孔径/外径与归一化方式，位置和网络仍须匹配；最新创建和修改路径正在最终复测。
+`pcb_connectivity_action line_create` 可核对端点反向，以及原生拆分/合并后同网络、同层、同宽的共线图元是否覆盖请求线段；结果返回实际 `primitiveIds`、`returnedPrimitiveId`、`after` 和 `normalization`。2.3.5 实机共线覆盖回读返回 2 个实际 ID 并验证成功。`via_create` 与 `pcb_routing_edit` 过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 0.2 mil 网格最近值（`round_0_2_mil`），返回请求值、实际孔径/外径与归一化方式，位置和网络仍须匹配；创建与修改已实测通过：15.748/31.496→15.8/31.4、15.7/31.5→15.8/31.6。
 
 `pcb_routing_edit` 删除过孔前检查原生网络图元：已知父器件 ID 时返回 `footprint_owned_via` 且不调用删除；缺少父字段时返回的归属为未知。删除后目标从完整 ID 列表消失，只证明当前页内存已删除，结果带 `verificationScope:"current_page_memory"`、`durableDeletionVerified:false`、`requiredPersistenceVerification:"save_and_reopen_pcb"`。必须保存并重新打开 PCB 核对，封装子过孔的持久删除尚未解决。
 
-`pcb_pour_manage rebuild` 优先使用批量 `rebuildCopperRegions()`；缺少批量方法时尝试目标实例的 `rebuildCopperRegion()`。两者均不可用则返回 `reason:"unsupported_capability"`、`errorCode:"EDA_CAPABILITY_UNAVAILABLE"`、缺失 API 和可用的 EDA 版本，明确 `applied:false`。2.3.5 实机全板重建已验证 1 个边框与 1 个填充；批量、实例回退和能力缺失分支另有本地回归。创建或修改允许闭合轮廓等价反向、起点变化及已观察的四位小数回读，返回实际轮廓与 `normalization`；最新几何路径正在最终复测。`pcb_text_manage` 的 Attribute 修改支持 `property.value` 和 `property.valueVisible` 通过 Server 校验，实机两字段修改及实际回读已验证。
+`pcb_pour_manage rebuild` 优先使用批量 `rebuildCopperRegions()`；缺少批量方法时尝试目标实例的 `rebuildCopperRegion()`。两者均不可用则返回 `reason:"unsupported_capability"`、`errorCode:"EDA_CAPABILITY_UNAVAILABLE"`、缺失 API 和可用的 EDA 版本，明确 `applied:false`。2.3.5 实机全板重建已验证 1 个边框与 1 个填充；批量、实例回退和能力缺失分支另有本地回归。创建或修改允许闭合轮廓等价反向、起点变化及已观察的四位小数回读，返回实际轮廓与 `normalization`；实机创建与修改均确认反向和四位小数轮廓等价；实际优先级副作用另行报告。`pcb_text_manage` 的 Attribute 修改支持 `property.value` 和 `property.valueVisible` 通过 Server 校验，实机两字段修改及实际回读已验证。
 
 ### DRC 分页与错误传输
 
-`pcb_drc_check` 支持非负整数 `offset` 与 1–500 的 `limit`，默认每次最多 120 条详情。按照返回的 `nextOffset` 继续读取，直到该字段不再返回。结果包含 `totalAvailableDetails`、`returnedDetails`、`nativeTruncated`、`serializationTruncated` 和 `truncated`；分页只能覆盖原生提供的详情，不能补出原生未返回的错误。含 28 个真实错误的 PCB 复测发现旧实现把 2 个子类别当成 2 条详情，没有续页，深层直线端点出现 `DetailLimitExceeded`；正在修正真实分类树的叶子详情分页，需新构建实测，#76 继续开放。
+`pcb_drc_check` 支持非负整数 `offset` 与 1–500 的 `limit`，默认每次最多 120 条详情。按照返回的 `nextOffset` 继续读取，直到该字段不再返回。结果包含 `totalAvailableDetails`、`returnedDetails`、`nativeTruncated`、`serializationTruncated` 和 `truncated`；分页只能覆盖原生提供的详情，不能补出原生未返回的错误。真实分类树按叶子明细分页；含 28 个错误的 PCB 已按 limit:2 连续读取 14 页，nextOffset 正确结束，直线端点为数值，两种截断标志均 false。
 
 结构化错误在 Bridge、WebSocket、中继和工具分发层保留可用的 `message`、`name`、`code`、`reason`、`field`、`status`；非字符串对象错误不会只显示为 `[object Object]`。错误正文不透传任意源对象或设计源字段。
 

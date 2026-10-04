@@ -391,8 +391,10 @@ export async function handlePcbComponentEditTask(payload: unknown): Promise<unkn
 				throw new Error('EDA created PCB component was not readable.');
 			after = readComponent(observed);
 			await assertSamePage(runtime, pageUuid);
-			// 原生 create 可将器件/封装复制进工程库；以创建返回的引用和同 ID 回读确认实际来源。
-			const sourceVerified = matchesSource(after, source!) || sameReference(sourceReference(after, source!), returnedSource);
+			// 原生 create 返回实例可能仍使用公共库引用，同 ID 回读则已使用工程库副本。
+			const actualSource = sourceReference(after, source!);
+			const sourceVerified = actualSource !== null && (sameReference(actualSource, source!)
+				|| sameReference(returnedSource, source!) || sameReference(actualSource, returnedSource));
 			if (after.primitiveId !== createdId || !sourceVerified || !matchesRequested(after, createProperty!))
 				throw new Error('EDA created PCB component differs from the requested source or placement.');
 			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: createdId, verified: true, after, ...creationNormalization(after, source!, createProperty!) };

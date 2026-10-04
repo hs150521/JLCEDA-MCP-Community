@@ -844,7 +844,7 @@
   },
   {
     "name": "pcb_component_edit",
-    "description": "完整读取当前 PCB 页器件，或按 ID 修改、删除；也可从器件或封装库按坐标创建一件。原生创建复制来源到工程库时，以创建返回的来源引用和同 ID 实际回读一致性确认，并返回 normalization.source。写后核对位置、属性与模 360° 等价的旋转；返回实际原生角度。部分属性修改不符时返回 after 和 requested/actual/unchanged 差异，仍要求完整回读后恢复，避免重复创建或误改。",
+    "description": "完整读取当前 PCB 页器件，或按 ID 修改、删除；也可从器件或封装库按坐标创建一件。原生创建复制来源到工程库时，以创建返回来源与请求来源或同 ID 实际回读的一致性及真实几何确认，并返回 normalization.source。写后核对位置、属性与模 360° 等价的旋转；返回实际原生角度。部分属性修改不符时返回 after 和 requested/actual/unchanged 差异，仍要求完整回读后恢复，避免重复创建或误改。",
     "inputSchema": {
       "type": "object",
       "properties": {

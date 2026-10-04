@@ -4,7 +4,7 @@
 
 2.3.4 新增 `board_setup`：传当前工程 UUID 和 `confirm:true`，可新建 Board 及关联的原理图、PCB；提供尚未关联 Board 的原理图 UUID 时，会创建 PCB 并将两者关联到新 Board。工具回读三个文档的归属，不会自动打开 PCB 或导入原理图变更。
 
-2.3.5 正在发布验证：补充器件库引用解析、器件引脚实例修改、覆铜重建回退、PCB 图元等价回读、DRC 分页和结构化错误诊断。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 三种查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；最新过孔、器件来源和覆铜几何修复正在最终复测。全部 23 个 Issue 的证据、待验证项及未解决限制见 [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)。
+2.3.5 已通过发布验证：补充器件库引用解析、器件引脚实例修改、覆铜重建回退、PCB 图元等价回读、DRC 分页和结构化错误诊断。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 三种查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。全部 23 个 Issue 的证据、待验证项及未解决限制见 [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)。
 
 原理图器件几何修改会核对有名网络和匿名导线连通组；引脚离开匿名导线或移至另一组时会报告连接变化。大图页可为 `schematic_read` 和 `bridge_recover_client` 设置最多 120 秒的 `timeoutMs`。
 
@@ -161,7 +161,7 @@ codex mcp list
 - 原理图自动放置先查设备库，将裸 UUID 引用解析为完整 DeviceItem；查无设备时停止，避免将无效引用交给原生创建。2.3.5 实机中，无效设备 UUID 立即返回 `DEVICE_NOT_FOUND`，随后自动放置 0603 C23221 及 0805 C96346/C84376/C110775 的 4 型号批次全部成功，合计约 8.9 秒。
 - `api_invoke` 修改原理图 ComponentPin 的 NC 或引脚号时，使用真实器件引脚实例；引脚位置、旋转和其他符号几何不作为该适配器的可写字段。失败后按 `schematic_connectivity_primitives` 诊断，以 `schematic_read includeConnectivityPrimitives:true` 核对所属器件全部引脚的 `pinId/x/y/rotation/noConnected`，只查询上下文不能解除隔离。2.3.5 实机 NC `true`→`false` 两次均 `verified:true`，目标坐标与同器件其他引脚保持不变。
 - 现有点导线改成多线段路径会在写入前返回 `point_wire_path_conversion_unsupported`；可新建目标导线并核对连接，再显式删除原点导线。
-- `pcb_connectivity_action via_create` 与 `pcb_routing_edit` 的过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 `round_0_2_mil` 结果，返回请求值与实际孔径/外径；真实尺寸差异仍失败。最新创建和修改路径正在最终复测。
+- `pcb_connectivity_action via_create` 与 `pcb_routing_edit` 的过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 `round_0_2_mil` 结果，返回请求值与实际孔径/外径；真实尺寸差异仍失败。创建与修改已实测通过：15.748/31.496→15.8/31.4、15.7/31.5→15.8/31.6。
 - 过孔删除只确认当前页内存中目标消失，返回 `verificationScope:"current_page_memory"` 和 `durableDeletionVerified:false`。已知封装子过孔拒绝删除；缺少父 ID 时归属未知，必须保存并重新打开 PCB 后核对持久性。
 - 独立封装编辑器尚无专用 Bridge 上下文，不能作为普通 PCB 页完整控制。
 

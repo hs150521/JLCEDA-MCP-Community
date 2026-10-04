@@ -272,6 +272,26 @@ async function main() {
 		assert.deepEqual(copied.normalization.source.actual, copied.after[kind === 'device' ? 'component' : 'footprint']);
 	}
 	api.create = async (...args) => {
+		const created = await originalCreate(...args);
+		const state = parts.get(created.getState_PrimitiveId());
+		const field = args[0].libraryType === '4' ? 'footprint' : 'component';
+		const returned = primitive({ ...state, [field]: { ...state[field] } });
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+		state[field] = { libraryUuid: 'project-library', uuid: `project-${field}-${state.primitiveId}`, name: 'Native project copy' };
+		return returned;
+	};
+	for (const kind of ['device', 'footprint']) {
+		const source = { kind, libraryUuid: kind === 'device' ? 'devices' : 'footprints', uuid: `public-${kind}` };
+		const copied = await toSerializableAsync(await handlePcbComponentEditTask({ action: 'create', source, layer: 1, x: 700, y: 300, rotation: -90 }));
+		assert.equal(copied.ok, true, `${kind} create return can retain its public library reference before readback imports it`);
+		assert.equal(copied.verified, true);
+		assert.equal(copied.after.x, 700);
+		assert.equal(copied.after.y, 300);
+		assert.equal(copied.after.rotation, 270);
+		assert.equal(copied.normalization.source.actual.libraryUuid, 'project-library');
+		assert.equal(copied.normalization.source.requested.uuid, source.uuid);
+	}
+	api.create = async (...args) => {
 		await copyCreate(...args);
 		return undefined;
 	};
