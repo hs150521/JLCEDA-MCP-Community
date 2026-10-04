@@ -75,6 +75,7 @@ async function main() {
 	let componentWrites = 0;
 	let viaDeletes = 0;
 	let viaModifies = 0;
+	let lineCreated = false;
 	const vias = new Map([
 		['via-1', { primitiveId: 'via-1', net: 'GND', x: 20, y: 0, holeDiameter: 19.6, diameter: 47.2, viaType: 0, primitiveLock: false }],
 		['sample-via', { primitiveId: 'sample-via', net: 'GND', x: 20, y: 0, holeDiameter: 15.8, diameter: 31.4, viaType: 0, primitiveLock: false }],
@@ -97,10 +98,15 @@ async function main() {
 		},
 		pcb_Layer: { async getAllLayers() { return [{ id: 1, type: 'SIGNAL', layerStatus: 1, locked: false }]; } },
 		pcb_PrimitiveLine: {
-			async create() { return primitive({ primitiveId: 'replaced-line' }); },
+			async create() {
+				lineCreated = true;
+				return primitive({ primitiveId: 'replaced-line' });
+			},
 			async get() {},
 			async getAll(net, layer) {
 				assert.deepEqual([net, layer], ['GND', 1]);
+				if (!lineCreated)
+					return [];
 				return [
 					primitive({ primitiveId: 'split-1', net, layer, startX: 0, startY: 0, endX: 10, endY: 0, lineWidth: 8 }),
 					primitive({ primitiveId: 'split-2', net, layer, startX: 20, startY: 0, endX: 10, endY: 0, lineWidth: 8 }),
@@ -148,6 +154,7 @@ async function main() {
 		assert.equal(split.error, undefined);
 		assert.equal(split.result.ok, true);
 		assert.deepEqual(split.result.primitiveIds, ['split-1', 'split-2']);
+		assert.deepEqual(split.result.normalization.changedPrimitiveIds, ['split-1', 'split-2']);
 		assert.equal(split.result.after.lines.length, 2);
 		const via = await submit('via', connectivityPath, { action: 'via_create', net: 'GND', x: 20, y: 0, holeDiameter: 19.685, diameter: 47.244 });
 		assert.equal(via.error, undefined, 'normalized lines must not block the next write');

@@ -38,6 +38,8 @@ interface BridgeClientContext {
   pageName?: string;
 }
 
+type SchematicPinAdapter = 'component_pin_instance' | 'native_pin';
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -53,6 +55,7 @@ interface PendingRequest {
   payload?: unknown;
   startedAt?: number;
   context?: BridgeClientContext;
+  schematicPinAdapter?: SchematicPinAdapter;
 }
 
 interface RecoveryDiagnostic {
@@ -71,6 +74,7 @@ interface RecoveryDiagnostic {
   targetSchematicMayBeEmpty?: boolean;
   targetSchematicPageUuid?: string;
   targetSchematicPinPrimitiveId?: string;
+  schematicPinAdapter?: SchematicPinAdapter;
   sourceSchematicPageUuid?: string;
   targetPageMayBeAbsent?: boolean;
   targetPcbUuid?: string;
@@ -950,6 +954,9 @@ export class EdaBridgeServer {
       // A Bridge task timeout or an unknown commit state does not mean the
       // underlying EDA Promise settled. Keep the write quarantine in that case.
       const diagnostic = this.recoveryDiagnostics.get(requestId);
+      if (diagnostic?.clientId === peer.clientId && diagnostic.targetSchematicPinPrimitiveId
+        && isRecord(message.result) && message.result.adapter === 'component_pin_instance')
+        diagnostic.schematicPinAdapter = 'component_pin_instance';
       this.updateAutoLayoutDiagnostic(requestId, message.result, peer.clientId);
       this.updatePcbDocumentDiagnostic(requestId, message.result, peer.clientId);
       const bridgeTimedOut = getBridgeTaskTimeoutMs(message.error) !== undefined
@@ -996,6 +1003,9 @@ export class EdaBridgeServer {
       }
       return;
     }
+    if (isSchematicPinModify(pending.path ?? '', pending.payload)
+      && isRecord(message.result) && message.result.adapter === 'component_pin_instance')
+      pending.schematicPinAdapter = 'component_pin_instance';
     this.clearPendingTimeout(pending);
     this.pendingRequests.delete(requestId);
     const bridgeTimeoutMs = getBridgeTaskTimeoutMs(message.error);
@@ -1047,9 +1057,24 @@ export class EdaBridgeServer {
   private markPendingRequestStarted(peer: BridgePeer, message: Record<string, unknown>): void {
     const requestId = String(message.requestId ?? '');
     const pending = this.pendingRequests.get(requestId);
-    if (!pending || pending.started || pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
+    if (!pending) {
+      // 识别组件引脚的只读查询可能比 Server 的计时器晚完成；保留已确认的适配器信息。
+      const diagnostic = this.recoveryDiagnostics.get(requestId);
+      if (diagnostic?.clientId === peer.clientId && peer.connectedAt <= Date.parse(diagnostic.startedAt)
+        && diagnostic.targetSchematicPinPrimitiveId
+        && message.schematicPinAdapter === 'component_pin_instance')
+        diagnostic.schematicPinAdapter = 'component_pin_instance';
       return;
     }
+    if (pending.clientId !== peer.clientId || pending.edaSocket !== peer.socket || pending.leaseTerm !== Number(message.leaseTerm)) {
+      return;
+    }
+    if (isSchematicPinModify(pending.path ?? '', pending.payload)
+      && (message.schematicPinAdapter === 'component_pin_instance' || message.schematicPinAdapter === 'native_pin')
+      && pending.schematicPinAdapter !== 'component_pin_instance')
+      pending.schematicPinAdapter = message.schematicPinAdapter;
+    // 第二次 started 只补充实际执行路径，不能延长请求超时或重发内部客户端确认。
+    if (pending.started) return;
 
     pending.started = true;
     pending.startedAt = Date.now();
@@ -1410,7 +1435,7 @@ export class EdaBridgeServer {
       ...(mutating && isSchematicConnectivityMutation(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_connectivity_primitives' as const, hostRestartRequired: !nativeCallSettled } : {}),
       ...(mutating && isSchematicPinModify(pending.path ?? '', pending.payload) && isRecord(pending.payload) && Array.isArray(pending.payload.args)
-		? { targetSchematicPinPrimitiveId: optionalString(pending.payload.args[0]) } : {}),
+		? { targetSchematicPinPrimitiveId: optionalString(pending.payload.args[0]), schematicPinAdapter: pending.schematicPinAdapter } : {}),
       ...(mutating && isTargetedSchematicPageMutation(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_page_inventory' as const, ...schematicPageMutationTarget(pending.path ?? '', pending.payload) } : {}),
       uncertaintyReason,
@@ -2294,7 +2319,7 @@ export class EdaBridgeServer {
       || semantic.componentCount !== semantic.components.length || semantic.networkCount !== semantic.networks.length) {
       throw new Error('Schematic connectivity readback was incomplete or from another page; writes remain blocked.');
     }
-    if (diagnostic.targetSchematicPinPrimitiveId) {
+    if (diagnostic.schematicPinAdapter === 'component_pin_instance' && diagnostic.targetSchematicPinPrimitiveId) {
       const owner = semantic.components.find(component => isRecord(component) && Array.isArray(component.pins)
         && component.pins.some(pin => isRecord(pin) && pin.pinId === diagnostic.targetSchematicPinPrimitiveId));
       if (!isRecord(owner) || !Array.isArray(owner.pins) || !optionalString(owner.componentInstanceId))

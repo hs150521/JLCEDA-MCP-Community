@@ -470,8 +470,12 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 			};
 		}
 		const observed = await getOne(runtime, writableKind, primitiveId!, pageUuid);
-		if (!observed || !matchesRequested(observed, requested!)) {
+		const invalidViaDimensions = writableKind === 'via' && observed !== undefined && observed !== null
+			&& !((observed.diameter as number) > (observed.holeDiameter as number));
+		if (!observed || invalidViaDimensions || !matchesRequested(observed, requested!)) {
 			const mismatches = observed ? requestedMismatches(observed, requested!) : undefined;
+			if (invalidViaDimensions && mismatches)
+				mismatches.push({ field: 'annularRing', requested: 'diameter > holeDiameter', actual: (observed!.diameter as number) - (observed!.holeDiameter as number) });
 			return unknownAfterWrite(action, new Error('EDA routing readback differs from the requested properties.'), {
 				...context,
 				after: observed ?? null,

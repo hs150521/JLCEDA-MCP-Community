@@ -9,6 +9,7 @@
  * ------------------------------------------------------------------------
  */
 
+import type { SchematicPinAdapter } from '../bridge/protocol.ts';
 import type { AutoRoutingSnapshot } from './pcb-auto-routing-observation';
 import { isReadOnlyBridgeRequest } from '../bridge/bridge-contract';
 import { getSyncState, isPlainObjectRecord, preserveBoundedArray, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils';
@@ -214,7 +215,7 @@ function resolveApiCallable(apiFullName: string): { callable: (...args: unknown[
  * @param payload 任务参数。
  * @returns 调用结果。
  */
-export async function handleApiInvokeTask(payload: unknown): Promise<unknown> {
+export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (adapter: SchematicPinAdapter) => void): Promise<unknown> {
 	if (!isPlainObjectRecord(payload)) {
 		throw new Error('invoke 任务参数必须为对象。');
 	}
@@ -243,9 +244,10 @@ export async function handleApiInvokeTask(payload: unknown): Promise<unknown> {
 	}
 
 	if (normalizedPath === 'eda.sch_primitivepin.modify') {
-		const adapted = await tryModifySchematicComponentPin(invokeArgs);
+		const adapted = await tryModifySchematicComponentPin(invokeArgs, reportPinAdapter);
 		if (adapted)
 			return { apiFullName: resolvedPath, ...adapted };
+		reportPinAdapter?.('native_pin');
 	}
 	if (normalizedPath === 'eda.sch_primitivecomponent.create') {
 		const resolved = await resolveSchematicLibraryComponent(invokeArgs[0], invokeArgs[3]);

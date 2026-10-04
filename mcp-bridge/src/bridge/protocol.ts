@@ -14,6 +14,8 @@ import type { UnifiedLogEntry } from '../logging/log.ts';
 // 桥接角色，仅允许活动与待命两种。
 export type BridgeRole = 'active' | 'standby';
 
+export type SchematicPinAdapter = 'component_pin_instance' | 'native_pin';
+
 // 调试开关配置。
 export interface BridgeDebugSwitch {
 	enableSystemLog: boolean;
@@ -74,6 +76,7 @@ export interface BridgeClientTaskStartedMessage {
 	leaseTerm: number;
 	startedAt: number;
 	context?: BridgeClientContext;
+	schematicPinAdapter?: SchematicPinAdapter;
 }
 
 // 客户端上报日志消息。

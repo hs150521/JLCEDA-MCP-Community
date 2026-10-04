@@ -1,3 +1,4 @@
+import type { SchematicPinAdapter } from '../bridge/protocol.ts';
 import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
 
 type Api = Record<string, unknown>;
@@ -106,7 +107,7 @@ async function findOwner(api: Api, targetId: string): Promise<Owner | undefined>
 }
 
 /** 将 ComponentPin 的可写字段通过其真实实例提交，普通符号 Pin 留给原生 API。 */
-export async function tryModifySchematicComponentPin(args: unknown[]): Promise<Record<string, unknown> | undefined> {
+export async function tryModifySchematicComponentPin(args: unknown[], reportAdapter?: (adapter: SchematicPinAdapter) => void): Promise<Record<string, unknown> | undefined> {
 	const primitiveId = args[0];
 	const property = args[1];
 	if (typeof primitiveId !== 'string' || !isPlainObjectRecord(property))
@@ -157,6 +158,8 @@ export async function tryModifySchematicComponentPin(args: unknown[]): Promise<R
 	for (const [key, value] of Object.entries(requested))
 		(editable[key === 'noConnected' ? 'setState_NoConnected' : 'setState_PinNumber'] as (value: unknown) => unknown).call(editable, value);
 	await assertPage(runtime, page.uuid);
+	// 紧邻原生写入上报执行路径，同时重新核对租约和连接；此后不能再 await 只读查询。
+	reportAdapter?.('component_pin_instance');
 	try {
 		await editable.done();
 	}

@@ -24,6 +24,7 @@ class MockBridgeTransport {
 		this.started = [];
 		this.probeAcks = [];
 		this.startedContexts = new Map();
+		this.pinAdapters = new Map();
 		activeTransport = this;
 	}
 
@@ -59,9 +60,11 @@ class MockBridgeTransport {
 		return waiter.promise;
 	}
 
-	reportTaskStarted(requestId, _leaseTerm, context) {
+	reportTaskStarted(requestId, _leaseTerm, context, adapter) {
 		this.started.push(requestId);
 		this.startedContexts.set(requestId, context);
+		if (adapter)
+			this.pinAdapters.set(requestId, adapter);
 		this.afterStarted?.(requestId);
 	}
 
@@ -195,6 +198,14 @@ async function main() {
 		assert.equal(transport.startedContexts.get('pcb-write').pageKind, 'pcb');
 		assert.equal(transport.startedContexts.get('pcb-write').pageUuid, 'cached-pcb');
 		currentDocumentType = 1;
+		globalThis.eda.sch_PrimitivePin = { async modify(id, patch) {
+			assert.equal(transport.pinAdapters.get('ordinary-pin-write'), 'native_pin');
+			return { primitiveId: id, ...patch };
+		} };
+		submit('ordinary-pin-write', { apiFullName: 'eda.sch_PrimitivePin.modify', args: ['ordinary-pin', { noConnected: false }] });
+		assert.equal((await transport.resultFor('ordinary-pin-write')).error, undefined);
+		assert.equal(transport.startedContexts.get('ordinary-pin-write').pageUuid, 'schematic-one');
+		readCalls = 0;
 		submit('wrong-page-write', { apiFullName: 'eda.pcb_PrimitiveComponent.create', args: [] });
 		const wrongPage = await transport.resultFor('wrong-page-write');
 		assert.match(wrongPage.error.message, /Current editor is schematic/);

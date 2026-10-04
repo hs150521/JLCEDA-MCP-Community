@@ -522,7 +522,13 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 			const timeoutMs = resolveBridgeTaskTimeoutMs(task.path, task.payload);
 			const timedTask = startTimedTask(
 				(async () => {
-					const value = await toSerializableAsync(await handler(handlerPayload));
+					const value = await toSerializableAsync(await handler(handlerPayload, (adapter) => {
+						if (taskGeneration !== transportGeneration || transport !== currentTransport)
+							throw new Error('Bridge connection changed before the pin mutation started.');
+						if (currentRole !== 'active' || task.leaseTerm !== currentLeaseTerm)
+							throw new Error('Bridge role or lease changed before the pin mutation started.');
+						currentTransport.reportTaskStarted(task.requestId, task.leaseTerm, executionContext, adapter);
+					}));
 					if (task.path === '/bridge/jlceda/pcb/document'
 						&& task.payload && typeof task.payload === 'object' && !Array.isArray(task.payload)
 						&& (task.payload as Record<string, unknown>).action === 'import_changes'

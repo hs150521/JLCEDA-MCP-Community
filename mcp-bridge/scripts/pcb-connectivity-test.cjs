@@ -46,6 +46,7 @@ async function main() {
 	let lineCreateMode = 'normal';
 	let viaReadbackMode = 'normal';
 	let lineScans = 0;
+	const lineScanScopes = [];
 	globalThis.eda = {
 		pcb_Net: { async getAllNets() { return nets; } },
 		pcb_Layer: { async getAllLayers() { return layers; } },
@@ -68,8 +69,7 @@ async function main() {
 			async get(id) { return lines.get(id); },
 			async getAll(net, layer) {
 				lineScans += 1;
-				assert.equal(net, 'GND', 'normalization scan is scoped to the requested net');
-				assert.equal(layer, 1);
+				lineScanScopes.push([net, layer]);
 				return [...lines.values()].filter(item => item.getState_Net() === net && item.getState_Layer() === layer);
 			},
 		},
@@ -99,7 +99,8 @@ async function main() {
 	assert.equal(createdVia.ok, true);
 	assert.equal(createdVia.primitiveId, 'via-1');
 	assert.equal(createdVia.verified, true);
-	assert.equal(lineScans, 0, 'normal successful create keeps its targeted readback');
+	assert.equal(lineScans, 1, '记录写前快照，成功的单 ID 回读无需再次扫描');
+	assert.deepEqual(lineScanScopes, [['GND', 1]], '只读取请求网络和层，不扫描全板');
 
 	await assert.rejects(handlePcbConnectivityTask({ ...line, net: 'UNKNOWN' }), /does not exist/);
 	await assert.rejects(handlePcbConnectivityTask({ ...line, layer: 2 }), /unlocked copper/);
@@ -131,6 +132,16 @@ async function main() {
 	assert.deepEqual(split.primitiveIds, ['split-a', 'split-b']);
 	assert.equal(split.after.lines.length, 2);
 	assert.equal(split.normalization.kind, 'split_or_merged_line');
+	assert.deepEqual(split.normalization.changedPrimitiveIds, ['split-a', 'split-b']);
+	lines.delete('split-a');
+	lines.delete('split-b');
+	const originalLineGet = lineApi.get;
+	lineApi.get = async id => id === 'native-replaced' ? { getState_PrimitiveId: () => id } : originalLineGet(id);
+	const placeholderSplit = await toSerializableAsync(await handlePcbConnectivityTask(normalizedRequest));
+	assert.equal(placeholderSplit.ok, true, '原生拆分返回仅 ID 的删除占位对象仍可由本次新线路核验');
+	assert.deepEqual(placeholderSplit.primitiveIds, ['split-a', 'split-b']);
+	assert.deepEqual(placeholderSplit.normalization.changedPrimitiveIds, ['split-a', 'split-b']);
+	lineApi.get = originalLineGet;
 	lines.delete('split-a');
 	lines.delete('split-b');
 	lineApi.create = async () => {
@@ -141,6 +152,60 @@ async function main() {
 	assert.equal(merged.ok, true);
 	assert.deepEqual(merged.primitiveIds, ['merged']);
 	lines.delete('merged');
+
+	// 已有线路完整覆盖请求段时，不能掩盖 create 返回的错误新图元。
+	lines.set('old-cover', linePrimitive('old-cover', 'GND', 1, 950, 200, 1250, 200, 10));
+	for (const [net, layer, startY, endY, width] of [
+		['VCC', 1, 200, 200, 10],
+		['GND', 2, 200, 200, 10],
+		['GND', 1, 200, 200, 20],
+		['GND', 1, 210, 210, 10],
+	]) {
+		lineApi.create = async () => {
+			const wrong = linePrimitive('wrong-new', net, layer, 1000, startY, 1200, endY, width);
+			lines.set('wrong-new', wrong);
+			return wrong;
+		};
+		const wrong = await toSerializableAsync(await handlePcbConnectivityTask(normalizedRequest));
+		assert.equal(wrong.ok, false, '旧铜线不能作为错误返回图元的成功证据');
+		assert.equal(wrong.verified, undefined);
+		assert.equal(wrong.commitUnknown, true);
+		assert.equal(wrong.returnedPrimitiveId, 'wrong-new');
+		assert.deepEqual([wrong.after.net, wrong.after.layer, wrong.after.startY, wrong.after.lineWidth], [net, layer, startY, width]);
+		lines.delete('wrong-new');
+	}
+	lineApi.create = async () => ({ getState_PrimitiveId: () => 'native-no-change' });
+	const unchanged = await handlePcbConnectivityTask(normalizedRequest);
+	assert.equal(unchanged.ok, false, '仅存在写前覆盖且没有本次线路变化时不得 verified');
+	assert.equal(unchanged.commitUnknown, true);
+	lines.delete('old-cover');
+
+	// EDA 合并到原有 ID，必须按几何变化而不只按新 ID 判断。
+	lines.set('reused-merge', linePrimitive('reused-merge', 'GND', 1, 950, 200, 1050, 200, 10));
+	lineApi.create = async () => {
+		const merged = linePrimitive('reused-merge', 'GND', 1, 1250, 200, 950, 200, 10);
+		lines.set('reused-merge', merged);
+		return merged;
+	};
+	const reused = await handlePcbConnectivityTask(normalizedRequest);
+	assert.equal(reused.ok, true);
+	assert.deepEqual(reused.primitiveIds, ['reused-merge']);
+	assert.deepEqual(reused.normalization.changedPrimitiveIds, ['reused-merge']);
+	lines.delete('reused-merge');
+
+	// 新建的半段可以和未变化的旧半段共同覆盖请求段。
+	lines.set('old-half', linePrimitive('old-half', 'GND', 1, 1000, 200, 1100, 200, 10));
+	lineApi.create = async () => {
+		const added = linePrimitive('new-half', 'GND', 1, 1100, 200, 1200, 200, 10);
+		lines.set('new-half', added);
+		return added;
+	};
+	const extension = await handlePcbConnectivityTask(normalizedRequest);
+	assert.equal(extension.ok, true);
+	assert.deepEqual(extension.primitiveIds, ['old-half', 'new-half']);
+	assert.deepEqual(extension.normalization.changedPrimitiveIds, ['new-half']);
+	lines.delete('old-half');
+	lines.delete('new-half');
 	lineApi.create = async () => {
 		lines.set('gap-a', linePrimitive('gap-a', 'GND', 1, 1000, 200, 1090, 200, 10));
 		lines.set('gap-b', linePrimitive('gap-b', 'GND', 1, 1100, 200, 1200, 200, 10));

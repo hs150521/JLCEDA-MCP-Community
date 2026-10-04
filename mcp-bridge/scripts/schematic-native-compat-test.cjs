@@ -17,6 +17,9 @@ async function main() {
 	let nativePinModifyCalls = 0;
 	let doneCalls = 0;
 	let corruptSibling = false;
+	let pageReadHook;
+	const adapters = [];
+	const reportAdapter = adapter => adapters.push(adapter);
 	const states = [pinState('pin-16', '16'), pinState('pin-17', '17')];
 	function nativePin(state) {
 		const primitive = { getState_PrimitiveId: () => state.primitiveId, getState_PrimitiveType: () => 'ComponentPin', getState_OtherProperty: () => ({ ...state.otherProperty }) };
@@ -34,6 +37,7 @@ async function main() {
 					return this;
 				},
 				async done() {
+					assert.equal(adapters.at(-1), 'component_pin_instance', 'classification is reported before native ComponentPin mutation');
 					doneCalls += 1;
 					Object.assign(state, staged);
 					if (corruptSibling)
@@ -47,7 +51,12 @@ async function main() {
 	globalThis.eda = {
 		EDMT_EditorDocumentType: { SCHEMATIC_PAGE: 1, SYMBOL_COMPONENT: 2 },
 		dmt_SelectControl: { async getCurrentDocumentInfo() { return { documentType, uuid: pageUuid }; } },
-		dmt_Schematic: { async getCurrentSchematicPageInfo() { return { uuid: pageUuid }; } },
+		dmt_Schematic: {
+			async getCurrentSchematicPageInfo() {
+				pageReadHook?.();
+				return { uuid: pageUuid };
+			},
+		},
 		sch_PrimitiveComponent: {
 			async getAll(_type, allPages) {
 				assert.equal(allPages, false);
@@ -59,39 +68,40 @@ async function main() {
 		},
 		sch_PrimitivePin: {
 			async modify(id, patch) {
+				assert.equal(adapters.at(-1), 'native_pin', 'ordinary Pin classification is reported before native modify');
 				nativePinModifyCalls += 1;
 				return { primitiveId: id, ...patch };
 			},
 		},
 	};
-	const ncEdit = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] });
+	const ncEdit = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] }, reportAdapter);
 	assert.deepEqual([ncEdit.ok, ncEdit.verified, ncEdit.adapter, ncEdit.after.noConnected, ncEdit.after.x, ncEdit.after.y], [true, true, 'component_pin_instance', false, 530, 330]);
 	const ncWireResult = JSON.parse(JSON.stringify(await toSerializableAsync(ncEdit)));
 	assert.deepEqual(ncWireResult.result, ncWireResult.after, 'final transport must preserve the native-compatible result snapshot');
 	assert.equal(JSON.stringify(ncWireResult).includes('[Circular]'), false);
 	assert.equal(states[1].noConnected, true);
 	assert.equal(nativePinModifyCalls, 0, 'ComponentPin must bypass the faulty generic Pin.modify factory');
-	const unchanged = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] });
+	const unchanged = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] }, reportAdapter);
 	assert.equal(unchanged.changed, false);
 	const unchangedWireResult = JSON.parse(JSON.stringify(await toSerializableAsync(unchanged)));
 	assert.deepEqual(unchangedWireResult.before, unchangedWireResult.after, 'no-op transport snapshots remain inspectable');
 	assert.deepEqual(unchangedWireResult.result, unchangedWireResult.after);
 	assert.equal(JSON.stringify(unchangedWireResult).includes('[Circular]'), false);
 	assert.equal(doneCalls, 1);
-	const renumbered = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { pinNumber: '16A' }] });
+	const renumbered = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { pinNumber: '16A' }] }, reportAdapter);
 	assert.equal(renumbered.after.pinNumber, '16A');
 	assert.equal(renumbered.after.noConnected, false, 'pin number edits preserve NC state');
 	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { y: -330 }] }), /geometry belongs to the library symbol/);
 	assert.equal(nativePinModifyCalls, 0);
 	corruptSibling = true;
-	const drift = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] });
+	const drift = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] }, reportAdapter);
 	assert.deepEqual([drift.ok, drift.commitUnknown, drift.nativeCallSettled], [false, true, true]);
 	assert.equal(drift.after.y, 330);
 	assert.ok(drift.sideEffects.some(effect => effect.primitiveId === 'pin-17' && effect.field === 'y'));
 	corruptSibling = false;
 	states[1].y = 330;
 	states[1].noConnected = undefined;
-	const unmarkedSibling = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] });
+	const unmarkedSibling = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] }, reportAdapter);
 	assert.equal(unmarkedSibling.verified, true, 'official undefined NC state on an unmarked sibling remains compatible');
 	states[1].noConnected = true;
 	globalThis.eda.sch_PrimitiveComponent.getAll = async () => [{ getState_PrimitiveId: () => 'U1' }];
@@ -99,16 +109,40 @@ async function main() {
 		assert.equal(id, 'U1');
 		return states.map(nativePin);
 	};
-	assert.equal((await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] })).verified, true, 'module enumeration also yields native ComponentPin instances');
+	assert.equal((await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] }, reportAdapter)).verified, true, 'module enumeration also yields native ComponentPin instances');
 	const realPinEnumeration = globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId;
 	globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId = async () => states.map(state => ({ ...nativePin(state), toAsync: undefined }));
-	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] }), /toAsync is unavailable/);
+	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] }, reportAdapter), /toAsync is unavailable/);
 	globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId = realPinEnumeration;
+	let pageReads = 0;
+	let staleLease = false;
+	pageReadHook = () => {
+		if (++pageReads === 3)
+			staleLease = true;
+	};
+	const beforeStaleDone = doneCalls;
+	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] }, (adapter) => {
+		if (staleLease)
+			throw new Error('Bridge lease changed before the pin mutation started.');
+		reportAdapter(adapter);
+	}), /lease changed/);
+	assert.equal(pageReads, 3, 'the lease change occurs in the final page read before native done');
+	assert.equal(doneCalls, beforeStaleDone, 'a lease change during final prewrite verification must not commit');
+	pageReadHook = undefined;
 	documentType = 2;
-	const normalPin = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['symbol-pin', { y: 100 }] });
+	const normalPin = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['symbol-pin', { y: 100 }] }, reportAdapter);
 	assert.equal(normalPin.result.y, 100);
 	assert.equal(nativePinModifyCalls, 1, 'independent symbol Pin keeps its native API path');
 	documentType = 1;
+	const ordinaryPagePin = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['ordinary-page-pin', { noConnected: false }] }, reportAdapter);
+	assert.equal(ordinaryPagePin.result.primitiveId, 'ordinary-page-pin');
+	assert.equal(adapters.at(-1), 'native_pin', 'a current-page Pin without a component owner keeps its native path');
+	assert.equal(nativePinModifyCalls, 2);
+	const beforeBlockedWrite = nativePinModifyCalls;
+	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['ordinary-page-pin', { noConnected: true }] }, () => {
+		throw new Error('execution context reporting failed');
+	}), /execution context reporting failed/);
+	assert.equal(nativePinModifyCalls, beforeBlockedWrite, 'failed classification reporting must not execute the native write');
 
 	let createCalls = 0;
 	let lookupCalls = 0;

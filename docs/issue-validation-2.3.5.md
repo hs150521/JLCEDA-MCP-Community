@@ -14,6 +14,12 @@
 - PCB 实机已验证 BOM CSV（334 B）、板框反向回读、显式闭合区域反向与四位小数坐标回读、2 个实际直线 ID 的共线覆盖、旋转 `-90`→`270`、Attribute 的 `value` / `valueVisible`、器件 `supplierId` / `otherProperty`，以及全板覆铜重建后的 1 个边框与 1 个填充。此前新 PCB 导航悬挂已重启恢复，后续验证在可用 PCB 页面继续。
 - 过孔创建 15.748/31.496→15.8/31.4 与修改 15.7/31.5→15.8/31.6 均 verified:true；PCB 器件创建的公共库返回引用与同 ID 工程库副本回读已验证；覆铜反向与四位小数轮廓创建、修改通过。真实 PCB 的 28 条 DRC 叶子详情按 limit:2 连续读取 14 页，nextOffset 从 2 递增至 26 后结束，数值端点完整，nativeTruncated 和 serializationTruncated 均为 false。#80、#82 和旧 Issue 原场景继续保持开放。
 
+## 发布审查补修
+
+发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
+
+三项审查补修均已完成两轮本地复查。最终 Bridge 完整构建、两包全部测试入口、lint 与多客户端协议验证通过。最终扩展热更新后，再次实测 ComponentPin 的 NC true→false，完整原理图语义快照恢复一致；直线拆分/合并返回 2 个本次变化的实际 ID 与 `changedPrimitiveIds`；正常过孔量化修改仍 verified:true。普通 Pin / ComponentPin 的真实无结果超时、迟到分类和中继恢复，以及零环宽失败分支由针对性本地回归验证。
+
 ## 全部 Open Issue 矩阵
 
 | Issue | 问题与本轮处理 | 已有证据 | 当前结论 / 下一步 |
@@ -52,11 +58,11 @@ PCB 器件旋转按模 360 度比较。板框闭合轮廓允许等价反向和�
 
 PCB 器件创建若将设备或封装复制进工程库，实际引用可与输入库引用不同；仅在原生创建返回来源与请求来源或同 ID 实际回读一致，且新 ID、位置等回读吻合时确认，并返回 `normalization.source`。覆铜创建与修改复用闭合轮廓等价比较，保留实际绕序、起点和坐标诊断，优先级等真实差异仍失败。两项修复已通过本地回归、两轮审查和实机验证。
 
-直线创建在原生 ID 的单件回读不能直接确认时，检查同网络、同层、同线宽的共线图元覆盖请求线段，返回实际图元集合。成功代表请求线段得到覆盖，原生图元边界可能不同。
+直线创建先记录同网络、同层的写前快照；原生 ID 的单件回读不能直接确认时，检查同网络、同层、同线宽的共线图元覆盖请求线段，且至少有本次新增或几何变化的有效线路，返回实际图元集合与 `changedPrimitiveIds`。成功代表请求线段得到覆盖，原生图元边界可能不同。
 
 ### 已结束的部分写入与未知提交
 
-ComponentPin 修改失败的恢复类型为 `schematic_connectivity_primitives`。使用 `bridge_recover_client action=readback`，设置 `readbackPath:"/bridge/jlceda/schematic/read"`、`readbackPayload:{"includeConnectivityPrimitives":true}`；语义快照包含 `pinId`、`x`、`y`、`rotation`、`noConnected`，须核对目标所属器件全部引脚的真实状态。只查询 `/context` 不能解除隔离；诊断要求宿主重启时先重启原 EDA 宿主。
+Bridge 在原生写入前上报实际引脚适配器；普通 Pin 不要求 ComponentPin 所属器件，仍须完整连接状态恢复。已识别 ComponentPin 修改失败的恢复类型为 `schematic_connectivity_primitives`。使用 `bridge_recover_client action=readback`，设置 `readbackPath:"/bridge/jlceda/schematic/read"`、`readbackPayload:{"includeConnectivityPrimitives":true}`；语义快照包含 `pinId`、`x`、`y`、`rotation`、`noConnected`，须核对目标所属器件全部引脚的真实状态。只查询 `/context` 不能解除隔离；诊断要求宿主重启时先重启原 EDA 宿主。
 
 PCB 器件部分修改会返回实际 `after`、`failureKind:"state_mismatch"` 和 `mismatches`，并以 `nativeCallSettled:true` 表明原生调用已结束。该结果仍保留 `commitUnknown` / `readbackRequired`，须按诊断完成同板器件回读；不应将其当成未执行而重复写入。
 

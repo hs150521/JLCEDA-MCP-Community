@@ -115,27 +115,31 @@ function sameLine(actual: LineState, requested: Omit<LineState, 'primitiveId'>):
 	return forward || reversed;
 }
 
-function coveringLines(lines: LineState[], requested: Omit<LineState, 'primitiveId'>): LineState[] | undefined {
+function requestedLineInterval(line: LineState, requested: Omit<LineState, 'primitiveId'>): { start: number; end: number; line: LineState } | undefined {
+	if (!line.primitiveId || line.net !== requested.net || line.layer !== requested.layer || !sameNumber(line.lineWidth, requested.lineWidth))
+		return undefined;
 	const dx = requested.endX - requested.startX;
 	const dy = requested.endY - requested.startY;
 	const length = Math.hypot(dx, dy);
 	const ux = dx / length;
 	const uy = dy / length;
-	const intervals: Array<{ start: number; end: number; line: LineState }> = [];
-	for (const line of lines) {
-		if (!line.primitiveId || line.net !== requested.net || line.layer !== requested.layer || !sameNumber(line.lineWidth, requested.lineWidth))
-			continue;
-		const points = [[line.startX, line.startY], [line.endX, line.endY]];
-		if (points.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y)
-			|| Math.abs((x - requested.startX) * uy - (y - requested.startY) * ux) > COORDINATE_EPSILON)) {
-			continue;
-		}
-		const projections = points.map(([x, y]) => (x - requested.startX) * ux + (y - requested.startY) * uy);
-		const start = Math.max(0, Math.min(...projections));
-		const end = Math.min(length, Math.max(...projections));
-		if (end - start > COORDINATE_EPSILON)
-			intervals.push({ start, end, line });
+	const points = [[line.startX, line.startY], [line.endX, line.endY]];
+	if (points.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y)
+		|| Math.abs((x - requested.startX) * uy - (y - requested.startY) * ux) > COORDINATE_EPSILON)) {
+		return undefined;
 	}
+	const projections = points.map(([x, y]) => (x - requested.startX) * ux + (y - requested.startY) * uy);
+	const start = Math.max(0, Math.min(...projections));
+	const end = Math.min(length, Math.max(...projections));
+	return end - start > COORDINATE_EPSILON ? { start, end, line } : undefined;
+}
+
+function coveringLines(lines: LineState[], requested: Omit<LineState, 'primitiveId'>): LineState[] | undefined {
+	const length = Math.hypot(requested.endX - requested.startX, requested.endY - requested.startY);
+	const intervals = lines.flatMap((line) => {
+		const interval = requestedLineInterval(line, requested);
+		return interval ? [interval] : [];
+	});
 	intervals.sort((a, b) => a.start - b.start);
 	let covered = 0;
 	const result: LineState[] = [];
@@ -150,6 +154,13 @@ function coveringLines(lines: LineState[], requested: Omit<LineState, 'primitive
 			return preserveBoundedArray(result);
 	}
 	return undefined;
+}
+
+async function readScopedLines(api: Record<string, unknown>, net: string, layer: number): Promise<LineState[]> {
+	const raw = await (api.getAll as (net: string, layer: number) => Promise<unknown>).call(api, net, layer);
+	if (!Array.isArray(raw))
+		throw new TypeError('EDA pcb_PrimitiveLine.getAll did not return an array.');
+	return raw.map(readLine);
 }
 
 async function handleLineCreate(payload: Record<string, unknown>, eda: Record<string, unknown>, net: string, allowNewNet: boolean): Promise<unknown> {
@@ -171,6 +182,8 @@ async function handleLineCreate(payload: Record<string, unknown>, eda: Record<st
 	if (netApi)
 		preflight.push(verifyNet(netApi, net));
 	await Promise.all(preflight);
+	// 仅记录请求的网络与层，用来区分原有铜线和此次原生拆分、合并产生的变化。
+	const beforeLines = typeof lineApi.getAll === 'function' ? await readScopedLines(lineApi, net, layer) : undefined;
 	let created: unknown;
 	try {
 		created = await (lineApi.create as (...args: unknown[]) => Promise<unknown>).call(lineApi, net, layer, startX, startY, endX, endY, lineWidth);
@@ -185,15 +198,33 @@ async function handleLineCreate(payload: Record<string, unknown>, eda: Record<st
 		const observed = readLine(await (lineApi.get as (id: string) => Promise<unknown>).call(lineApi, returnedPrimitiveId));
 		if (observed.primitiveId === returnedPrimitiveId && sameLine(observed, requested))
 			return { ok: true, action: 'line_create', primitiveId: returnedPrimitiveId, ...requested, after: observed, verified: true };
+		// 返回完整图元时，它必须属于请求段；拆分后仅 ID 的占位对象仍走覆盖回读。
+		const hasReturnedGeometry = observed.net !== '' && observed.layer > 0
+			&& [observed.startX, observed.startY, observed.endX, observed.endY, observed.lineWidth].every(Number.isFinite);
+		if (observed.primitiveId && hasReturnedGeometry && (observed.primitiveId !== returnedPrimitiveId || !requestedLineInterval(observed, requested))) {
+			return { ...unknownAfterWrite('line_create', returnedPrimitiveId, 'EDA returned line differs from the requested net, layer, width, or segment.'), after: observed };
+		}
 		// 原生布线会在交点拆分线路，或把线路合并到已有铜线。
-		// 单 ID 回读不等价时，仅扫描所请求的网络和层。
+		// 覆盖回读必须包含此次新增或几何发生变化的有效线路。
 		const allApi = pcbApi(eda, 'pcb_PrimitiveLine', ['getAll']);
-		const raw = await (allApi.getAll as (net: string, layer: number) => Promise<unknown>).call(allApi, net, layer);
-		if (!Array.isArray(raw))
-			throw new TypeError('EDA pcb_PrimitiveLine.getAll did not return an array.');
-		const lines = coveringLines(raw.map(readLine), requested);
-		if (!lines)
-			return { ...unknownAfterWrite('line_create', returnedPrimitiveId, 'EDA line readback differs from the requested net, layer, or geometry.'), after: observed };
+		const afterLines = await readScopedLines(allApi, net, layer);
+		const beforeById = new Map(beforeLines?.map(line => [line.primitiveId, line]));
+		const changedLines = beforeLines === undefined
+			? []
+			: afterLines.filter((line) => {
+					const before = beforeById.get(line.primitiveId);
+					return (!before || !sameLine(line, before)) && requestedLineInterval(line, requested) !== undefined;
+				});
+		const lines = coveringLines(afterLines, requested);
+		if (!lines || changedLines.length === 0) {
+			return { ...unknownAfterWrite('line_create', returnedPrimitiveId, 'EDA line readback has no verified change covering the requested segment.'), after: observed };
+		}
+		// 覆盖算法可能先选中更长的旧线；同时返回实际变化的有效图元作为核验依据。
+		for (const changed of changedLines) {
+			if (!lines.some(line => line.primitiveId === changed.primitiveId))
+				lines.push(changed);
+		}
+
 		return {
 			ok: true,
 			action: 'line_create',
@@ -202,7 +233,7 @@ async function handleLineCreate(payload: Record<string, unknown>, eda: Record<st
 			returnedPrimitiveId,
 			...requested,
 			after: { lines },
-			normalization: { kind: 'split_or_merged_line', verification: 'requested_segment_covered' },
+			normalization: { kind: 'split_or_merged_line', verification: 'requested_segment_covered', changedPrimitiveIds: preserveBoundedArray(changedLines.map(line => line.primitiveId)) },
 			verified: true,
 		};
 	}

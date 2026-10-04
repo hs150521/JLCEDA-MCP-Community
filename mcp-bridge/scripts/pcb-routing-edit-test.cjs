@@ -216,6 +216,14 @@ async function main() {
 	assert.equal(unchangedHole.ok, true);
 	assert.equal(unchangedHole.primitive.holeDiameter, 15.6);
 	assert.equal(unchangedHole.normalization, undefined);
+	states.via.set('quantized-via', makeState('via', 'quantized-via', { holeDiameter: 15.8, diameter: 31.6 }));
+	observedViaDimensions = { holeDiameter: 15.8, diameter: 15.8 };
+	const collapsedRing = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { diameter: 15.81 } }));
+	assert.equal(collapsedRing.ok, false, '量化后的实际外径仍须大于孔径');
+	assert.equal(collapsedRing.verified, undefined);
+	assert.deepEqual([collapsedRing.after.holeDiameter, collapsedRing.after.diameter], [15.8, 15.8]);
+	assert.deepEqual(collapsedRing.mismatches, [{ field: 'annularRing', requested: 'diameter > holeDiameter', actual: 0 }]);
+	assert.equal(collapsedRing.nativeCallSettled, true);
 	globalThis.eda.pcb_PrimitiveVia.modify = originalViaModify;
 	states.via.delete('quantized-via');
 	states.via.set('child-via', makeState('via', 'child-via', { parentComponentPrimitiveId: 'component-1' }));
