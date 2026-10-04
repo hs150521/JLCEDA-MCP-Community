@@ -2,7 +2,7 @@
 
 当前源码版本：Bridge `2.3.6`，MCP Server `2.3.6`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
 
-2.3.6新增独立封装编辑器支持：以官方 `documentType:4` 和库文档身份建立 Bridge 连接，使用 `footprint_read` 完整读取七类图元，通过 `api_invoke` 操作首批 41 个封装画布 API。无孔 Pad 的空值或原生 NaN 孔旋转表示为 `null`，没有额外特殊轮廓的 `specialPad:[]` 原样保留。正式恢复、5 个控制图元的源码写回后重开，以及 Via/Line/Polyline/String/独立 Arc 新案例的创建、修改、删除已实测通过。Pad 尺寸请求未生效、首次 Arc 未登记原因未确定、Attribute 无非空实机样本，#80 和 EDA v4 仍未解决或未验证。完整证据、范围和限制见 [2.3.6 发布说明](docs/releases/v2.3.6.md)。
+2.3.6新增独立封装编辑器支持：以官方 `documentType:4` 和当前库文档建立 Bridge 连接，库身份优先取匹配当前文档的实际 `<documentUuid>@<libraryUuid>` 标签；无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`。使用 `footprint_read` 完整读取七类图元，通过 `api_invoke` 操作首批 41 个封装画布 API。无孔 Pad 的空值或原生 NaN 孔旋转表示为 `null`，没有额外特殊轮廓的 `specialPad:[]` 原样保留。正式恢复、5 个控制图元的源码写回后重开，以及 Via/Line/Polyline/String/独立 Arc 新案例的创建、修改、删除已实测通过。Pad 尺寸请求未生效、首次 Arc 未登记原因未确定、Attribute 无非空实机样本，#80 和 EDA v4 仍未解决或未验证。完整证据、范围和限制见 [2.3.6 发布说明](docs/releases/v2.3.6.md)。
 
 2.3.4 新增 `board_setup`：传当前工程 UUID 和 `confirm:true`，可新建 Board 及关联的原理图、PCB；提供尚未关联 Board 的原理图 UUID 时，会创建 PCB 并将两者关联到新 Board。工具回读三个文档的归属，不会自动打开 PCB 或导入原理图变更。
 

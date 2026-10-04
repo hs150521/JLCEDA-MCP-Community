@@ -72,6 +72,20 @@ async function incomplete(change, pattern) {
 }
 
 async function main() {
+	// 原生 tab 保持当前库，而 parentLibraryUuid 在跨库切换后可能滞留。
+	const switched = fixture();
+	for (const [uuid, libraryUuid, staleParent] of [
+		['personal-foot', 'personal-library', 'personal-library'],
+		['project-foot', 'project-library', 'personal-library'],
+		['personal-foot', 'personal-library', 'project-library'],
+	]) {
+		Object.assign(switched.document, { uuid, tabId: `${uuid}@${libraryUuid}`, parentLibraryUuid: staleParent });
+		const snapshot = await handleFootprintReadTask({});
+		assert.equal(snapshot.complete, true);
+		assert.deepEqual([snapshot.documentUuid, snapshot.libraryUuid, snapshot.tabId], [uuid, libraryUuid, `${uuid}@${libraryUuid}`]);
+	}
+	delete switched.document.parentLibraryUuid;
+	assert.equal((await handleFootprintReadTask({})).complete, true, 'canonical tabs do not require the stale parent field');
 	const f = fixture();
 	const result = await handleFootprintReadTask({});
 	assert.deepEqual([result.ok, result.complete, result.scope, result.pageKind, result.documentType], [true, true, 'current_footprint_document', 'footprint', 4]);
@@ -176,7 +190,7 @@ async function main() {
 	await incomplete(({ lists }) => {
 		lists.via[0].getState_PrimitiveId = () => 'pad-1';
 	}, /object IDs differ/);
-	for (const field of ['uuid', 'parentLibraryUuid', 'tabId']) {
+	for (const field of ['uuid', 'tabId']) {
 		await incomplete(({ document, runtime }) => {
 			const original = runtime.pcb_PrimitivePad.getAll;
 			runtime.pcb_PrimitivePad.getAll = async () => {
@@ -189,7 +203,21 @@ async function main() {
 	await incomplete(({ document }) => {
 		document.documentType = 3;
 	}, /footprint|type/i);
+	await incomplete(({ document, runtime }) => {
+		const original = runtime.pcb_PrimitivePad.getAll;
+		runtime.pcb_PrimitivePad.getAll = async () => {
+			const raw = await original();
+			document.tabId = 'fp-document@library-two';
+			return raw;
+		};
+	}, /changed/i);
+	for (const tabId of ['other-document@library-one', 'fp-document@', '@library-one', 'fp-document@library-one@extra']) {
+		await incomplete(({ document }) => {
+			document.tabId = tabId;
+		}, /tab|library UUID/i);
+	}
 	await incomplete(({ document }) => {
+		document.tabId = 'legacy-foot-tab';
 		delete document.parentLibraryUuid;
 	}, /library|identity/i);
 	await incomplete(({ lists }) => {

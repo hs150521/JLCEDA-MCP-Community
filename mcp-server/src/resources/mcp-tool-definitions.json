@@ -313,7 +313,7 @@
   },
   {
     "name": "footprint_read",
-    "description": "完整读取当前独立封装编辑器（DocumentType 4）的焊盘、过孔、直线、圆弧、折线、文本和属性。返回库 UUID、文档 UUID、标签身份及七类不截断图元和数量；读取前后核对同一库、文档与标签。封装编辑不使用 PCB 专用工具；通过 api_invoke 调用允许的 pcb_Primitive API，提交未确认时必须用本工具完整回读同库同文档后恢复。",
+    "description": "完整读取当前独立封装编辑器（DocumentType 4）的焊盘、过孔、直线、圆弧、折线、文本和属性。库身份优先取匹配当前文档的实际 documentUuid@libraryUuid 标签，无 @ 的旧式标签兼容当前文档的 parentLibraryUuid，跨库滞留字段不能覆盖匹配标签。返回库 UUID、文档 UUID、标签身份及七类不截断图元和数量；读取前后核对同一库、文档与标签。封装编辑不使用 PCB 专用工具；通过 api_invoke 调用允许的 pcb_Primitive API，提交未确认时必须用本工具完整回读同库同文档后恢复。",
     "inputSchema": {
       "type": "object",
       "properties": {

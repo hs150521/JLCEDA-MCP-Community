@@ -2,7 +2,7 @@
 
 ## 2.3.6 独立封装编辑
 
-Bridge 将官方 `getCurrentDocumentInfo()` 返回的 `documentType:4` 识别为 `pageKind:"footprint"`，身份包含 `documentUuid`、`pageUuid`、`libraryUuid` 和 `tabId`；其中 `pageUuid` 为该封装文档 UUID，库身份来自 `parentLibraryUuid`。独立封装可建立连接，无需工程 UUID；已有 PCB 或工程缓存不作为封装身份。`eda_context` 返回 `footprintContext`，`bridge_clients` 显示同一组身份。
+Bridge 将官方 `getCurrentDocumentInfo()` 返回的 `documentType:4` 识别为 `pageKind:"footprint"`，身份包含 `documentUuid`、`pageUuid`、`libraryUuid` 和 `tabId`；其中 `pageUuid` 为该封装文档 UUID。库身份优先取匹配当前文档的实际 `<documentUuid>@<libraryUuid>` 标签；含 `@` 但文档前缀不符或库 UUID 缺失时拒绝，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`。EDA 3.2.181 跨库切换时该字段可能滞留旧值，不能覆盖匹配当前文档的实际库标签。独立封装可建立连接，无需工程 UUID；已有 PCB 或工程缓存不作为封装身份。`eda_context` 返回 `footprintContext`，`bridge_clients` 显示同一组身份。
 
 先调用 `footprint_read` 获取当前文档全部图元。仅支持可选 `timeoutMs`（5–120 秒，默认 60 秒），不支持 sections 或过滤；成功结果包含 `scope:"current_footprint_document"`、`complete:true`、七类数组及数量。Pad 保留焊盘/孔形状、孔偏移、孔旋转和 `padType`，Polyline 保留原生 `polygonSource` 数组，Attribute 保留父 ID、key/value、显示状态及可为空的坐标。对象与全 ID 清单不一致、必要 getter 缺失、读取中换库/文档/标签或超出 10000 图元/8 MiB 时返回 `complete:false`，不会以截断数据声明完整。
 

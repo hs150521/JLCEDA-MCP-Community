@@ -4,7 +4,7 @@
 
 ## [2.3.6] - 2026-10-05
 
-- 新增独立封装支持：公开 `footprint_read`，同步独立封装文档及 `libraryUuid` 上下文；默认提供 60 秒 Bridge 读取预算，可按需要延长至 120 秒。
+- 新增独立封装支持：公开 `footprint_read`，同步独立封装文档及 `libraryUuid` 上下文；库身份优先取匹配当前文档的实际库标签，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`，避免跨库滞留字段覆盖真实标签。默认提供 60 秒 Bridge 读取预算，可按需要延长至 120 秒。
 - 共享契约声明首批 21 个封装画布读取方法和 20 个写入方法，与 Bridge 路由及输入定义保持同步；Attribute.create 不开放。
 - 封装写入按 task-started 的真实执行身份分类，未知提交、超时和失联要求同库同文档七类完整 `footprint_read`。恢复允许新标签，但回读前后的库/文档/标签必须一致，错误库或不完整状态不会解除写入隔离。
 - 新增主连接/中继的三类未确认提交恢复及分发回归，更新 Agent 操作指引。正式 footprint_state 实机恢复返回 readbackVerified:true、writesRemainBlocked:false；个人封装原生源码写回后重开，5 控制图元完整 DTO 一致。最终 SMD x130 状态已保存并重开核对；#80 持久 PCB 子过孔删除继续开放。

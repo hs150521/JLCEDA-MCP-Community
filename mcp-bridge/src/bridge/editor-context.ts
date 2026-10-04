@@ -40,13 +40,26 @@ export function footprintIdentityFromDocument(document: unknown): FootprintIdent
 	if (!isPlainObjectRecord(document) || editorDocumentPageKind(document) !== 'footprint')
 		throw new TypeError('Current editor is not a footprint document.');
 	const documentUuid = requiredIdentity(document.uuid, 'document UUID');
+	const tabId = requiredIdentity(document.tabId, 'tab ID');
+	let libraryUuid: string;
+	if (tabId.includes('@')) {
+		const parts = tabId.split('@');
+		if (parts.length !== 2 || parts[0] !== documentUuid)
+			throw new TypeError('Current footprint tab identity does not match the document UUID.');
+		// 原生库标签格式为 documentUuid@libraryUuid；跨库后 parentLibraryUuid 可能滞留。
+		libraryUuid = requiredIdentity(parts[1], 'library UUID in tab ID');
+	}
+	else {
+		// 非标准标签仅兼容当前文档提供的库字段，不读取其他页面的缓存上下文。
+		libraryUuid = requiredIdentity(document.parentLibraryUuid, 'library UUID');
+	}
 	return {
 		pageKind: 'footprint',
 		documentType: 4,
 		documentUuid,
 		pageUuid: documentUuid,
-		libraryUuid: requiredIdentity(document.parentLibraryUuid, 'library UUID'),
-		tabId: requiredIdentity(document.tabId, 'tab ID'),
+		libraryUuid,
+		tabId,
 	};
 }
 

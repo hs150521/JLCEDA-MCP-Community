@@ -163,6 +163,39 @@ function fixture() {
 
 const invoke = (kind, method, args = [], extra = {}) => handleApiInvokeTask({ apiFullName: `eda.pcb_Primitive${TYPES[kind]}.${method}`, args, ...extra });
 
+async function canonicalIdentityTests() {
+	const f = fixture();
+	// 实机个人库→工程库→个人库切换时，parentLibraryUuid 可仍指向上一库。
+	for (const [uuid, libraryUuid, staleParent] of [
+		['personal-foot', 'personal-library', 'personal-library'],
+		['project-foot', 'project-library', 'personal-library'],
+		['personal-foot', 'personal-library', 'project-library'],
+	]) {
+		Object.assign(f.document, { uuid, tabId: `${uuid}@${libraryUuid}`, parentLibraryUuid: staleParent });
+		const identity = await readFootprintIdentity(f.runtime);
+		assert.equal(identity.libraryUuid, libraryUuid);
+		assert.equal(identity.documentUuid, uuid);
+		assert.deepEqual((await handleEdaContextTask({})).footprintContext, identity);
+		assert.equal((await invoke('pad', 'get', ['pad-1'])).libraryUuid, libraryUuid);
+		const readback = await handleFootprintReadTask({});
+		assert.equal(readback.complete, true);
+		assert.equal(readback.libraryUuid, libraryUuid, 'complete recovery snapshots must use the actual tab library');
+	}
+	const actual = await readFootprintIdentity(f.runtime);
+	const wrongLibrary = { ...actual, libraryUuid: 'project-library' };
+	await assert.rejects(assertFootprintIdentity(f.runtime, wrongLibrary), /changed/);
+	const before = f.calls.length;
+	await assert.rejects(invoke('line', 'create', [], { expectedFootprintIdentity: wrongLibrary }), /changed/);
+	assert.equal(f.calls.length, before, 'an expected identity from the stale parent library must not start native writes');
+	delete f.document.parentLibraryUuid;
+	assert.deepEqual(await readFootprintIdentity(f.runtime), actual, 'canonical tabs supply the library without a parent field');
+	for (const tabId of ['other-document@personal-library', 'personal-foot@', '@personal-library', 'personal-foot@personal-library@other']) {
+		f.document.tabId = tabId;
+		await assert.rejects(readFootprintIdentity(f.runtime), /tab|library UUID/);
+		assert.equal((await handleEdaContextTask({})).footprintContext, null, 'invalid canonical identity must not fall back to a parent library');
+	}
+}
+
 async function handlerTests() {
 	let f = fixture();
 	const identity = await readFootprintIdentity(f.runtime);
@@ -537,6 +570,8 @@ const { enqueueTask, startBridgeRuntime, stopBridgeRuntime } = require('../src/r
 
 async function runtimeTests() {
 	const f = fixture();
+	f.document.tabId = 'fp-document@library-one';
+	f.document.parentLibraryUuid = 'cached-library';
 	let cachedReads = 0;
 	for (const [module, method] of [['dmt_Project', 'getCurrentProjectInfo'], ['dmt_Pcb', 'getCurrentPcbInfo'], ['dmt_Schematic', 'getCurrentSchematicPageInfo']]) {
 		f.runtime[module][method] = async () => {
@@ -575,6 +610,26 @@ async function runtimeTests() {
 		assert.equal(activeTransport.started.get('write').documentType, 4);
 		assert.equal(activeTransport.started.get('write').libraryUuid, 'library-one');
 		const originalRead = f.runtime.dmt_SelectControl.getCurrentDocumentInfo;
+		let libraryReads = 0;
+		activeTransport.afterStarted = (id) => {
+			if (id === 'library-changed')
+				libraryReads = 1;
+		};
+		f.runtime.dmt_SelectControl.getCurrentDocumentInfo = async () => {
+			if (libraryReads && ++libraryReads === 4)
+				f.document.tabId = 'fp-document@library-two';
+			return originalRead();
+		};
+		const beforeLibraryChange = f.calls.filter(call => call[1] === 'done').length;
+		const changedLibrary = await submit('library-changed', '/bridge/jlceda/api/invoke', { apiFullName: 'eda.pcb_PrimitiveLine.modify', args: ['line-1', { lineWidth: 9 }] });
+		assert.match(changedLibrary.error.message, /changed/);
+		assert.equal(libraryReads, 4, 'library switch must happen during the final identity read');
+		assert.equal(activeTransport.started.get('library-changed').libraryUuid, 'library-one');
+		assert.equal(f.document.parentLibraryUuid, 'cached-library');
+		assert.equal(f.calls.filter(call => call[1] === 'done').length, beforeLibraryChange, 'same document in another library must not commit a prepared DTO');
+		f.document.tabId = 'fp-document@library-one';
+		f.runtime.dmt_SelectControl.getCurrentDocumentInfo = originalRead;
+		activeTransport.afterStarted = undefined;
 		let readsSinceStart = 0;
 		activeTransport.afterStarted = (id) => {
 			if (id === 'lease-changed')
@@ -635,6 +690,8 @@ async function runtimeTests() {
 		assert.equal(recoveryRead.error, undefined);
 		assert.equal(recoveryRead.result.complete, true, 'quarantine must allow controlled full readback');
 		assert.equal(recoveryRead.result.lines[0].lineWidth, 9);
+		assert.equal(recoveryRead.result.libraryUuid, 'library-one');
+		assert.equal((await handleEdaContextTask({})).footprintContext.libraryUuid, 'library-one', 'recovery context must not inherit the stale parent library');
 	}
 	finally {
 		stopBridgeRuntime();
@@ -642,6 +699,7 @@ async function runtimeTests() {
 }
 
 async function main() {
+	await canonicalIdentityTests();
 	await modifyCommitTests();
 	await modifyMappingTests();
 	await partialModificationTests();

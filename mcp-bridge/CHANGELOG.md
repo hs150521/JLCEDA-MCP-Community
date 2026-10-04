@@ -4,7 +4,7 @@
 
 ## [2.3.6] - 2026-10-05
 
-- 新增独立封装支持：识别官方 DocumentType 4 独立封装，按库 UUID、文档 UUID 和标签建立 Bridge 上下文与连接，不复用工程/PCB 缓存。
+- 新增独立封装支持：识别官方 DocumentType 4 独立封装，按库 UUID、文档 UUID 和标签建立 Bridge 上下文与连接；库身份优先取匹配当前文档的实际库标签，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`，避免跨库滞留字段覆盖真实标签，不复用工程/PCB 缓存。
 - 新增 `footprint_read`：完整读取 Pad/Via/Line/Arc/Polyline/String/Attribute 七类图元，核对全 ID 清单和真实 DTO；保留焊盘/孔几何、原生轮廓源及属性父 ID、显示状态，缺能力或超预算时不声明完整。
 - `api_invoke` 支持首批 41 个封装画布方法，Polyline 源数组自动转换；创建/修改后读取实际 `after`，删除核对目标残留。Attribute.create 因官方内部空实现排除，PCB/原理图专用工具在封装文档内明确拒绝。
 - 写入前核对同库、同文档、同标签，并在最后身份读取后检查连接、活动角色与租约。封装未知提交使用同库同文档的完整 `footprint_read` 恢复；恢复可以使用新标签，但一次回读期间必须稳定。
