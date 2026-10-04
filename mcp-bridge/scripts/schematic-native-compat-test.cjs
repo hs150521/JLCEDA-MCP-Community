@@ -180,6 +180,13 @@ async function main() {
 	const auto = await handleComponentPlaceAutoTask({ components: [{ uuid: validId, libraryUuid: 'system', x: 350, y: 400 }] });
 	assert.equal(auto.ok, true);
 	assert.equal(auto.placedCount, 1);
+	const beforeWrongLibraryCreate = createCalls;
+	globalThis.eda.lib_Device.get = async () => ({ ...item, libraryUuid: 'different-library' });
+	const wrongLibraryCreate = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveComponent.create', args: [{ uuid: validId, libraryUuid: 'system' }, 300, 400] });
+	assert.deepEqual([wrongLibraryCreate.errorCode, wrongLibraryCreate.applied, wrongLibraryCreate.nativeCallStarted], ['DEVICE_LOOKUP_MISMATCH', false, false]);
+	const wrongLibraryAuto = await handleComponentPlaceAutoTask({ components: [{ uuid: validId, libraryUuid: 'system', x: 350, y: 400 }] });
+	assert.equal(wrongLibraryAuto.errorCode, 'DEVICE_LOOKUP_MISMATCH');
+	assert.equal(createCalls, beforeWrongLibraryCreate, '同 UUID 的其他库版本不能交给原生创建');
 	const beforeDirectLookup = lookupCalls;
 	globalThis.eda.lib_Device.get = async () => {
 		throw new Error('Full official DeviceItem must not require another lookup');

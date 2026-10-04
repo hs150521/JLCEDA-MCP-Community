@@ -4,6 +4,7 @@
 
 ## [2.3.5] - 2026-10-05
 
+- 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
 - 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
 - `pcb_region_manage` 的多点轮廓写入须显式首尾闭合；工具定义、Agent 指引和文档增加 EDA 3.2.181 实机要求与闭合示例。
 - `pcb_text_manage` 的 Attribute 修改参数允许 `value`、`valueVisible`，补全对应的工具契约与分发回归；2.3.5 实机两字段修改及回读已验证。

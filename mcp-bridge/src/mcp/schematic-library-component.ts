@@ -40,7 +40,8 @@ export async function resolveSchematicLibraryComponent(raw: unknown, requestedSu
 	if (item === undefined || item === null) {
 		return { ok: false, errorCode: 'DEVICE_NOT_FOUND', reason: 'device_not_found', error: 'The requested device UUID was not found in the specified EDA library.', applied: false, nativeCallStarted: false };
 	}
-	if (!isPlainObjectRecord(item) || item.uuid !== raw.uuid) {
+	if (!isPlainObjectRecord(item) || item.uuid !== raw.uuid
+		|| (typeof raw.libraryUuid === 'string' && raw.libraryUuid !== '' && item.libraryUuid !== raw.libraryUuid)) {
 		return { ok: false, errorCode: 'DEVICE_LOOKUP_MISMATCH', reason: 'device_lookup_mismatch', error: 'EDA library lookup did not return the requested device.', applied: false, nativeCallStarted: false };
 	}
 	return { ok: true, component: item, subPartName: defaultSubPart(item, requestedSubPart) };

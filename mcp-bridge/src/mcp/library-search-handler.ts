@@ -124,6 +124,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 	const page = parseBoundedIntegerValue(payload.page, 1, 1, 9999);
 	const api = getApi(kind);
 	let rawResults: unknown;
+	let searchImplementation: string | undefined;
 	if (uuid) {
 		if (kind === 'simulation_model')
 			throw new TypeError('simulation_model only supports keyword search because the official get API requires a private deployment.');
@@ -144,12 +145,17 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 			throw new TypeError('EDA lib_Device.getByLcscIds API is unavailable in this client version.');
 		rawResults = await (api.getByLcscIds as (...args: unknown[]) => Promise<unknown>).call(api, lcscIds, libraryUuid, allowMultiMatch);
 	}
+	else if (properties?.name) {
+		if (typeof api.search !== 'function')
+			throw new TypeError('EDA lib_Device.search API is unavailable in this client version.');
+		// 名称查询每页固定同一搜索后端，避免依据当前页命中情况切换分页序列。
+		rawResults = await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, properties.name, libraryUuid, undefined, undefined, limit, page);
+		searchImplementation = 'keyword_name_filter';
+	}
 	else if (properties) {
 		if (typeof api.searchByProperties !== 'function')
 			throw new TypeError(`EDA ${API_MODULE_BY_KIND[kind]}.searchByProperties API is unavailable in this client version.`);
-		rawResults = kind === 'device'
-			? await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid, undefined, undefined, limit, page)
-			: await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid);
+		rawResults = await (api.searchByProperties as (...args: unknown[]) => Promise<unknown>).call(api, properties, libraryUuid, undefined, undefined, limit, page);
 	}
 	else {
 		if (typeof api.search !== 'function')
@@ -161,25 +167,13 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 				: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
 	}
 	let allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
-	let searchImplementation: string | undefined;
 	let excludedNameMismatches = 0;
-	if (properties?.name) {
-		const exactNames = allRawItems.filter(item => matchesDeviceProperties(item, { name: properties.name }));
-		excludedNameMismatches = allRawItems.length - exactNames.length;
-		if (exactNames.length === 0 && typeof api.search === 'function') {
-			// 关键词搜索在同一版本中可找到被属性搜索漏掉的器件。
-			rawResults = await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, properties.name, libraryUuid, undefined, undefined, limit, page);
-			allRawItems = Array.isArray(rawResults) ? rawResults : rawResults == null ? [] : [rawResults];
-			searchImplementation = 'keyword_name_fallback';
-		}
-		else {
-			searchImplementation = 'native_properties';
-		}
-	}
+	if (properties?.name)
+		excludedNameMismatches = allRawItems.filter(item => !matchesDeviceProperties(item, { name: properties.name })).length;
 	const rawPageLength = allRawItems.length;
 	if (properties?.name) {
-		// 回退搜索只筛名称；其余属性仍须逐项核对，不能选择不相干器件。
-		allRawItems = allRawItems.filter(item => matchesDeviceProperties(item, searchImplementation === 'keyword_name_fallback' ? properties : { name: properties.name }));
+		// 关键词候选仍须核对全部请求属性。
+		allRawItems = allRawItems.filter(item => matchesDeviceProperties(item, properties));
 	}
 	const items = await toSerializableAsync(allRawItems.slice(0, limit));
 	const response = {

@@ -9,12 +9,14 @@
 - 本轮实现覆盖器件引用解析、真实 ComponentPin 实例修改、绑定属性查询、覆铜重建回退、工具输入契约、名称搜索过滤、制造格式校验、PCB 等价回读和错误传输。最新 PCB 修复补充过孔 0.2 mil 最近格点、工程库来源回读和覆铜轮廓等价比较，已完成最终实机验证。
 - 两轮本地全面审查、Bridge/Server 全量构建测试及 lint 通过；Bridge 构建包含全部新增回归脚本、TypeScript、API 文档、runtime 校验和打包。2.3.5 已导入扩展并重启，Server 与 Bridge 均确认版本 2.3.5。
 - #68 的无效 33 字符 UUID 与正确 32 字符系统库记录已区分；2.3.4 实机一次性图页中，通过 `lib_Device.get()` 的完整 DeviceItem 与唯一 `subPartName`，连续创建 0603 C23221 及 0805 C96346/C84376/C110775。四次原生创建各约 1–2 秒，当前页 `schematic_read` 完整回读确认 4 件，未触发写入隔离。随后在 2.3.5 实机中，无效引用立即返回 `DEVICE_NOT_FOUND`，正确设备的 4 型号自动放置批次全部成功，合计约 8.9 秒。
-- 2.3.5 实机同一 ComponentPin 的 NC `true`→`false` 均已验证，坐标与同器件其他引脚不变；精确名称搜索仅返回 1 条匹配记录并排除 20 条无关记录；原理图 BOM CSV、JLCEDA 网表、PDF 文档均生成成功。
+- 2.3.5 实机同一 ComponentPin 的 NC `true`→`false` 均已验证，坐标与同器件其他引脚不变；最终精确名称搜索两页分别返回 1 条匹配与空页，固定 keyword_name_filter，续页正确结束；原理图 BOM CSV、JLCEDA 网表、PDF 文档均生成成功。
 - NetPort Name 的最终实机类型查询、单件读取和批量读取均返回 Attribute，单件与批量的真实父 ID、Name 值和坐标一致。
 - PCB 实机已验证 BOM CSV（334 B）、板框反向回读、显式闭合区域反向与四位小数坐标回读、2 个实际直线 ID 的共线覆盖、旋转 `-90`→`270`、Attribute 的 `value` / `valueVisible`、器件 `supplierId` / `otherProperty`，以及全板覆铜重建后的 1 个边框与 1 个填充。此前新 PCB 导航悬挂已重启恢复，后续验证在可用 PCB 页面继续。
 - 过孔创建 15.748/31.496→15.8/31.4 与修改 15.7/31.5→15.8/31.6 均 verified:true；PCB 器件创建的公共库返回引用与同 ID 工程库副本回读已验证；覆铜反向与四位小数轮廓创建、修改通过。真实 PCB 的 28 条 DRC 叶子详情按 limit:2 连续读取 14 页，nextOffset 从 2 递增至 26 后结束，数值端点完整，nativeTruncated 和 serializationTruncated 均为 false。#80、#82 和旧 Issue 原场景继续保持开放。
 
 ## 发布审查补修
+
+名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。 这两项补修均通过两轮本地复查、定向回归和最终构建；热更新后名称分页实测通过，指定系统库的 C23221 正常放置 1 件，未进入写入隔离。错误来源库分支在调用原生创建前拒绝的行为由本地回归确认。
 
 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
 
@@ -33,7 +35,7 @@
 | [#69](https://github.com/hs150521/JLCEDA-MCP-Community/issues/69) | 通用 Pin 修改接口用于 ComponentPin 时 NC 不保持且 Y 翻转；改走真实实例，仅支持 NC 与引脚号。失败恢复要求完整连接回读及所属器件全部引脚真实状态。 | 本地实例与完整连接恢复回归通过；2.3.5 实机同一 ComponentPin 的 NC `true`→`false` 两次均 `verified:true`，目标坐标和同器件其他引脚不变。 | NC 原场景新版实测通过；失败恢复路径已本地验证，未在该成功操作中触发。 |
 | [#70](https://github.com/hs150521/JLCEDA-MCP-Community/issues/70) | 覆铜批量重建方法缺失被误报为未打开 PCB；增加逐实例重建回退及明确能力缺失结果。 | 本地回归覆盖批量、实例回退和两者均缺失；2.3.5 实机 `rebuild all:true` 返回 `verified:true`，完整回读 1 个边框与 1 个填充。 | 新版重建与填充回读实测通过；各能力分支另保留本地回归证据。 |
 | [#71](https://github.com/hs150521/JLCEDA-MCP-Community/issues/71) | PCB Attribute 的 `value` / `valueVisible` 被 Server schema 拒绝；补全契约与分发。 | 本地契约、分发和处理器回归通过；2.3.5 实机两字段修改成功，实际 Attribute 回读 `verified:true`。 | 新版原操作实测通过，可按该修复范围评估关闭。 |
-| [#72](https://github.com/hs150521/JLCEDA-MCP-Community/issues/72) | 设备 `properties.name` 原生搜索返回无关器件；核对实际名称，必要时关键词回退后过滤。 | 本地名称过滤与回退回归通过；2.3.5 实机精确名称搜索只返回 1 条匹配记录，排除 20 条无关记录。 | 新版名称筛选实测通过，可按该修复范围评估关闭。 |
+| [#72](https://github.com/hs150521/JLCEDA-MCP-Community/issues/72) | 设备 `properties.name` 原生搜索返回无关器件；核对实际名称，各页固定关键词搜索后核对全部请求属性。 | 本地名称与附加属性过滤、固定后端分页回归通过；最终 2.3.5 实机 limit:1 两页分别返回 1 条精确匹配与空页，均使用 keyword_name_filter，第二页 mayHaveMore:false。 | 新版名称筛选实测通过，可按该修复范围评估关闭。 |
 | [#73](https://github.com/hs150521/JLCEDA-MCP-Community/issues/73) | 板框轮廓仅因原生反向或起点变化被拒绝；闭合轮廓支持等价方向/起点，开放路径只接受完整反向。 | 本地回归覆盖闭合循环起点、开放路径完整反向及拒绝循环换起点、圆弧/曲线语义与真实差异；2.3.5 实机板框创建后的原生反向回读 `verified:true`。 | 新版反向轮廓原场景实测通过；其他比较边界保留本地证据。 |
 | [#74](https://github.com/hs150521/JLCEDA-MCP-Community/issues/74) | 不同 0805 器件后续创建悬挂；与 #68 共用完整设备记录解析，保留子件重载。 | 2.3.4 完整记录连续创建已通过；2.3.5 `component_place_auto` 连续创建 C23221 / C96346 / C84376 / C110775 全部成功，4 型号批次约 8.9 秒。 | 新版连续不同型号自动放置实测通过，可按该修复范围评估关闭。 |
 | [#75](https://github.com/hs150521/JLCEDA-MCP-Community/issues/75) | 制造导出提前构造其他 kind 的参数，导致无关格式或网表类型校验拒绝当前请求；改为仅计算选定 domain/kind 的分支。原理图 BOM CSV 是该共用根因的一个场景。 | 本地覆盖 PCB/原理图 BOM、文档、标准与仿真网表分支；2.3.5 实机原理图 CSV（740 B）、JLCEDA 网表（18,883 B）、PDF（35,886 B）及 PCB BOM CSV（334 B）均生成成功。 | 已测原理图格式与 PCB BOM 通过；仿真及其他导出保持本地回归证据，未声称全部实测。 |

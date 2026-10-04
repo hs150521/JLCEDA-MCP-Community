@@ -1336,20 +1336,28 @@ async function main() {
 	const exactNameSearch = await handleLibrarySearchTask(exactNameQuery);
 	assert.deepEqual(exactNameSearch.items.map(item => item.uuid), ['resistor', 'other-supplier']);
 	assert.equal(exactNameSearch.exactNameVerified, true);
-	assert.equal(exactNameSearch.searchImplementation, 'keyword_name_fallback');
+	assert.equal(exactNameSearch.searchImplementation, 'keyword_name_filter');
 	assert.equal(exactNameSearch.mayHaveMore, true, 'pagination uses the native candidate page, not the filtered hit count');
 	const combinedNameSearch = await handleLibrarySearchTask({ ...exactNameQuery, properties: { name: resistorName, supplierId: 'C23221' } });
 	assert.deepEqual(combinedNameSearch.items.map(item => item.uuid), ['resistor'], 'keyword fallback must also verify requested extra properties');
 	globalThis.eda.lib_Device.search = async () => [{ uuid: 'connector', name: '842-044-521-102' }];
 	assert.equal((await handleLibrarySearchTask(exactNameQuery)).returned, 0);
-	globalThis.eda.lib_Device.searchByProperties = async () => [{ uuid: 'resistor', name: resistorName }, { uuid: 'connector', name: '842-044-521-102' }];
-	globalThis.eda.lib_Device.search = async () => {
-		throw new Error('Native exact name matches must not call keyword fallback');
+	let nativeNamePageCalls = 0;
+	const keywordNamePages = [];
+	globalThis.eda.lib_Device.searchByProperties = async (_properties, _libraryUuid, _classification, _symbolType, _limit, page) => {
+		nativeNamePageCalls += 1;
+		return page === 1 ? [{ uuid: 'wrong-sequence', name: resistorName }] : [{ uuid: 'connector', name: '842-044-521-102' }];
 	};
-	const nativeNameSearch = await handleLibrarySearchTask(exactNameQuery);
-	assert.deepEqual(nativeNameSearch.items.map(item => item.uuid), ['resistor']);
-	assert.equal(nativeNameSearch.searchImplementation, 'native_properties');
-	assert.equal(nativeNameSearch.excludedNameMismatches, 1);
+	globalThis.eda.lib_Device.search = async (_keyword, _libraryUuid, _classification, _symbolType, _limit, page) => {
+		keywordNamePages.push(page);
+		return [{ uuid: `name-page-${page}`, name: resistorName }];
+	};
+	const namePage1 = await handleLibrarySearchTask({ ...exactNameQuery, page: 1 });
+	const namePage2 = await handleLibrarySearchTask({ ...exactNameQuery, page: 2 });
+	assert.deepEqual([...namePage1.items, ...namePage2.items].map(item => item.uuid), ['name-page-1', 'name-page-2']);
+	assert.deepEqual(keywordNamePages, [1, 2]);
+	assert.equal(nativeNamePageCalls, 0, '名称分页不能依据每页属性命中切换后端');
+	assert.equal(namePage1.searchImplementation, namePage2.searchImplementation);
 	globalThis.eda.lib_Device.search = savedDeviceSearch;
 	globalThis.eda.lib_Device.searchByProperties = savedDeviceProperties;
 	const classifications = await handleLibraryClassificationTask({ kind: 'symbol', libraryUuid: 'system-library-1' });

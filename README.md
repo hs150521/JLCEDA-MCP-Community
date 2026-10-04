@@ -8,6 +8,8 @@
 
 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
 
+名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
+
 原理图器件几何修改会核对有名网络和匿名导线连通组；引脚离开匿名导线或移至另一组时会报告连接变化。大图页可为 `schematic_read` 和 `bridge_recover_client` 设置最多 120 秒的 `timeoutMs`。
 
 导线创建会在任务预算内等待 EDA 图元列表同步；原生未返回导线 ID 时，只有唯一导线与请求路径及网络匹配才确认创建，结果中的 `confirmedPrimitiveId` 标识确认的图元。
@@ -61,7 +63,7 @@ PCB `autoRouting` 指定网络时使用 `RoutingNets:["网络名"]`；返回值�
 - `pcb_document_action`：读取 PCB 坐标、选中图元、区域图元、过滤器和画布状态；执行视图导航、保存、变更导入以及 Base64 自动布局/布线文件导入。
 - `component_select`：支持精确器件属性查询，包括 LCSC `supplierId`。
 - `library_sources`：列出系统、个人、工程和收藏库。
-- `library_search`：搜索或读取 0.4.15 设备、符号、封装、3D 模型、可复用模块和 Panel 库资源，也支持仿真模型搜索；设备搜索支持精确属性和官方 LCSC C 编号映射。设备名称属性搜索会核对实际名称，必要时回退到关键词搜索并过滤。
+- `library_search`：搜索或读取 0.4.15 设备、符号、封装、3D 模型、可复用模块和 Panel 库资源，也支持仿真模型搜索；设备搜索支持精确属性和官方 LCSC C 编号映射。设备名称属性搜索会核对实际名称，各页固定关键词搜索并核对全部请求属性。
 - `pcb_constraints_query`：读取当前规则、规则配置、网络规则、区域规则和约束组。
 - `manufacture_export`：生成受限的 BOM、Gerber、网表、贴片坐标等制造文件；仅校验选定 domain/kind 的参数，BOM、图纸文档、标准与仿真网表使用各自格式，避免其他分支提前校验。
 - `manufacture_templates_query`：列出 PCB BOM 模板或原理图装配变体；`manufacture_export` 可使用返回的装配变体。
