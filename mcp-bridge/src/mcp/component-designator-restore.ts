@@ -100,6 +100,7 @@ export async function restoreChangedSchematicDesignators(
 	api: DesignatorApi,
 	baseline: Map<string, string>,
 	assertPage?: () => Promise<void>,
+	beforeNativeMutation?: () => void,
 ): Promise<DesignatorRestoreResult> {
 	const snapshot = await readSnapshot(api);
 	const changes = changedDesignators(baseline, snapshot.designators);
@@ -133,6 +134,7 @@ export async function restoreChangedSchematicDesignators(
 	try {
 		for (const change of changes) {
 			await assertPage?.();
+			beforeNativeMutation?.();
 			attempted = true;
 			nativeCallInFlight = true;
 			await Promise.resolve(api.modify.call(api.context, change.primitiveId, {

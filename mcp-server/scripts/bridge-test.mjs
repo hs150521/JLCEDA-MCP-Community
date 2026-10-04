@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import { WebSocket } from 'ws';
 import { EdaBridgeServer } from '../dist/mcp/bridge-client.js';
-import { isReadOnlyBridgeRequest, validateBridgeClientMessage } from '../dist/mcp/bridge-contract.js';
+import { BRIDGE_CONTRACT, footprintApiAccess, isReadOnlyBridgeRequest, validateBridgeClientMessage } from '../dist/mcp/bridge-contract.js';
 import { ToolDispatcher } from '../dist/mcp/tool-dispatcher.js';
 
 async function reservePort() {
@@ -426,6 +426,16 @@ try {
     assert.equal(validateBridgeClientMessage({ type: 'bridge/task-started', clientId: 'pin-client', requestId: 'pin-1',
       leaseTerm: 1, startedAt: Date.now(), schematicPinAdapter }), undefined);
   }
+  assert.equal(validateBridgeClientMessage({ type: 'bridge/task-started', clientId: 'footprint-client', requestId: 'footprint-1',
+    leaseTerm: 1, startedAt: Date.now(), context: { pageKind: 'footprint', documentType: 4, documentUuid: 'fp', pageUuid: 'fp', libraryUuid: 'lib', tabId: 'tab' } }), undefined);
+  assert.equal(BRIDGE_CONTRACT.footprintApi.readOnlyApiFullNames.length, 21);
+  assert.equal(BRIDGE_CONTRACT.footprintApi.mutatingApiFullNames.length, 20);
+  for (const name of BRIDGE_CONTRACT.footprintApi.readOnlyApiFullNames) {
+    assert.equal(footprintApiAccess(name), 'read');
+    assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/api/invoke', { apiFullName: name, args: ['primitive-1'] }), true);
+  }
+  for (const name of BRIDGE_CONTRACT.footprintApi.mutatingApiFullNames) assert.equal(footprintApiAccess(name), 'write');
+  assert.equal(footprintApiAccess('eda.pcb_PrimitiveAttribute.create'), undefined);
   assert.match(validateBridgeClientMessage({ type: 'bridge/task-started', clientId: 'pin-client', requestId: 'pin-1',
     leaseTerm: 1, startedAt: Date.now(), schematicPinAdapter: 'unknown' }), /schematicPinAdapter/);
   for (const action of ['navigate_to_coordinates', 'navigate_to_region', 'zoom_to_board_outline']) {
@@ -452,7 +462,7 @@ try {
   assert.equal(isReadOnlyBridgeRequest(invokePath, { apiFullName: 'eda.pcb_primitivecomponent.getall', args: [] }), true);
   for (const apiFullName of ['eda.pcb_PrimitiveLine.getAll', 'eda.pcb_PrimitiveArc.getAll', 'eda.pcb_PrimitivePolyline.getAll', 'eda.pcb_PrimitiveVia.getAll']) {
     assert.equal(isReadOnlyBridgeRequest(invokePath, { apiFullName, args: [] }), true);
-    assert.equal(isReadOnlyBridgeRequest(invokePath, { apiFullName, args: ['VCC'] }), false);
+    assert.equal(isReadOnlyBridgeRequest(invokePath, { apiFullName, args: ['VCC'] }), true);
   }
   assert.equal(isReadOnlyBridgeRequest(invokePath, { apiFullName: ' EDA.SCH_PRIMITIVECOMPONENT.GETALL ', args: [null, false] }), true);
   assert.equal(isReadOnlyBridgeRequest(invokePath, { apiFullName: 'EDA.SCH_PRIMITIVECOMPONENT.GETALL', args: [null, true] }), false);
@@ -1594,6 +1604,108 @@ try {
   unverifiedWriteServer.close();
   unverifiedWriteServer = undefined;
 
+  for (const mode of ['unknown', 'timeout', 'disconnect']) {
+    const footprintPort = await reservePort();
+    const footprintServer = new EdaBridgeServer(footprintPort);
+    const footprintRelay = new EdaBridgeServer(footprintPort);
+    const execution = { pageKind: 'footprint', documentType: 4, documentUuid: 'fp-document', pageUuid: 'fp-document', libraryUuid: 'fp-library', tabId: 'old-tab' };
+    let oldFootprint;
+    let freshFootprint;
+    try {
+      await footprintServer.start();
+      await footprintRelay.start();
+      const url = `ws://127.0.0.1:${footprintPort}/bridge/ws${tokenQuery}`;
+      oldFootprint = await registerEda(url, `footprint-${mode}-old`, {
+        pageKind: 'pcb', documentType: 3, documentUuid: 'stale-pcb-document', pageUuid: 'stale-pcb-page', projectUuid: 'stale-project',
+      });
+      oldFootprint.socket.on('message', data => {
+        const message = JSON.parse(data.toString());
+        if (message.type !== 'bridge/task') return;
+        oldFootprint.socket.send(JSON.stringify({ type: 'bridge/task-started', clientId: `footprint-${mode}-old`,
+          requestId: message.requestId, leaseTerm: message.leaseTerm, startedAt: Date.now(), context: execution }));
+        if (mode === 'unknown') oldFootprint.socket.send(JSON.stringify({ type: 'bridge/result', clientId: `footprint-${mode}-old`,
+          requestId: message.requestId, leaseTerm: message.leaseTerm, result: { ok: false, commitUnknown: true, nativeCallSettled: true } }));
+        if (mode === 'disconnect') oldFootprint.socket.close();
+      });
+      const write = { apiFullName: 'eda.pcb_PrimitiveVia.modify', args: ['via-1', { diameter: 20 }] };
+      if (mode === 'unknown') assert.equal((await footprintRelay.request('/bridge/jlceda/api/invoke', write, 2000)).commitUnknown, true);
+      else await assert.rejects(footprintRelay.request('/bridge/jlceda/api/invoke', write, mode === 'timeout' ? 50 : 2000), mode === 'timeout' ? /execution timeout/ : /disconnected/);
+      const diagnostic = (await footprintRelay.request('/bridge/admin/clients', {}, 2000)).clients
+        .find(client => client.clientId === `footprint-${mode}-old`).quarantine.diagnostics[0];
+      assert.equal(diagnostic.requiredReadback, 'footprint_state');
+      assert.equal(diagnostic.context.libraryUuid, 'fp-library');
+      assert.equal(diagnostic.context.projectUuid, undefined, '封装编辑不要求工程 UUID');
+      const session = await footprintRelay.request('/bridge/admin/recover-client', { action: 'recover', confirm: true, requestId: diagnostic.requestId }, 2000);
+      oldFootprint.socket.close();
+      await waitUntil(async () => (await footprintRelay.request('/bridge/admin/clients', {}, 2000)).clients
+        .find(client => client.clientId === `footprint-${mode}-old`)?.ready === false);
+      const freshIdentity = { ...execution, tabId: 'new-tab' };
+      freshFootprint = await registerEda(url, `footprint-${mode}-fresh`, freshIdentity);
+      // Bridge 完整 DTO 将无孔原生 NaN 旋转归一为明确 null；三种 Relay 恢复路径都必须接受该实际状态。
+      const smdPad = { primitiveId: 'smd-pad', primitiveType: 'Pad', primitiveLock: false,
+        layer: 1, padNumber: '1', x: 10, y: 20, rotation: 0, net: null, pad: ['RECT', 80, 60], hole: null,
+        holeOffsetX: 0, holeOffsetY: 0, holeRotation: null, metallization: false, padType: 0, specialPad: [],
+        solderMaskAndPasteMaskExpansion: null, heatWelding: null };
+      const snapshot = { ok: true, complete: true, scope: 'current_footprint_document', ...freshIdentity,
+        pads: [smdPad], padCount: 1, vias: [], viaCount: 0,
+        lines: [{ primitiveId: 'line-1', primitiveType: 'Line', primitiveLock: false, net: null, layer: 11, startX: 0, startY: 0, endX: 20, endY: 0, lineWidth: 1 }], lineCount: 1,
+        arcs: [], arcCount: 0, polylines: [], polylineCount: 0, strings: [], stringCount: 0, attributes: [], attributeCount: 0, primitiveCount: 2 };
+      let identityResult = freshIdentity;
+      let readbackResult = snapshot;
+      let changeTabAfterRead = false;
+      attachTaskResponder(freshFootprint.socket, `footprint-${mode}-fresh`, message => {
+        if (message.path === '/bridge/jlceda/context') return { footprintContext: identityResult };
+        if (message.path === '/bridge/jlceda/footprint/read') {
+          if (changeTabAfterRead) identityResult = { ...freshIdentity, tabId: 'changed-tab' };
+          return readbackResult;
+        }
+        return { source: 'footprint-fresh', path: message.path };
+      });
+      const request = { action: 'readback', confirm: true, recoveryId: session.recoveryId, clientId: `footprint-${mode}-fresh`,
+        ...(mode === 'unknown' ? {} : { hostRestartConfirmed: true }), readbackPath: '/bridge/jlceda/footprint/read', readbackPayload: {} };
+      if (mode === 'unknown') {
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', { ...request, readbackPath: '/bridge/jlceda/context' }, 2000), /requires complete footprint_read/);
+        identityResult = { ...freshIdentity, libraryUuid: 'different-library' };
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /library, or tab identity/);
+        identityResult = freshIdentity;
+        readbackResult = { ...snapshot, libraryUuid: 'different-library' };
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /another document or library/);
+        readbackResult = { ...snapshot, attributes: undefined };
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /lists or counts were incomplete/);
+        readbackResult = { ...snapshot, lines: [{ ...snapshot.lines[0], lineWidth: null }] };
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /primitive state was incomplete/);
+        for (const holeRotation of [null, undefined]) {
+          readbackResult = { ...snapshot, pads: [{ ...smdPad, hole: ['ROUND', 35], holeRotation }] };
+          await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /primitive state was incomplete/);
+        }
+        readbackResult = { ...snapshot, pads: [{ ...smdPad, holeRotation: undefined }] };
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /primitive state was incomplete/);
+        for (const pad of [null, []]) {
+          readbackResult = { ...snapshot, pads: [{ ...smdPad, pad }] };
+          await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /primitive state was incomplete/);
+        }
+        readbackResult = snapshot;
+        changeTabAfterRead = true;
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', request, 2000), /library, or tab identity/);
+        identityResult = freshIdentity;
+        changeTabAfterRead = false;
+      }
+      const recovered = await footprintRelay.request('/bridge/admin/recover-client', request, 2000);
+      assert.equal(recovered.readbackVerified, true);
+      assert.equal(recovered.writesRemainBlocked, false);
+      assert.equal(recovered.readback.tabId, 'new-tab', '重连后的新标签允许与旧执行标签不同');
+      assert.equal(recovered.readback.pads[0].hole, null);
+      assert.equal(recovered.readback.pads[0].holeRotation, null, '无孔原生 NaN 旋转归一后的明确 null 允许完整恢复');
+      assert.deepEqual(recovered.readback.pads[0].specialPad, [], '空特殊轮廓与实际普通焊盘形状允许三个 Relay 路径完整恢复');
+      assert.deepEqual(await footprintRelay.request('/bridge/jlceda/api/invoke', write, 2000), { source: 'footprint-fresh', path: '/bridge/jlceda/api/invoke' });
+    } finally {
+      oldFootprint?.socket.close();
+      freshFootprint?.socket.close();
+      footprintRelay.close();
+      footprintServer.close();
+    }
+  }
+
   for (const [action, nativeCallSettled] of [['wire_create', true], ['netport_create', true], ['netport_move', true], ['wire_create', false], ['netlabel_place', false], ['modify', true], ['delete', false], ['pin_modify', true], ['pin_modify', false], ['ordinary_pin_modify', true], ['ordinary_pin_modify', false], ['pin_modify_timeout', false], ['ordinary_pin_modify_timeout', false], ['unclassified_pin_modify_timeout', false], ['late_pin_modify_timeout', false]]) {
     const pinModify = action.includes('pin_modify');
     const componentPin = pinModify && !action.startsWith('ordinary_') && !action.startsWith('unclassified_');
@@ -1964,7 +2076,9 @@ try {
         result: { ok: false, commitUnknown: true, nativeCallSettled: true, primitiveIds: ['kept', 'extra'] },
       }));
     });
-    assert.equal((await placementCheckServer.request('/bridge/jlceda/component/place/check', { sessionId: 'placement-1' }, 2000)).commitUnknown, true);
+    // raw create 复用 placement 的完整 ID、位号和 BOM 回读恢复。
+    assert.equal((await placementCheckServer.request('/bridge/jlceda/api/invoke',
+      { apiFullName: ' EDA.SCH_PRIMITIVECOMPONENT.CREATE ', args: [] }, 2000)).commitUnknown, true);
     const placementDiagnostic = (await placementCheckServer.request('/bridge/admin/clients', {}, 2000)).clients[0].quarantine.diagnostics[0];
     assert.equal(placementDiagnostic.requiredReadback, 'schematic_component_ids');
     assert.equal(placementDiagnostic.hostRestartRequired, false);
@@ -2032,7 +2146,7 @@ try {
     placementCheckServer.close();
   }
 
-  for (const lateResult of [false, true]) {
+  for (const [rawCreate, lateResult] of [[false, false], [false, true], [true, false], [true, true]]) {
     const placementTimeoutPort = await reservePort();
     const placementTimeoutServer = new EdaBridgeServer(placementTimeoutPort);
     let placementTimeoutOld;
@@ -2057,9 +2171,11 @@ try {
         }
       });
       if (lateResult)
-        await assert.rejects(placementTimeoutServer.request('/bridge/jlceda/component/place/check', { sessionId: 'timeout' }, 100), /Request execution timeout/);
+        await assert.rejects(placementTimeoutServer.request(rawCreate ? '/bridge/jlceda/api/invoke' : '/bridge/jlceda/component/place/check',
+          rawCreate ? { apiFullName: 'eda.sch_PrimitiveComponent.create', args: [] } : { sessionId: 'timeout' }, 100), /Request execution timeout/);
       else
-        assert.equal((await placementTimeoutServer.request('/bridge/jlceda/component/place/check', { sessionId: 'timeout' }, 2000)).commitUnknown, true);
+        assert.equal((await placementTimeoutServer.request(rawCreate ? '/bridge/jlceda/api/invoke' : '/bridge/jlceda/component/place/check',
+          rawCreate ? { apiFullName: 'eda.sch_PrimitiveComponent.create', args: [] } : { sessionId: 'timeout' }, 2000)).commitUnknown, true);
       assert.ok(heldTask);
       const before = (await placementTimeoutServer.request('/bridge/admin/clients', {}, 2000)).clients[0].quarantine.diagnostics[0];
       assert.equal(before.requiredReadback, 'schematic_component_ids');

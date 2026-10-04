@@ -29,7 +29,8 @@ export interface BridgeClientContext {
 	tabId?: string;
 	projectUuid?: string;
 	projectName?: string;
-	pageKind?: 'schematic' | 'pcb';
+	libraryUuid?: string;
+	pageKind?: 'schematic' | 'pcb' | 'footprint';
 	pageUuid?: string;
 	pageName?: string;
 }

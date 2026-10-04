@@ -1,5 +1,8 @@
 import { getEdaRuntime, isPlainObjectRecord, toSafeErrorMessage } from '../utils.ts';
 
+// 官方 SymbolSearchItem 省略 libraryType，以 ELIB_SymbolType 区分器件搜索结果。
+const SYMBOL_TYPES = new Set([2, 17, 18, 19, 20, 21, 22, 25, 31]);
+
 type Resolution = { ok: true; component: Record<string, unknown>; subPartName?: string }
 	| { ok: false; errorCode: string; reason: string; error: string; applied: false; nativeCallStarted: false };
 
@@ -24,7 +27,8 @@ export async function resolveSchematicLibraryComponent(raw: unknown, requestedSu
 	const runtime = getEdaRuntime();
 	const libraryTypes = isPlainObjectRecord(runtime?.ELIB_LibraryType) ? runtime.ELIB_LibraryType : {};
 	// SYMBOL 引用使用其独立原生重载；DEVICE 在官方及 3.2.181 均为字符串 3。
-	if (raw.libraryType === (libraryTypes.SYMBOL ?? '2') || completeDeviceItem(raw))
+	const symbolSearchItem = raw.libraryType === undefined && typeof raw.type === 'number' && SYMBOL_TYPES.has(raw.type);
+	if (raw.libraryType === (libraryTypes.SYMBOL ?? '2') || symbolSearchItem || completeDeviceItem(raw))
 		return { ok: true, component: raw, subPartName: defaultSubPart(raw, requestedSubPart) };
 	const device = runtime?.lib_Device;
 	// 某些宿主未暴露 get；官方仍允许裸引用创建，保留该兼容路径。

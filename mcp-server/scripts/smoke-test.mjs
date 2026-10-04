@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const recoveryReadbackSchema = JSON.parse(readFileSync(resolve(packageRoot, 'src/resources/mcp-tool-definitions.json'), 'utf8'))
+  .find(tool => tool.name === 'bridge_recover_client').inputSchema.properties.readbackPath;
 
 function findPropertySchemas(schema, propertyName, matches = []) {
   if (!schema || typeof schema !== 'object') {
@@ -120,6 +123,10 @@ async function testProtocolVersion(protocolVersion) {
     const readbackPayloadSchemas = findPropertySchemas(recoverTool.inputSchema, 'readbackPayload');
     assert.ok(readbackPayloadSchemas.some((schema) => JSON.stringify(schema.default) === '{}'), 'bridge_recover_client must publish the empty readbackPayload default');
     const readbackPathSchemas = findPropertySchemas(recoverTool.inputSchema, 'readbackPath');
+    assert.ok(readbackPathSchemas.every(schema => JSON.stringify(schema.enum) === JSON.stringify(recoveryReadbackSchema.enum)),
+      'MCP tools/list recovery paths must match the canonical definition, including footprint and project readback');
+    assert.ok(readbackPathSchemas.every(schema => schema.default === recoveryReadbackSchema.default),
+      'MCP tools/list must preserve the canonical recovery path default');
     assert.ok(readbackPathSchemas.some((schema) => schema.enum?.includes('/bridge/jlceda/api/invoke')), 'bridge_recover_client must allow current-page API readback');
     assert.ok(readbackPathSchemas.some((schema) => schema.enum?.includes('/bridge/jlceda/schematic/component-edit')), 'bridge_recover_client must publish schematic component state readback');
     assert.ok(readbackPathSchemas.some((schema) => schema.enum?.includes('/bridge/jlceda/pcb/component-edit')), 'bridge_recover_client must publish PCB component state readback');
@@ -182,6 +189,24 @@ async function testProtocolVersion(protocolVersion) {
     const documentCallResponse = JSON.parse(documentCallLine);
     assert.equal(documentCallResponse.id, 40);
     assert.match(JSON.stringify(documentCallResponse), /No Bridge recovery is awaiting readback/);
+
+    for (const [id, readbackPath] of [[41, '/bridge/jlceda/footprint/read'], [42, '/bridge/jlceda/project/info'], [43, '/bridge/jlceda/not-a-recovery-readback']]) {
+      const recoveryLinePromise = once(lines, 'line');
+      child.stdin.write(JSON.stringify({
+        jsonrpc: '2.0', id, method: 'tools/call',
+        params: {
+          ...(modern ? params : {}),
+          name: 'bridge_recover_client',
+          arguments: { action: 'readback', confirm: true, recoveryId: 'smoke-schema-recovery', clientId: 'smoke-schema-client',
+            readbackPath, readbackPayload: {} },
+        },
+      }) + '\n');
+      const [recoveryLine] = await Promise.race([recoveryLinePromise, lineTimeout]);
+      const recoveryResponse = JSON.parse(recoveryLine);
+      assert.equal(recoveryResponse.id, id);
+      assert.match(JSON.stringify(recoveryResponse), id === 43 ? /Invalid arguments/ : /No Bridge recovery is awaiting readback/,
+        'known readback paths must pass the real MCP SDK parser and reach dispatch; unknown paths must be rejected');
+    }
 
     const invalidCallLinePromise = once(lines, 'line');
     child.stdin.write(JSON.stringify({

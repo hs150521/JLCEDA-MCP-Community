@@ -235,6 +235,22 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 	{ fullName: 'eda.sch_SelectControl.getAllSelectedPrimitives_PrimitiveId', summary: 'Get selected schematic primitive IDs' },
 ];
 
+// 七类封装图元的官方读取/修改入口；Attribute.create 是无效果的 internal API，不列入索引。
+const FOOTPRINT_API_INDEX: ApiIndexEntry[] = ['Pad', 'Via', 'Line', 'Arc', 'Polyline', 'String', 'Attribute'].flatMap(kind =>
+	['get', 'getAll', 'getAllPrimitiveId', 'modify', 'delete', ...(kind === 'Attribute' ? [] : ['create'])].map(method => ({
+		fullName: `eda.pcb_Primitive${kind}.${method}`,
+		summary: `封装 ${kind} 图元 ${method}；使用 footprint_read 核对完整状态`,
+	})));
+FOOTPRINT_API_INDEX.push(
+	{ fullName: 'eda.dmt_SelectControl.getCurrentDocumentInfo', summary: '获取封装文档 UUID、所属库和编辑标签页身份' },
+	{ fullName: 'eda.dmt_EditorControl.openLibraryDocument', summary: '打开符号或封装库文档' },
+	{ fullName: 'eda.dmt_EditorControl.closeDocument', summary: '关闭编辑标签页' },
+	{ fullName: 'eda.lib_Footprint.create', summary: '在指定库创建封装' },
+	{ fullName: 'eda.lib_Footprint.openInEditor', summary: '在编辑器打开指定库封装' },
+	{ fullName: 'eda.lib_Footprint.updateDocumentSource', summary: '将封装文档源码写回指定库资产' },
+	{ fullName: 'eda.lib_Footprint.delete', summary: '删除指定库中的封装资产' },
+);
+
 /**
  * 处理 API 索引查询任务。
  * @param payload 任务参数，可选 owner 字段用于按命名空间过滤。
@@ -246,9 +262,10 @@ export async function handleApiIndexTask(payload: unknown): Promise<unknown> {
 		ownerFilter = String((payload as Record<string, unknown>).owner ?? '').trim().toLowerCase();
 	}
 
+	const all = [...SCHEMATIC_API_INDEX, ...FOOTPRINT_API_INDEX];
 	const index = ownerFilter
-		? SCHEMATIC_API_INDEX.filter(entry => entry.fullName.toLowerCase().includes(ownerFilter))
-		: SCHEMATIC_API_INDEX;
+		? all.filter(entry => entry.fullName.toLowerCase().includes(ownerFilter))
+		: all;
 
 	return {
 		ok: true,

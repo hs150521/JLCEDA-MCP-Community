@@ -12,6 +12,206 @@ function pinState(id, number) {
 	return { primitiveId: id, x: 530, y: 330, rotation: 180, pinNumber: number, pinName: 'IO', pinLength: 10, pinColor: null, pinShape: 'None', pinType: 'BI', noConnected: true, otherProperty: { net: 'IO' } };
 }
 
+function schematicCreateFixture(options = {}) {
+	const pageUuid = 'raw-create-page';
+	const oldProperties = {
+		u4: { 'Manufacturer': 'ACME', 'Supplier': 'LCSC', 'Supplier Part': 'C1004', 'Value': 'MCU', 'includeInBom': true, 'channels': 4 },
+		u5: { 'Manufacturer': 'ACME', 'Supplier': 'LCSC', 'Supplier Part': 'C1005', 'Value': 'MCU', 'includeInBom': false, 'channels': 5 },
+	};
+	const components = new Map([
+		['u4', { primitiveId: 'u4', designator: 'U4', otherProperty: { ...oldProperties.u4 } }],
+		['u5', { primitiveId: 'u5', designator: 'U5', otherProperty: { ...oldProperties.u5 } }],
+	]);
+	const createCalls = [];
+	const modifyCalls = [];
+	const getCalls = [];
+	const libraryLookups = [];
+	let pageReadFailure = false;
+	let snapshotReads = 0;
+	const deviceItem = { libraryType: '3', uuid: 'raw-device', libraryUuid: 'system', name: 'Test Device', association: { symbol: { uuid: 'raw-symbol', libraryUuid: 'system' } }, property: {}, subPartNames: [] };
+	function nativeComponent(state, source) {
+		return {
+			...state,
+			otherProperty: { ...state.otherProperty },
+			readSource: source,
+			getState_PrimitiveId: () => state.primitiveId,
+			getState_Designator: () => state.designator,
+			getState_ComponentType: () => 'part',
+			getState_OtherProperty: () => ({ ...state.otherProperty }),
+		};
+	}
+	const api = {
+		async create(...args) {
+			assert.equal(this, api, 'native create retains its API receiver');
+			createCalls.push(args);
+			if (options.drift !== false) {
+				components.get('u4').designator = 'U15';
+				components.get('u5').designator = 'U16';
+			}
+			const added = { primitiveId: 'new-r', designator: 'R1', otherProperty: { 'Value': '10k', 'Supplier': 'LCSC', 'Supplier Part': 'C21190' }, x: args[1], y: args[2] };
+			components.set('new-r', added);
+			if (options.nativeCreateError)
+				throw new Error(options.nativeCreateError);
+			if (options.createReturnsUndefined)
+				return undefined;
+			return nativeComponent({ ...added }, 'create');
+		},
+		async getAll(componentType, allSchematicPages) {
+			assert.equal(this, api);
+			assert.deepEqual([componentType, allSchematicPages], [null, false], 'baseline and restore verification must read only the current page');
+			snapshotReads += 1;
+			if (options.postReadFailure && snapshotReads === 3)
+				throw new Error('post-restore component read failed');
+			return [...components.values()].map(state => nativeComponent(state, 'inventory'));
+		},
+		async modify(id, patch) {
+			assert.equal(this, api, 'restoration retains its API receiver');
+			modifyCalls.push({ id, patch });
+			assert.deepEqual(patch.otherProperty, oldProperties[id], 'restoration supplies the complete BOM object, including boolean and numeric values');
+			if (options.restoreTimeout) {
+				pageReadFailure = options.pageFailureAfterTimeout === true;
+				throw new Error('ETIMEDOUT: restoration timed out');
+			}
+			if (!options.ignoreRestore) {
+				Object.assign(components.get(id), patch);
+				components.get('new-r').designator = 'R2';
+			}
+			return nativeComponent(components.get(id), 'modify');
+		},
+		async get(id) {
+			assert.equal(this, api);
+			getCalls.push(id);
+			if (options.freshReadFailure)
+				throw new Error('fresh created component read failed');
+			return nativeComponent(components.get(id), 'fresh-get');
+		},
+	};
+	if (options.noModify)
+		delete api.modify;
+	globalThis.eda = {
+		EDMT_EditorDocumentType: { SCHEMATIC_PAGE: 1 },
+		ELIB_LibraryType: { DEVICE: '3', SYMBOL: '2' },
+		dmt_SelectControl: { async getCurrentDocumentInfo() { return { documentType: 1, uuid: pageUuid }; } },
+		dmt_Schematic: {
+			async getCurrentSchematicPageInfo() {
+				if (pageReadFailure)
+					throw new Error('page read failed after restoration timeout');
+				return { uuid: pageUuid };
+			},
+		},
+		lib_Device: {
+			async get(uuid, libraryUuid) {
+				libraryLookups.push([uuid, libraryUuid]);
+				return uuid === deviceItem.uuid && libraryUuid === deviceItem.libraryUuid ? deviceItem : undefined;
+			},
+		},
+		sch_PrimitiveComponent: api,
+	};
+	return { pageUuid, deviceItem, components, oldProperties, createCalls, modifyCalls, getCalls, libraryLookups };
+}
+
+async function rawSchematicCreateTests() {
+	const path = '/bridge/jlceda/api/invoke';
+	const apiFullName = 'eda.sch_PrimitiveComponent.create';
+	const payloadFor = component => ({ apiFullName, args: [component, 300, 400, 'ExplicitPart', 135, false, false, false] });
+	let f = schematicCreateFixture();
+	const restored = await handleApiInvokeTask(payloadFor(f.deviceItem));
+	assert.deepEqual([restored.apiFullName, restored.ok, restored.pageUuid, restored.commitUnknown], [apiFullName, true, f.pageUuid, undefined]);
+	assert.deepEqual(restored.designatorChanges, []);
+	assert.deepEqual(restored.restoredDesignators, [
+		{ primitiveId: 'u4', before: 'U15', after: 'U4' },
+		{ primitiveId: 'u5', before: 'U16', after: 'U5' },
+	]);
+	assert.deepEqual([...f.components.values()].map(state => [state.primitiveId, state.designator]), [['u4', 'U4'], ['u5', 'U5'], ['new-r', 'R2']]);
+	for (const id of ['u4', 'u5'])
+		assert.deepEqual(f.components.get(id).otherProperty, f.oldProperties[id]);
+	assert.deepEqual(f.modifyCalls.map(call => call.id), ['u4', 'u5'], 'only renumbered existing components are restored');
+	assert.deepEqual(f.getCalls, ['new-r'], 'a new component is read freshly after any designator restoration');
+	assert.deepEqual([restored.result.primitiveId, restored.result.designator, restored.result.readSource], ['new-r', 'R2', 'fresh-get']);
+	assert.deepEqual(restored.result.otherProperty, f.components.get('new-r').otherProperty);
+
+	f = schematicCreateFixture({ drift: false });
+	const unchanged = await handleApiInvokeTask(payloadFor(f.deviceItem));
+	assert.equal(unchanged.ok, true);
+	assert.deepEqual(unchanged.designatorChanges, []);
+	assert.deepEqual(unchanged.restoredDesignators, []);
+	assert.equal(f.modifyCalls.length, 0, 'create without annotation drift must not invoke modify');
+	assert.equal(f.getCalls.length, 0, 'no-drift create retains the original native result without an unnecessary read');
+	assert.equal(unchanged.result.readSource, 'create');
+
+	const inputCases = [
+		['DEVICE reference', () => ({ libraryType: '3', uuid: 'raw-device', libraryUuid: 'system' }), true],
+		['SYMBOL reference', () => ({ libraryType: '2', uuid: 'raw-symbol', libraryUuid: 'system' }), false],
+		['DeviceItem', fixture => fixture.deviceItem, false],
+		['DeviceSearchItem', () => ({ uuid: 'searched-device', libraryUuid: 'system', ordinal: 1, name: 'Test Device', symbolName: 'Test Symbol', symbolUuid: 'raw-symbol', symbol: { name: 'Test Symbol', uuid: 'raw-symbol', libraryUuid: 'system' }, footprintUuid: 'raw-footprint', model3DUuid: 'raw-model' }), false],
+		['SymbolItem', () => ({ libraryType: '2', uuid: 'raw-symbol', libraryUuid: 'system', name: 'Test Symbol', type: 2, subPartNames: [] }), false],
+		['SymbolSearchItem', () => ({ uuid: 'raw-symbol', libraryUuid: 'system', ordinal: 1, name: 'Test Symbol', type: 2, updateTimestamp: 1, ascription: 'system', lastModifiedBy: 'tester' }), false],
+	];
+	for (const [name, input, resolvedDevice] of inputCases) {
+		f = schematicCreateFixture({ drift: false });
+		const component = input(f);
+		const payload = payloadFor(component);
+		const result = await handleApiInvokeTask(payload);
+		assert.equal(result.ok, true, `${name} remains an official native create overload`);
+		assert.equal(f.createCalls.length, 1, name);
+		assert.equal(f.createCalls[0].length, 8, `${name} keeps all eight native arguments`);
+		assert.equal(f.createCalls[0][0], resolvedDevice ? f.deviceItem : component, `${name} preserves the accepted native item`);
+		assert.deepEqual(f.createCalls[0].slice(1), [300, 400, 'ExplicitPart', 135, false, false, false], `${name} must not replace explicit false mirror/BOM/PCB flags`);
+		assert.equal(f.libraryLookups.length, resolvedDevice ? 1 : 0, `${name} should only resolve bare DEVICE references`);
+	}
+
+	for (const options of [{ noModify: true }, { ignoreRestore: true }]) {
+		f = schematicCreateFixture(options);
+		const warning = await handleApiInvokeTask(payloadFor(f.deviceItem));
+		assert.deepEqual([warning.ok, warning.needsReview, warning.commitUnknown], [false, true, undefined]);
+		assert.ok(warning.annotationWarning);
+		assert.equal(warning.designatorChanges.length, 2);
+		assert.equal(f.modifyCalls.length, options.noModify ? 0 : 2, 'the warning fixture must reach the intended restoration path');
+	}
+	for (const pageFailureAfterTimeout of [false, true]) {
+		f = schematicCreateFixture({ restoreTimeout: true, pageFailureAfterTimeout });
+		const payload = payloadFor(f.deviceItem);
+		const uncertain = await handleApiInvokeTask(payload);
+		assert.deepEqual([uncertain.ok, uncertain.commitUnknown, uncertain.readbackRequired, uncertain.nativeCallSettled], [false, true, true, false], 'restoration timeout stays unsettled even if the following page read fails');
+		assert.equal(requiresHostRestartForResult(path, payload, uncertain), true);
+		assert.equal(f.createCalls.length, 1);
+		assert.equal(f.modifyCalls.length, 1, 'the timeout originates in the first actual restore mutation');
+		assert.match(pageFailureAfterTimeout ? uncertain.error : uncertain.annotationWarning, pageFailureAfterTimeout ? /page read failed after restoration timeout/ : /ETIMEDOUT/);
+	}
+	for (const options of [{ postReadFailure: true }, { freshReadFailure: true }]) {
+		f = schematicCreateFixture(options);
+		const payload = payloadFor(f.deviceItem);
+		const uncertain = await handleApiInvokeTask(payload);
+		assert.deepEqual([uncertain.ok, uncertain.commitUnknown, uncertain.readbackRequired, uncertain.nativeCallSettled], [false, true, true, true], 'a settled restoration with failed readback remains unknown without requiring a host restart');
+		assert.equal(requiresHostRestartForResult(path, payload, uncertain), false);
+		assert.equal(f.modifyCalls.length, 2, 'both native restore writes have completed before this readback failure');
+		assert.equal(f.getCalls.length, options.freshReadFailure ? 1 : 0);
+	}
+	for (const options of [{ nativeCreateError: 'WebSocket is not open' }, { createReturnsUndefined: true }]) {
+		f = schematicCreateFixture(options);
+		const payload = payloadFor(f.deviceItem);
+		const uncertain = await handleApiInvokeTask(payload);
+		const unsettled = Boolean(options.nativeCreateError);
+		assert.deepEqual([uncertain.ok, uncertain.commitUnknown, uncertain.readbackRequired, uncertain.nativeCallSettled], [false, true, true, !unsettled]);
+		assert.equal(requiresHostRestartForResult(path, payload, uncertain), unsettled);
+		assert.equal(f.createCalls.length, 1);
+		assert.equal(f.components.has('new-r'), true, 'a missing native response does not undo the created component');
+		assert.equal(f.modifyCalls.length, 0);
+	}
+	f = schematicCreateFixture();
+	let mutationGuards = 0;
+	const guarded = await handleApiInvokeTask(payloadFor(f.deviceItem), undefined, () => {
+		if (++mutationGuards === 2)
+			throw new Error('lease changed before the restore mutation');
+	});
+	assert.deepEqual([guarded.ok, guarded.needsReview, guarded.commitUnknown], [false, true, undefined]);
+	assert.match(guarded.annotationWarning, /lease changed before the restore mutation/);
+	assert.deepEqual(guarded.designatorChanges, [{ primitiveId: 'u4', before: 'U4', after: 'U15' }, { primitiveId: 'u5', before: 'U5', after: 'U16' }]);
+	assert.equal(mutationGuards, 2, 'the final guard executes again before the first restore write');
+	assert.equal(f.createCalls.length, 1);
+	assert.equal(f.modifyCalls.length, 0, 'lease loss after create must stop native restoration');
+}
+
 async function main() {
 	const pageUuid = 'page-1';
 	let documentType = 1;
@@ -223,6 +423,7 @@ async function main() {
 	assert.equal(lookupCalls, beforeDirectLookup);
 	delete globalThis.eda.lib_Device;
 	assert.equal((await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveComponent.create', args: [item, 450, 400] })).result.x, 450, 'complete native item remains usable without the get capability');
+	await rawSchematicCreateTests();
 	console.log('Schematic native pin and library creation compatibility tests passed');
 }
 

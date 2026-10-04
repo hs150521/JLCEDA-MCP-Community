@@ -9,10 +9,17 @@
  * ------------------------------------------------------------------------
  */
 
+import type { FootprintIdentity } from '../bridge/editor-context.ts';
 import type { SchematicPinAdapter } from '../bridge/protocol.ts';
+import type { DesignatorApi } from './component-designator-restore';
+import type { FootprintPrimitiveKind } from './footprint-primitive-state.ts';
 import type { AutoRoutingSnapshot } from './pcb-auto-routing-observation';
-import { isReadOnlyBridgeRequest } from '../bridge/bridge-contract';
+import { footprintApiAccess, isReadOnlyBridgeRequest } from '../bridge/bridge-contract';
+import { assertFootprintIdentity, editorDocumentPageKind, footprintIdentityFromDocument, readCurrentEditorDocument } from '../bridge/editor-context.ts';
 import { getSyncState, isPlainObjectRecord, isUnknownNativeRpcResult, preserveBoundedArray, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils';
+import { readSchematicComponentBaseline, restoreChangedSchematicDesignators } from './component-designator-restore';
+import { compareFootprintModification, prepareFootprintModification } from './footprint-modify-helper.ts';
+import { readFootprintPrimitiveState } from './footprint-primitive-state.ts';
 import { AutoRoutingPageChangedError, compareAutoRoutingSnapshots, readAutoRoutingSnapshot, unavailableAutoRoutingObservation } from './pcb-auto-routing-observation';
 import { tryModifySchematicComponentPin } from './schematic-component-pin-edit.ts';
 import { resolveSchematicLibraryComponent } from './schematic-library-component.ts';
@@ -125,7 +132,7 @@ async function currentPcbLayoutContext(): Promise<{ pageKind: 'pcb'; pageUuid?: 
 	};
 }
 
-async function currentSchematicDeletePage(): Promise<string> {
+async function currentSchematicMutationPage(operation = '删除'): Promise<string> {
 	const [page, document] = await Promise.all([
 		eda.dmt_Schematic.getCurrentSchematicPageInfo(),
 		eda.dmt_SelectControl.getCurrentDocumentInfo(),
@@ -133,13 +140,13 @@ async function currentSchematicDeletePage(): Promise<string> {
 	const pageUuid = typeof page?.uuid === 'string' ? page.uuid.trim() : '';
 	const documentUuid = typeof document?.uuid === 'string' ? document.uuid.trim() : '';
 	if (!pageUuid || pageUuid !== documentUuid)
-		throw new Error('当前原理图图页与编辑器文档尚未同步，已取消删除。');
+		throw new Error(`当前原理图图页与编辑器文档尚未同步，已取消${operation}。`);
 	return pageUuid;
 }
 
-async function assertSchematicDeletePage(expected: string): Promise<void> {
-	if (await currentSchematicDeletePage() !== expected)
-		throw new Error('删除期间原理图图页已切换，已停止后续删除。');
+async function assertSchematicMutationPage(expected: string, operation = '删除'): Promise<void> {
+	if (await currentSchematicMutationPage(operation) !== expected)
+		throw new Error(`${operation}期间原理图图页已切换，已停止后续${operation}。`);
 }
 
 // 在对象上解析段名，要求精确匹配。
@@ -206,18 +213,220 @@ function resolveApiCallable(apiFullName: string): { callable: (...args: unknown[
 	};
 }
 
+function footprintPolygon(runtime: Record<string, unknown>, value: unknown): unknown {
+	const source = isPlainObjectRecord(value) ? value.polygonSource : value;
+	if (!Array.isArray(source) || source.length === 0 || source.some(item =>
+		!(typeof item === 'number' && Number.isFinite(item))
+		&& !(typeof item === 'string' && ['L', 'ARC', 'CARC', 'C', 'R', 'CIRCLE'].includes(item)))) {
+		throw new TypeError('Footprint polyline polygonSource must be an official polygon source array.');
+	}
+	const api = runtime.pcb_MathPolygon;
+	if (!isPlainObjectRecord(api) || typeof api.createPolygon !== 'function')
+		throw new TypeError('EDA pcb_MathPolygon.createPolygon is unavailable.');
+	const polygon = api.createPolygon([...source]);
+	if (!isPlainObjectRecord(polygon) || typeof polygon.getSource !== 'function')
+		throw new TypeError('EDA pcb_MathPolygon.createPolygon rejected polygonSource.');
+	return polygon;
+}
+
+function footprintTargetIds(value: unknown): string[] {
+	const ids = typeof value === 'string' ? [value] : value;
+	if (!Array.isArray(ids) || ids.length === 0 || ids.some(id => typeof id !== 'string' || !id.trim()))
+		throw new TypeError('Footprint primitive target must be an ID string or ID array.');
+	return ids as string[];
+}
+
+function footprintInvokeResult(raw: unknown, kind: FootprintPrimitiveKind, method: string): unknown {
+	if (method === 'getallprimitiveid') {
+		if (!Array.isArray(raw) || raw.some(id => typeof id !== 'string' || !id))
+			throw new TypeError('EDA footprint primitive ID readback is incomplete.');
+		return preserveBoundedArray([...raw]);
+	}
+	if (Array.isArray(raw))
+		return preserveBoundedArray(raw.map(item => readFootprintPrimitiveState(item, kind)));
+	return raw === undefined ? null : readFootprintPrimitiveState(raw, kind);
+}
+
+async function invokeSchematicComponentCreate(
+	payload: Record<string, unknown>,
+	apiFullName: string,
+	callable: (...args: unknown[]) => unknown,
+	thisArg: unknown,
+	args: unknown[],
+	beforeNativeMutation?: () => void,
+): Promise<unknown> {
+	const module = thisArg as Pick<DesignatorApi, 'getAll' | 'modify'> & { get?: (id: string) => Promise<unknown> };
+	const api: DesignatorApi = { context: thisArg, getAll: module.getAll, modify: module.modify };
+	const pageUuid = await currentSchematicMutationPage('创建');
+	if (typeof payload.expectedSchematicCreatePageUuid === 'string' && pageUuid !== payload.expectedSchematicCreatePageUuid)
+		throw new Error('创建前原理图图页已切换，已取消创建。');
+	const baseline = await readSchematicComponentBaseline(api);
+	await assertSchematicMutationPage(pageUuid, '创建');
+	beforeNativeMutation?.();
+	let nativeResult: unknown;
+	try {
+		nativeResult = await Promise.resolve(callable.apply(thisArg, args));
+	}
+	catch (error: unknown) {
+		if (isUnknownNativeRpcResult(toSafeErrorMessage(error))) {
+			return { apiFullName, pageUuid, ok: false, commitUnknown: true, readbackRequired: true, nativeCallSettled: false, error: toSafeErrorMessage(error) };
+		}
+		throw error;
+	}
+	let nativeCallSettled = true;
+	try {
+		await assertSchematicMutationPage(pageUuid, '创建');
+		const primitiveId = getSyncState(nativeResult, 'getState_PrimitiveId', '');
+		if (!primitiveId)
+			throw new Error('EDA 创建未返回可核对的器件图元。');
+		const restored = await restoreChangedSchematicDesignators(api, baseline.designators, () => assertSchematicMutationPage(pageUuid, '位号恢复'), beforeNativeMutation);
+		nativeCallSettled = restored.nativeCallSettled !== false;
+		await assertSchematicMutationPage(pageUuid, '创建');
+		if (!restored.currentDesignators.has(primitiveId))
+			throw new Error(`EDA 返回的器件图元 ${primitiveId} 不在当前原理图图页中。`);
+		let observed = nativeResult;
+		if (restored.restoredDesignators.length > 0 && !restored.commitUnknown) {
+			if (!module.get)
+				throw new TypeError('sch_PrimitiveComponent.get API 不可用，无法回读恢复后的新器件。');
+			observed = await Promise.resolve(module.get.call(thisArg, primitiveId));
+			await assertSchematicMutationPage(pageUuid, '创建');
+			if (getSyncState(observed, 'getState_PrimitiveId', '') !== primitiveId)
+				throw new Error('位号恢复后的新器件回读未通过。');
+		}
+		return {
+			apiFullName,
+			pageUuid,
+			result: await toSerializableAsync(observed),
+			ok: !restored.annotationWarning,
+			designatorChanges: restored.designatorChanges,
+			restoredDesignators: restored.restoredDesignators,
+			...(restored.annotationWarning ? { needsReview: true, annotationWarning: restored.annotationWarning } : {}),
+			...(restored.commitUnknown ? { commitUnknown: true, readbackRequired: true, nativeCallSettled: restored.nativeCallSettled !== false } : {}),
+		};
+	}
+	catch (error: unknown) {
+		return { apiFullName, pageUuid, ok: false, commitUnknown: true, readbackRequired: true, nativeCallSettled, error: toSafeErrorMessage(error) };
+	}
+}
+
+async function invokeFootprintPrimitive(
+	payload: Record<string, unknown>,
+	resolvedPath: string,
+	callable: (...args: unknown[]) => unknown,
+	thisArg: unknown,
+	identity: FootprintIdentity,
+	beforeNativeMutation?: () => void,
+): Promise<unknown> {
+	const runtime = eda as unknown as Record<string, unknown>;
+	const normalized = resolvedPath.toLowerCase();
+	const access = footprintApiAccess(normalized)!;
+	const parts = normalized.split('.');
+	const kind = parts[1].slice('pcb_primitive'.length) as FootprintPrimitiveKind;
+	const method = parts[2];
+	const args = Array.isArray(payload.args) ? [...payload.args] : [];
+	if (payload.includeCompletePositions !== undefined || payload.includeCompleteRouting !== undefined
+		|| payload.includeCompleteSchematicComponentIds !== undefined) {
+		throw new TypeError('Use footprint_read for complete footprint recovery; PCB/schematic readback options do not apply.');
+	}
+	if (method === 'modify' && (typeof args[0] !== 'string' || !args[0].trim()))
+		throw new TypeError('Footprint modify requires a primitive ID string.');
+	const deleteIds = method === 'delete' ? footprintTargetIds(args[0]) : undefined;
+	if (kind === 'polyline' && method === 'create')
+		args[2] = footprintPolygon(runtime, args[2]);
+	if (kind === 'polyline' && method === 'modify') {
+		if (!isPlainObjectRecord(args[1]))
+			throw new TypeError('Footprint polyline modify requires a property object.');
+		const property = { ...args[1] };
+		if (property.polygonSource !== undefined && property.polygon !== undefined)
+			throw new TypeError('Provide either polygonSource or polygon for footprint polyline modification.');
+		if (property.polygonSource !== undefined) {
+			property.polygon = footprintPolygon(runtime, property.polygonSource);
+			delete property.polygonSource;
+		}
+		else if (property.polygon !== undefined) {
+			property.polygon = footprintPolygon(runtime, property.polygon);
+		}
+		args[1] = property;
+	}
+	const commitModification = method === 'modify'
+		? await prepareFootprintModification(runtime, thisArg as Record<string, unknown>, kind, args[0] as string, args[1])
+		: undefined;
+	await assertFootprintIdentity(runtime, identity);
+	if (access === 'write')
+		beforeNativeMutation?.();
+	let nativeResult: unknown;
+	try {
+		nativeResult = await Promise.resolve(commitModification ? commitModification() : callable.apply(thisArg, args));
+	}
+	catch (error: unknown) {
+		if (access === 'write' && isUnknownNativeRpcResult(toSafeErrorMessage(error))) {
+			return { apiFullName: resolvedPath, ...identity, ok: false, commitUnknown: true, readbackRequired: true, nativeCallSettled: false, reason: 'native_footprint_result_unknown', error: toSafeErrorMessage(error) };
+		}
+		throw error;
+	}
+	let nativePrimitiveId: unknown;
+	try {
+		if (access === 'read') {
+			const result = footprintInvokeResult(nativeResult, kind, method);
+			await assertFootprintIdentity(runtime, identity);
+			return { apiFullName: resolvedPath, ...identity, result, identityVerified: true };
+		}
+		const api = thisArg as Record<string, unknown>;
+		const get = api.get;
+		if (typeof get !== 'function')
+			throw new TypeError('EDA footprint primitive get API is unavailable for post-write readback.');
+		if (method === 'delete') {
+			const after = await Promise.all(deleteIds!.map(id => get.call(api, id)));
+			const remainingIds = deleteIds!.filter((_id, index) => after[index] !== undefined && !(Array.isArray(after[index]) && after[index].length === 0));
+			await assertFootprintIdentity(runtime, identity);
+			return { apiFullName: resolvedPath, ...identity, result: nativeResult, identityVerified: true, deletedIds: preserveBoundedArray(deleteIds!.filter(id => !remainingIds.includes(id))), remainingIds: preserveBoundedArray(remainingIds), ...(nativeResult !== true || remainingIds.length ? { ok: false, reason: 'native_footprint_delete_incomplete' } : {}) };
+		}
+		const primitiveId = method === 'modify' ? args[0] : getSyncState<unknown>(nativeResult, 'getState_PrimitiveId', undefined);
+		nativePrimitiveId = await toSerializableAsync(primitiveId);
+		if (typeof primitiveId !== 'string' || !primitiveId.trim() || nativeResult === undefined)
+			throw new Error('EDA footprint write returned no confirmed primitive.');
+		const observed = await get.call(api, primitiveId);
+		const after = readFootprintPrimitiveState(observed, kind);
+		if (after.primitiveId !== primitiveId)
+			throw new Error('EDA footprint post-write primitive ID differs from the requested target.');
+		await assertFootprintIdentity(runtime, identity);
+		const fieldMismatches = method === 'modify' ? compareFootprintModification(kind, args[1] as Record<string, unknown>, after) : [];
+		return { apiFullName: resolvedPath, ...identity, result: after, after, identityVerified: true, ...(fieldMismatches.length ? { ok: false, reason: 'native_footprint_modify_incomplete', fieldMismatches } : {}) };
+	}
+	catch (error: unknown) {
+		if (access === 'read')
+			throw error;
+		return { apiFullName: resolvedPath, ...identity, ok: false, commitUnknown: true, readbackRequired: true, nativeCallSettled: true, reason: 'post_write_footprint_readback_failed', ...(nativePrimitiveId !== undefined ? { nativePrimitiveId } : {}), error: toSafeErrorMessage(error) };
+	}
+}
+
 /**
  * 处理 API 调用任务。
  * @param payload 任务参数。
  * @returns 调用结果。
  */
-export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (adapter: SchematicPinAdapter) => void): Promise<unknown> {
+export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (adapter: SchematicPinAdapter) => void, beforeNativeMutation?: () => void): Promise<unknown> {
 	if (!isPlainObjectRecord(payload)) {
 		throw new Error('invoke 任务参数必须为对象。');
 	}
 
 	const apiFullName = String(payload.apiFullName ?? '').trim();
+	const requestedName = apiFullName.toLowerCase();
+	const canvasApi = requestedName.startsWith('eda.pcb_') || requestedName.startsWith('eda.sch_');
+	const document = canvasApi ? await readCurrentEditorDocument(eda as unknown as Record<string, unknown>) : undefined;
+	if (canvasApi && payload.expectedEditorPageKind !== undefined
+		&& editorDocumentPageKind(document) !== payload.expectedEditorPageKind) {
+		throw new Error('The active editor page kind changed before the canvas API invocation.');
+	}
+	if (canvasApi && isPlainObjectRecord(payload.expectedFootprintIdentity))
+		await assertFootprintIdentity(eda as unknown as Record<string, unknown>, payload.expectedFootprintIdentity as unknown as FootprintIdentity);
+	const footprint = editorDocumentPageKind(document) === 'footprint';
+	if (footprint && !footprintApiAccess(requestedName)) {
+		return { apiFullName, ok: false, reason: 'unsupported_footprint_api', code: 'UNSUPPORTED_FOOTPRINT_API', error: `Unsupported footprint canvas API: ${apiFullName}.`, applied: false, nativeCallAttempted: false };
+	}
 	const { callable, thisArg, resolvedPath } = resolveApiCallable(apiFullName);
+	if (footprint)
+		return invokeFootprintPrimitive(payload, resolvedPath, callable, thisArg, footprintIdentityFromDocument(document), beforeNativeMutation);
 	const invokeArgs = Array.isArray(payload.args) ? payload.args : [];
 	const normalizedPath = resolvedPath.toLowerCase();
 	const routingProps = normalizedPath === PCB_AUTO_ROUTING && isPlainObjectRecord(invokeArgs[0]) ? invokeArgs[0] : undefined;
@@ -251,6 +460,7 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 			return { apiFullName: resolvedPath, ...resolved };
 		invokeArgs[0] = resolved.component;
 		invokeArgs[3] = resolved.subPartName;
+		return invokeSchematicComponentCreate(payload, resolvedPath, callable, thisArg, invokeArgs, beforeNativeMutation);
 	}
 
 	// EDA 3.x 的 modify 会在省略 otherProperty 时清空已有的 BOM 属性。
@@ -293,14 +503,14 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 		if (typeof module.getAllPrimitiveId !== 'function') {
 			throw new TypeError('无法核对器件图元列表，已取消删除。');
 		}
-		const pageUuid = await currentSchematicDeletePage();
+		const pageUuid = await currentSchematicMutationPage();
 		if (typeof payload.expectedSchematicDeletePageUuid === 'string'
 			&& pageUuid !== payload.expectedSchematicDeletePageUuid) {
 			throw new Error('删除前原理图图页已切换，已取消删除。');
 		}
 		const readCurrentIds = async (): Promise<string[]> => {
 			const current = await Promise.resolve(module.getAllPrimitiveId!.call(thisArg, undefined, false));
-			await assertSchematicDeletePage(pageUuid);
+			await assertSchematicMutationPage(pageUuid);
 			if (!Array.isArray(current) || current.some(id => typeof id !== 'string' || !id)
 				|| new Set(current).size !== current.length) {
 				throw new TypeError('无法核对当前页器件图元列表，已停止删除。');
@@ -340,7 +550,7 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 		});
 		for (const [index, id] of ids.entries()) {
 			try {
-				await assertSchematicDeletePage(pageUuid);
+				await assertSchematicMutationPage(pageUuid);
 			}
 			catch (error: unknown) {
 				if (!deleteAttempted)
@@ -374,7 +584,7 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 					if (typeof module.getAll !== 'function')
 						throw new TypeError('无法核对当前页器件对象，删除结果尚未确认。');
 					const currentObjects = await Promise.resolve(module.getAll.call(thisArg, undefined, false));
-					await assertSchematicDeletePage(pageUuid);
+					await assertSchematicMutationPage(pageUuid);
 					if (!Array.isArray(currentObjects))
 						throw new TypeError('无法读取当前页器件对象，已停止删除。');
 					const currentObjectIds = currentObjects.map(item => getSyncState(item, 'getState_PrimitiveId', ''));

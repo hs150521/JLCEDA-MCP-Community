@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [2.3.6] - 2026-10-05
+
+- 新增独立封装支持：识别官方 DocumentType 4 独立封装，按库 UUID、文档 UUID 和标签建立 Bridge 上下文与连接；库身份优先取匹配当前文档的实际库标签，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`，避免跨库滞留字段覆盖真实标签，不复用工程/PCB 缓存。
+- 新增 `footprint_read`：完整读取 Pad/Via/Line/Arc/Polyline/String/Attribute 七类图元，核对全 ID 清单和真实 DTO；保留焊盘/孔几何、原生轮廓源及属性父 ID、显示状态，缺能力或超预算时不声明完整。
+- `api_invoke` 支持首批 41 个封装画布方法，Polyline 源数组自动转换；创建/修改后读取实际 `after`，删除核对目标残留。Attribute.create 因官方内部空实现排除，PCB/原理图专用工具在封装文档内明确拒绝。
+- 写入前核对同库、同文档、同标签，并在最后身份读取后检查连接、活动角色与租约。封装未知提交使用同库同文档的完整 `footprint_read` 恢复；恢复可以使用新标签，但一次回读期间必须稳定。
+- 新增完整读取、41 方法、身份变化、租约变化、长轮廓传输和恢复定向回归。正式 footprint_state 恢复、个人封装源码写回后重开的 5 控制图元完整 DTO 一致已通过；Via/Line/Polyline/String/独立 Arc 新案例创建、修改、删除通过。#80 持久 PCB 子过孔删除继续开放。
+
+- 原理图 raw component.create 复用已有位号保护与完整 placement 恢复，保留正式设备/符号重载及原生参数。实机新件 BOM/PCB false 保留、9 旧件完整 DTO 不变；本次没有位号重排，U4/U5 恢复由本地 fixture 验证。
+- 无孔 Pad 的原生空值或 NaN 孔旋转按不适用表示为 null；带孔状态仍要求有限孔旋转。`specialPad:[]` 原样保留为没有额外特殊轮廓，焊盘或特殊焊盘至少有一个非空形状；必要 getter 与焊盘/孔形状检查仍保留。
+- 七类 modify 使用真实异步图元 setter，等待一次 done 后重新读取。请求字段未生效返回 ok:false、native_footprint_modify_incomplete、fieldMismatches 与实际 after；可确认的部分结果不进入未知提交隔离。Polyline 等价闭合轮廓方向/起点/已有精度规范化比较继续保留实际 source。
+- 实机 SMD x130 生效但 80×60 请求仍为 60×60，最终 x130 状态保存重开已验证；首次 layer3 水平弦 Arc 未登记原因未确定，另一个独立 Arc 案例通过。Attribute 无非空 native 样本，EDA v4 未验证。
+- 新增独立封装 MCP Bridge 菜单，实机可见，菜单重启后新客户端 ready、公开选择与 count5 完整回读通过。就绪报告发送失败后清理本次连接再重连、旧回调不影响新连接的分支已有本地回归，未宣称实机故障复现。
+
 ## [2.3.5] - 2026-10-05
 
 - 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。

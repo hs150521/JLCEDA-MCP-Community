@@ -47,7 +47,7 @@ export function viewConnectionStatus(): void {
 	const status = readConnectionStatus();
 	const statusText = status
 		? `桥接连接：${status.bridgeText}\nWebSocket：${status.websocketText}\n更新时间：${status.updatedAt}`
-		: '尚无连接状态。请打开原理图或 PCB 页面后重试。';
+		: '尚无连接状态。请打开原理图、PCB 或封装页面后重试。';
 	eda.sys_Dialog.showInformationMessage(statusText, 'MCP Bridge 连接状态');
 }
 
