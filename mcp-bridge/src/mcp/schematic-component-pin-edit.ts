@@ -1,10 +1,9 @@
 import type { SchematicPinAdapter } from '../bridge/protocol.ts';
-import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { getEdaRuntime, getSyncState, isPlainObjectRecord, isUnknownNativeRpcResult, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
 
 type Api = Record<string, unknown>;
 type PinState = Record<string, unknown> & { primitiveId: string; pinNumber: string; noConnected: boolean };
 
-const UNKNOWN_RPC = /timed?\s*out|ETIMEDOUT|disconnect|connection\s+(?:closed|lost|reset)|socket\s+(?:closed|hang up)|ECONNRESET|EPIPE/i;
 const GETTERS: Record<string, string> = {
 	x: 'getState_X',
 	y: 'getState_Y',
@@ -165,7 +164,7 @@ export async function tryModifySchematicComponentPin(args: unknown[], reportAdap
 	}
 	catch (error: unknown) {
 		const message = toSafeErrorMessage(error);
-		return { ok: false, ...context, before, reason: 'native_call_result_unknown', error: message, commitUnknown: true, readbackRequired: true, nativeCallSettled: !UNKNOWN_RPC.test(message) };
+		return { ok: false, ...context, before, reason: 'native_call_result_unknown', error: message, commitUnknown: true, readbackRequired: true, nativeCallSettled: !isUnknownNativeRpcResult(message) };
 	}
 	let after: PinState | undefined;
 	try {

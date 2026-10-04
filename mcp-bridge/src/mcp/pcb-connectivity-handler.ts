@@ -1,4 +1,4 @@
-import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { getEdaRuntime, getSyncState, isPlainObjectRecord, isUnknownNativeRpcResult, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
 import { pcbViaDimensionMode, pcbViaDimensionNormalization } from './pcb-native-normalization.ts';
 
 type PcbConnectivityAction = 'line_create' | 'via_create';
@@ -45,7 +45,7 @@ async function verifyNet(api: Record<string, unknown>, net: string): Promise<voi
 function nativeCreateFailure(action: PcbConnectivityAction, error: unknown): Record<string, unknown> {
 	const message = toSafeErrorMessage(error);
 	// A timed-out or disconnected RPC can finish inside EDA after it rejects here.
-	const commitUnknown = /timed?\s*out|disconnect|connection\s+(?:closed|lost|reset)|socket\s+(?:closed|hang up)|ECONNRESET|EPIPE/i.test(message);
+	const commitUnknown = isUnknownNativeRpcResult(message);
 	return {
 		ok: false,
 		action,

@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', modu
 require('ts-node/register/transpile-only');
 
 const { handlePcbConnectivityTask } = require('../src/mcp/pcb-connectivity-handler.ts');
+const { requiresHostRestartForResult } = require('../src/runtime/task-timeout.ts');
 const { toSerializableAsync } = require('../src/utils.ts');
 
 function linePrimitive(id, net, layer, startX, startY, endX, endY, lineWidth) {
@@ -44,6 +45,7 @@ async function main() {
 	let lineCreates = 0;
 	let viaCreates = 0;
 	let lineCreateMode = 'normal';
+	let nativeCreateError;
 	let viaReadbackMode = 'normal';
 	let lineScans = 0;
 	const lineScanScopes = [];
@@ -58,6 +60,8 @@ async function main() {
 				lineCreates++;
 				const primitive = linePrimitive(`line-${lineCreates}`, net, layer, startX, startY, endX, endY, lineWidth);
 				lines.set(primitive.getState_PrimitiveId(), primitive);
+				if (nativeCreateError)
+					throw new Error(nativeCreateError);
 				if (lineCreateMode === 'undefined')
 					return undefined;
 				if (lineCreateMode === 'reject')
@@ -79,6 +83,8 @@ async function main() {
 				viaCreates++;
 				const primitive = viaPrimitive(`via-${viaCreates}`, net, x, y, holeDiameter, diameter);
 				vias.set(primitive.getState_PrimitiveId(), primitive);
+				if (nativeCreateError)
+					throw new Error(nativeCreateError);
 				return primitive;
 			},
 			async get(id) {
@@ -285,6 +291,20 @@ async function main() {
 	const disconnected = await handlePcbConnectivityTask(line);
 	assert.equal(disconnected.commitUnknown, true);
 	assert.equal(disconnected.nativeCallSettled, false);
+	lineCreateMode = 'normal';
+	for (const payload of [line, via]) {
+		const store = payload.action === 'line_create' ? lines : vias;
+		for (const message of ['WebSocket is not open', 'transport closed', 'ECONNABORTED']) {
+			nativeCreateError = message;
+			const beforeCount = store.size;
+			const uncertain = await handlePcbConnectivityTask(payload);
+			assert.deepEqual([uncertain.ok, uncertain.commitUnknown, uncertain.readbackRequired, uncertain.nativeCallSettled], [false, true, true, false], message);
+			assert.equal(uncertain.reason, 'native_create_result_unknown');
+			assert.equal(store.size, beforeCount + 1, 'a failed RPC response does not prove native creation was rejected');
+			assert.equal(requiresHostRestartForResult('/bridge/jlceda/pcb/connectivity', payload, uncertain), true, message);
+		}
+	}
+	nativeCreateError = undefined;
 	lineCreateMode = 'validation';
 	const beforeValidation = lineCreates;
 	const nativeValidation = await handlePcbConnectivityTask(line);

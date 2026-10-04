@@ -12,7 +12,7 @@
 import type { SchematicPinAdapter } from '../bridge/protocol.ts';
 import type { AutoRoutingSnapshot } from './pcb-auto-routing-observation';
 import { isReadOnlyBridgeRequest } from '../bridge/bridge-contract';
-import { getSyncState, isPlainObjectRecord, preserveBoundedArray, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils';
+import { getSyncState, isPlainObjectRecord, isUnknownNativeRpcResult, preserveBoundedArray, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils';
 import { AutoRoutingPageChangedError, compareAutoRoutingSnapshots, readAutoRoutingSnapshot, unavailableAutoRoutingObservation } from './pcb-auto-routing-observation';
 import { tryModifySchematicComponentPin } from './schematic-component-pin-edit.ts';
 import { resolveSchematicLibraryComponent } from './schematic-library-component.ts';
@@ -29,10 +29,6 @@ const PCB_ROUTING_READBACKS = new Map([
 ]);
 const SCHEMATIC_PAGES_GET_ALL = 'eda.dmt_schematic.getallschematicpagesinfo';
 let pendingAutoLayoutPcbUuid: string | undefined;
-
-function isUnknownNativeRpcResult(errorMessage: string): boolean {
-	return /timed?\s*out|ETIMEDOUT|disconnect|connection\s+(?:closed|lost|reset|aborted)|socket\s+(?:closed|hang up)|transport\s+(?:closed|lost)|websocket.*(?:closed|not open)|ECONNRESET|ECONNABORTED|EPIPE/i.test(errorMessage);
-}
 
 function pcbComponentPosition(component: unknown): { primitiveId: string; designator: string; x: number; y: number; rotation: number } | undefined {
 	const raw = isPlainObjectRecord(component) ? component : {};

@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', modu
 require('ts-node/register/transpile-only');
 const { handleComponentPlaceAutoTask } = require('../src/mcp/component-place-auto-handler.ts');
 const { handleApiInvokeTask } = require('../src/mcp/invoke-handler.ts');
+const { requiresHostRestartForResult } = require('../src/runtime/task-timeout.ts');
 const { toSerializableAsync } = require('../src/utils.ts');
 
 function pinState(id, number) {
@@ -16,6 +17,8 @@ async function main() {
 	let documentType = 1;
 	let nativePinModifyCalls = 0;
 	let doneCalls = 0;
+	let nativeDoneError;
+	let nativePinModifyError;
 	let corruptSibling = false;
 	let pageReadHook;
 	const adapters = [];
@@ -39,6 +42,8 @@ async function main() {
 				async done() {
 					assert.equal(adapters.at(-1), 'component_pin_instance', 'classification is reported before native ComponentPin mutation');
 					doneCalls += 1;
+					if (nativeDoneError)
+						throw new Error(nativeDoneError);
 					Object.assign(state, staged);
 					if (corruptSibling)
 						states[1].y = -states[1].y;
@@ -70,6 +75,8 @@ async function main() {
 			async modify(id, patch) {
 				assert.equal(adapters.at(-1), 'native_pin', 'ordinary Pin classification is reported before native modify');
 				nativePinModifyCalls += 1;
+				if (nativePinModifyError)
+					throw new Error(nativePinModifyError);
 				return { primitiveId: id, ...patch };
 			},
 		},
@@ -96,6 +103,7 @@ async function main() {
 	corruptSibling = true;
 	const drift = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] }, reportAdapter);
 	assert.deepEqual([drift.ok, drift.commitUnknown, drift.nativeCallSettled], [false, true, true]);
+	assert.equal(requiresHostRestartForResult('/bridge/jlceda/api/invoke', { apiFullName: 'eda.sch_PrimitivePin.modify' }, drift), false, 'a completed write with state drift still requires readback without a host restart');
 	assert.equal(drift.after.y, 330);
 	assert.ok(drift.sideEffects.some(effect => effect.primitiveId === 'pin-17' && effect.field === 'y'));
 	corruptSibling = false;
@@ -103,6 +111,17 @@ async function main() {
 	states[1].noConnected = undefined;
 	const unmarkedSibling = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] }, reportAdapter);
 	assert.equal(unmarkedSibling.verified, true, 'official undefined NC state on an unmarked sibling remains compatible');
+	const rpcFailures = ['WebSocket is not open', 'transport closed', 'ECONNABORTED'];
+	const pinPayload = { apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: true }] };
+	for (const message of rpcFailures) {
+		nativeDoneError = message;
+		const uncertain = await handleApiInvokeTask(pinPayload, reportAdapter);
+		assert.deepEqual([uncertain.ok, uncertain.commitUnknown, uncertain.readbackRequired, uncertain.nativeCallSettled], [false, true, true, false], message);
+		assert.equal(uncertain.adapter, 'component_pin_instance');
+		assert.equal(requiresHostRestartForResult('/bridge/jlceda/api/invoke', pinPayload, uncertain), true, message);
+		assert.equal(states[0].noConnected, false, 'a rejected RPC cannot confirm the staged native state');
+	}
+	nativeDoneError = undefined;
 	states[1].noConnected = true;
 	globalThis.eda.sch_PrimitiveComponent.getAll = async () => [{ getState_PrimitiveId: () => 'U1' }];
 	globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId = async (id) => {
@@ -138,6 +157,15 @@ async function main() {
 	assert.equal(ordinaryPagePin.result.primitiveId, 'ordinary-page-pin');
 	assert.equal(adapters.at(-1), 'native_pin', 'a current-page Pin without a component owner keeps its native path');
 	assert.equal(nativePinModifyCalls, 2);
+	for (const message of rpcFailures) {
+		nativePinModifyError = message;
+		const ordinaryPayload = { apiFullName: 'eda.sch_PrimitivePin.modify', args: ['ordinary-page-pin', { noConnected: true }] };
+		const uncertain = await handleApiInvokeTask(ordinaryPayload, reportAdapter);
+		assert.deepEqual([uncertain.commitUnknown, uncertain.nativeCallSettled], [true, false], message);
+		assert.equal(adapters.at(-1), 'native_pin');
+		assert.equal(requiresHostRestartForResult('/bridge/jlceda/api/invoke', ordinaryPayload, uncertain), true, message);
+	}
+	nativePinModifyError = undefined;
 	const beforeBlockedWrite = nativePinModifyCalls;
 	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitivePin.modify', args: ['ordinary-page-pin', { noConnected: true }] }, () => {
 		throw new Error('execution context reporting failed');

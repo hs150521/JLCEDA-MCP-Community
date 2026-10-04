@@ -20,6 +20,8 @@
 
 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
 
+普通 Pin 与 ComponentPin 共用原生 RPC 未确认分类；WebSocket is not open、transport closed、ECONNABORTED 等断连结果均返回 nativeCallSettled:false，并要求原宿主重启后完整回读。已结束但状态不匹配的调用仍区分为 nativeCallSettled:true。三种断连在两条实际处理路径、宿主重启策略与状态漂移分支均有针对性回归，已通过两轮本地复查。 同样统一图页导航与 PCB 直线/过孔创建的断连分类；回归包含原生状态已改变后才抛错的场景，继续要求宿主重启。
+
 三项审查补修均已完成两轮本地复查。最终 Bridge 完整构建、两包全部测试入口、lint 与多客户端协议验证通过。最终扩展热更新后，再次实测 ComponentPin 的 NC true→false，完整原理图语义快照恢复一致；直线拆分/合并返回 2 个本次变化的实际 ID 与 `changedPrimitiveIds`；正常过孔量化修改仍 verified:true。普通 Pin / ComponentPin 的真实无结果超时、迟到分类和中继恢复，以及零环宽失败分支由针对性本地回归验证。
 
 ## 全部 Open Issue 矩阵

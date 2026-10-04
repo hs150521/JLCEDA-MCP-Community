@@ -28,6 +28,11 @@ export function getEdaRuntime(): Record<string, unknown> | undefined {
 	return undefined;
 }
 
+/** 原生 RPC 连接或超时错误不能证明 EDA 调用已经结束。 */
+export function isUnknownNativeRpcResult(errorMessage: string): boolean {
+	return /timed?\s*out|ETIMEDOUT|disconnect|connection\s+(?:closed|lost|reset|aborted)|socket\s+(?:closed|hang up)|transport\s+(?:closed|lost)|websocket.*(?:closed|not open)|ECONNRESET|ECONNABORTED|EPIPE/i.test(errorMessage);
+}
+
 const PRESERVE_BOUNDED_ARRAY = Symbol('preserveBoundedArray');
 const PRESERVE_BOUNDED_JSON = Symbol('preserveBoundedJson');
 
