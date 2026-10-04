@@ -156,31 +156,51 @@ async function main() {
 	lineApi.create = originalLineCreate;
 	const viaApi = globalThis.eda.pcb_PrimitiveVia;
 	const originalViaCreate = viaApi.create;
-	viaApi.create = async (net, x, y, hole, diameter) => {
-		const raw = viaPrimitive('quantized-via', net, x, y, Math.floor(hole * 10) / 10, Math.round(diameter * 10) / 10);
-		vias.set('quantized-via', raw);
-		return raw;
-	};
-	const quantized = await toSerializableAsync(await handlePcbConnectivityTask({ ...via, holeDiameter: 19.685, diameter: 47.244 }));
-	assert.equal(quantized.ok, true);
-	assert.equal(quantized.holeDiameter, 19.6);
-	assert.equal(quantized.diameter, 47.2);
-	assert.equal(quantized.after.holeDiameter, 19.6);
-	assert.equal(quantized.normalization.holeDiameter.requested, 19.685);
-	assert.equal(quantized.normalization.holeDiameter.mode, 'truncate_0_1_mil');
-	const rounded = await handlePcbConnectivityTask({ ...via, holeDiameter: 19.685, diameter: 47.268 });
-	assert.equal(rounded.ok, true);
-	assert.equal(rounded.diameter, 47.3);
-	assert.equal(rounded.normalization.diameter.mode, 'round_0_1_mil');
-	viaApi.create = async (net, x, y) => {
-		const raw = viaPrimitive('wrong-via', net, x, y, 19.64, 48);
-		vias.set('wrong-via', raw);
-		return raw;
-	};
-	const wrongVia = await handlePcbConnectivityTask({ ...via, holeDiameter: 19.685, diameter: 47.244 });
-	assert.equal(wrongVia.ok, false);
-	assert.equal(wrongVia.commitUnknown, true);
-	assert.equal(wrongVia.after.holeDiameter, 19.64, 'observed dimensions are available to reconcile a real mismatch');
+	// EDA Pro 3.2.181 的实机固定样本，避免在 mock 中重算待测公式。
+	const viaSamples = [
+		[19.685, 47.244, 19.6, 47.2],
+		[15.748, 31.496, 15.8, 31.4],
+		[19.73, 31.55, 19.8, 31.6],
+		[15.7, 31.5, 15.8, 31.6],
+	];
+	for (const [hole, diameter, actualHole, actualDiameter] of viaSamples) {
+		viaApi.create = async (net, x, y, requestedHole, requestedDiameter) => {
+			assert.deepEqual([requestedHole, requestedDiameter], [hole, diameter]);
+			const raw = viaPrimitive('quantized-via', net, x, y, actualHole, actualDiameter);
+			vias.set('quantized-via', raw);
+			return raw;
+		};
+		const quantized = await toSerializableAsync(await handlePcbConnectivityTask({ ...via, holeDiameter: hole, diameter }));
+		assert.equal(quantized.ok, true);
+		assert.equal(quantized.verified, true);
+		assert.equal(quantized.commitUnknown, undefined);
+		assert.deepEqual([quantized.holeDiameter, quantized.diameter], [actualHole, actualDiameter]);
+		assert.deepEqual([quantized.after.holeDiameter, quantized.after.diameter], [actualHole, actualDiameter]);
+		assert.deepEqual(quantized.normalization, {
+			kind: 'via_dimension_quantization',
+			holeDiameter: { requested: hole, actual: actualHole, mode: 'round_0_2_mil' },
+			diameter: { requested: diameter, actual: actualDiameter, mode: 'round_0_2_mil' },
+		});
+	}
+	for (const [hole, diameter, actualHole, actualDiameter] of [
+		[19.685, 47.244, 19.7, 47.2],
+		[15.748, 31.496, 15.8, 31.5],
+		[19.73, 31.55, 19.78, 31.6],
+		[15.7, 31.5, 15.6, 31.6],
+		[15.8, 31.4, 15.9, 31.4],
+		[19.685, 47.268, 19.6, 47.3],
+	]) {
+		viaApi.create = async (net, x, y) => {
+			const raw = viaPrimitive('wrong-via', net, x, y, actualHole, actualDiameter);
+			vias.set('wrong-via', raw);
+			return raw;
+		};
+		const wrongVia = await handlePcbConnectivityTask({ ...via, holeDiameter: hole, diameter });
+		assert.equal(wrongVia.ok, false, '相邻尺寸或非格点值不能作为原生量化结果接受');
+		assert.equal(wrongVia.commitUnknown, true);
+		assert.equal(wrongVia.nativeCallSettled, true);
+		assert.deepEqual([wrongVia.after.holeDiameter, wrongVia.after.diameter], [actualHole, actualDiameter]);
+	}
 	viaApi.create = originalViaCreate;
 
 	lineCreateMode = 'undefined';

@@ -1,5 +1,5 @@
 import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
-import { pcbViaDimensionMode } from './pcb-native-normalization.ts';
+import { pcbViaDimensionMode, pcbViaDimensionNormalization } from './pcb-native-normalization.ts';
 
 type PcbConnectivityAction = 'line_create' | 'via_create';
 const COORDINATE_EPSILON = 1e-6;
@@ -248,10 +248,7 @@ async function handleViaCreate(payload: Record<string, unknown>, eda: Record<str
 			&& holeMode !== undefined && diameterMode !== undefined && after.diameter > after.holeDiameter;
 		if (!verified)
 			return { ...unknownAfterWrite('via_create', primitiveId, 'EDA via readback differs from the requested net or geometry.'), after };
-		const normalization = holeMode !== 'exact' || diameterMode !== 'exact'
-			? { normalization: { kind: 'via_dimension_quantization', holeDiameter: { requested: holeDiameter, actual: after.holeDiameter, mode: holeMode }, diameter: { requested: diameter, actual: after.diameter, mode: diameterMode } } }
-			: {};
-		return { ok: true, action: 'via_create', ...after, after, ...normalization, verified: true };
+		return { ok: true, action: 'via_create', ...after, after, ...pcbViaDimensionNormalization(after, { holeDiameter, diameter }), verified: true };
 	}
 	catch (error: unknown) {
 		return unknownAfterWrite('via_create', primitiveId, error);

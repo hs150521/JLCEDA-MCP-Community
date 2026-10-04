@@ -31,10 +31,96 @@ function projectDetail(value: unknown, budget: DetailBudget, depth = 0, parents 
 		const entries = Object.entries(value);
 		if (entries.length > 40)
 			budget.truncated = true;
-		result = Object.fromEntries(entries.slice(0, 40).map(([key, child]) => [key, projectDetail(child, budget, depth + 1, parents)]));
+		result = Object.fromEntries(entries.slice(0, 40).map(([key, child]) => {
+			if (key === 'parentId' && isPlainObjectRecord(child)) {
+				// 原生 DRC 可能回指分类对象；保留分类信息，不沿 list 再次展开整棵树。
+				const { list: _list, parentId: _parentId, ...reference } = child;
+				if ('list' in child || 'parentId' in child)
+					budget.truncated = true;
+				return [key, projectDetail(reference, budget, depth + 1, parents)];
+			}
+			return [key, projectDetail(child, budget, depth + 1, parents)];
+		}));
 	}
 	parents.delete(value);
 	return result;
+}
+
+interface DrcDetailTree {
+	value: unknown;
+	children?: DrcDetailTree[];
+	detailCount: number;
+	nativeTruncated: boolean;
+	serializationTruncated: boolean;
+}
+
+function collectDetailTree(value: unknown, parents = new Set<object>(), depth = 0): DrcDetailTree {
+	if (!isPlainObjectRecord(value) || !Array.isArray(value.list)) {
+		return {
+			value,
+			detailCount: 1,
+			nativeTruncated: isPlainObjectRecord(value) && typeof value.count === 'number' && value.count > 1,
+			serializationTruncated: false,
+		};
+	}
+	if (parents.has(value) || depth > 6)
+		return { value, children: [], detailCount: 0, nativeTruncated: false, serializationTruncated: true };
+	parents.add(value);
+	const children = value.list.map(child => collectDetailTree(child, parents, depth + 1));
+	parents.delete(value);
+	const detailCount = children.reduce((total, child) => total + child.detailCount, 0);
+	const serializationTruncated = children.some(child => child.serializationTruncated);
+	return {
+		value,
+		children,
+		detailCount,
+		nativeTruncated: children.some(child => child.nativeTruncated)
+			|| (!serializationTruncated && typeof value.count === 'number' && value.count > detailCount),
+		serializationTruncated,
+	};
+}
+
+interface DetailPage {
+	skip: number;
+	remaining: number;
+	returned: number;
+	stopped: boolean;
+}
+
+function projectDetailPage(tree: DrcDetailTree, page: DetailPage, budget: DetailBudget): unknown {
+	if (page.skip >= tree.detailCount) {
+		page.skip -= tree.detailCount;
+		return undefined;
+	}
+	if (page.remaining === 0 || page.stopped)
+		return undefined;
+	if (!tree.children) {
+		// 深度从错误明细重新计算，分类层级不占用 errData.line 等几何数据的额度。
+		const projected = projectDetail(tree.value, budget);
+		if (budget.remaining < 0 && page.returned > 0) {
+			page.stopped = true;
+			return undefined;
+		}
+		page.returned += 1;
+		page.remaining -= 1;
+		if (budget.remaining < 0)
+			page.stopped = true;
+		return projected;
+	}
+	const { list: _list, ...metadata } = tree.value as Record<string, unknown>;
+	const projectedMetadata = projectDetail(metadata, budget);
+	const before = page.returned;
+	const list: unknown[] = [];
+	for (const child of tree.children) {
+		const projected = projectDetailPage(child, page, budget);
+		if (projected !== undefined)
+			list.push(projected);
+		if (page.remaining === 0 || page.stopped)
+			break;
+	}
+	if (list.length === 0)
+		return undefined;
+	return { ...(isPlainObjectRecord(projectedMetadata) ? projectedMetadata : {}), list, returned: page.returned - before };
 }
 
 interface PcbDrcApi {
@@ -83,54 +169,20 @@ export async function handlePcbDrcCheckTask(payload: unknown): Promise<unknown> 
 		return total + 1;
 	}, 0);
 
-	const budget: DetailBudget = { remaining: 5000, truncated: false };
-	const categories = rawErrors.map((category) => {
-		const list = isPlainObjectRecord(category) && Array.isArray(category.list) ? category.list : undefined;
-		return { category, list, items: list ?? [category] };
-	});
-	const availableDetails = categories.reduce((total, { items }) => total + items.length, 0);
-	const nativeTruncated = categories.some(({ category, items }) => isPlainObjectRecord(category)
-		&& typeof category.count === 'number' && category.count > items.length);
-	let visitedDetails = 0;
-	let returnedDetails = 0;
-	let detailLimitReached = false;
+	const categories = rawErrors.map(category => collectDetailTree(category));
+	const budget: DetailBudget = { remaining: 5000, truncated: categories.some(category => category.serializationTruncated) };
+	const availableDetails = categories.reduce((total, category) => total + category.detailCount, 0);
+	const nativeTruncated = categories.some(category => category.nativeTruncated);
+	const page: DetailPage = { skip: offset, remaining: limit, returned: 0, stopped: false };
 	const errors: unknown[] = [];
-	for (const { category, list, items } of categories) {
-		const start = Math.max(0, offset - visitedDetails);
-		const selected = items.slice(start, start + Math.max(0, limit - returnedDetails));
-		visitedDetails += items.length;
-		if (selected.length === 0)
-			continue;
-		if (budget.remaining <= 0) {
-			budget.truncated = true;
-			break;
-		}
-		let metadata: Record<string, unknown> | undefined;
-		if (list && isPlainObjectRecord(category)) {
-			const { list: _list, ...nativeMetadata } = category;
-			const projected = projectDetail(nativeMetadata, budget);
-			metadata = isPlainObjectRecord(projected) ? projected : { detail: projected };
-		}
-		const projectedItems: unknown[] = [];
-		for (const item of selected) {
-			const projected = projectDetail(item, budget);
-			if (budget.remaining < 0 && returnedDetails > 0) {
-				// 当前细节尚未完整发送，下页从该条重新投影，不跳过占位项。
-				detailLimitReached = true;
-				break;
-			}
-			projectedItems.push(projected);
-			returnedDetails += 1;
-			if (budget.remaining < 0) {
-				detailLimitReached = true;
-				break;
-			}
-		}
-		if (projectedItems.length > 0)
-			errors.push(list ? { ...metadata, list: projectedItems, returned: projectedItems.length } : projectedItems[0]);
-		if (detailLimitReached)
+	for (const category of categories) {
+		const projected = projectDetailPage(category, page, budget);
+		if (projected !== undefined)
+			errors.push(projected);
+		if (page.remaining === 0 || page.stopped)
 			break;
 	}
+	const returnedDetails = page.returned;
 	const nextOffset = offset + returnedDetails < availableDetails ? offset + returnedDetails : undefined;
 	return preserveBoundedJson({
 		ok: Array.isArray(rawResult) ? rawErrors.length === 0 : rawResult === true,

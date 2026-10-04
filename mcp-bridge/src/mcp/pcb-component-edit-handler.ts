@@ -267,9 +267,39 @@ function rotationNormalization(state: ComponentState, requested: Record<string, 
 		: {};
 }
 
+function sourceReference(state: ComponentState, source: Source): LibraryReference | null {
+	return source.kind === 'device' ? state.component : state.footprint;
+}
+
+function sameReference(actual: LibraryReference | null, wanted: LibraryReference | null): boolean {
+	return actual !== null && wanted !== null && actual.libraryUuid === wanted.libraryUuid && actual.uuid === wanted.uuid;
+}
+
 function matchesSource(state: ComponentState, source: Source): boolean {
-	const reference = source.kind === 'device' ? state.component : state.footprint;
-	return reference?.libraryUuid === source.libraryUuid && reference.uuid === source.uuid;
+	return sameReference(sourceReference(state, source), source);
+}
+
+function createdSourceReference(created: unknown, source: Source): LibraryReference | null {
+	const method = source.kind === 'device' ? 'getState_Component' : 'getState_Footprint';
+	const getter = (created as Record<string, unknown> | null)?.[method];
+	return typeof getter === 'function' ? readReference(getter.call(created)) : null;
+}
+
+function creationNormalization(state: ComponentState, source: Source, property: Record<string, unknown>): Record<string, unknown> {
+	const result = rotationNormalization(state, property);
+	if (matchesSource(state, source))
+		return result;
+	return {
+		normalization: {
+			...(result.normalization as Record<string, unknown> | undefined),
+			source: {
+				kind: source.kind,
+				requested: { libraryUuid: source.libraryUuid, uuid: source.uuid },
+				actual: { ...sourceReference(state, source)! },
+				mode: 'native_create_reference',
+			},
+		},
+	};
 }
 
 function unknownNativeWrite(action: Exclude<Action, 'read'>, error: unknown, context: Record<string, unknown>): Record<string, unknown> {
@@ -341,9 +371,12 @@ export async function handlePcbComponentEditTask(payload: unknown): Promise<unkn
 		catch (error: unknown) {
 			return unknownNativeWrite(action, error, context);
 		}
+		let after: ComponentState | undefined;
+		let createdId: string | undefined;
 		try {
 			await assertSamePage(runtime, pageUuid);
-			let createdId = created == null ? undefined : requiredId(readState(created, 'getState_PrimitiveId'), 'EDA created PCB component primitiveId');
+			createdId = created == null ? undefined : requiredId(readState(created, 'getState_PrimitiveId'), 'EDA created PCB component primitiveId');
+			const returnedSource = createdSourceReference(created, source!);
 			if (!createdId) {
 				const afterIds = await readAllIds(api);
 				const delta = afterIds.filter(id => !ids.includes(id));
@@ -356,14 +389,16 @@ export async function handlePcbComponentEditTask(payload: unknown): Promise<unkn
 			const observed = await api.get(createdId);
 			if (observed === undefined || observed === null)
 				throw new Error('EDA created PCB component was not readable.');
-			const after = readComponent(observed);
+			after = readComponent(observed);
 			await assertSamePage(runtime, pageUuid);
-			if (after.primitiveId !== createdId || !matchesSource(after, source!) || !matchesRequested(after, createProperty!))
+			// 原生 create 可将器件/封装复制进工程库；以创建返回的引用和同 ID 回读确认实际来源。
+			const sourceVerified = matchesSource(after, source!) || sameReference(sourceReference(after, source!), returnedSource);
+			if (after.primitiveId !== createdId || !sourceVerified || !matchesRequested(after, createProperty!))
 				throw new Error('EDA created PCB component differs from the requested source or placement.');
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: createdId, verified: true, after, ...rotationNormalization(after, createProperty!) };
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: createdId, verified: true, after, ...creationNormalization(after, source!, createProperty!) };
 		}
 		catch (error: unknown) {
-			return unknownAfterWrite(action, error, context);
+			return unknownAfterWrite(action, error, { ...context, ...(createdId ? { primitiveId: createdId } : {}), ...(after ? { after } : {}) });
 		}
 	}
 	if (!ids.includes(primitiveId!))

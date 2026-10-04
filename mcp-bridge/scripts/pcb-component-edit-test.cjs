@@ -247,6 +247,60 @@ async function main() {
 	assert.equal(normalizedCreate.ok, true);
 	assert.equal(normalizedCreate.after.rotation, 270);
 	assert.equal(normalizedCreate.normalization.rotation.mode, 'modulo_360');
+	const copyCreate = async (...args) => {
+		const result = await originalCreate(...args);
+		const state = parts.get(result.getState_PrimitiveId());
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+		const field = args[0].libraryType === '4' ? 'footprint' : 'component';
+		state[field] = { libraryUuid: 'project-library', uuid: `project-${field}-${state.primitiveId}`, name: 'Native project copy' };
+		return primitive({ ...state, [field]: { ...state[field] } });
+	};
+	api.create = copyCreate;
+	for (const kind of ['device', 'footprint']) {
+		const source = { kind, libraryUuid: kind === 'device' ? 'devices' : 'footprints', uuid: `source-${kind}` };
+		const copied = JSON.parse(JSON.stringify(await toSerializableAsync(await handlePcbComponentEditTask({ action: 'create', source, layer: 1, x: 300, y: 300, rotation: -90 }))));
+		assert.equal(copied.ok, true, `${kind} native creation imports its reference into the project library`);
+		assert.equal(copied.verified, true);
+		assert.equal(copied.commitUnknown, undefined);
+		assert.equal(copied.after.primitiveId, copied.primitiveId);
+		assert.equal(copied.after.x, 300);
+		assert.equal(copied.after.rotation, 270);
+		assert.equal(copied.normalization.rotation.mode, 'modulo_360');
+		assert.equal(copied.normalization.source.mode, 'native_create_reference');
+		assert.equal(copied.normalization.source.kind, kind);
+		assert.deepEqual(copied.normalization.source.requested, { libraryUuid: source.libraryUuid, uuid: source.uuid });
+		assert.deepEqual(copied.normalization.source.actual, copied.after[kind === 'device' ? 'component' : 'footprint']);
+	}
+	api.create = async (...args) => {
+		await copyCreate(...args);
+		return undefined;
+	};
+	const copyWithoutReturn = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-without-native-result' }, layer: 1, x: 301, y: 301 });
+	assert.equal(copyWithoutReturn.ok, false, 'different source without native create evidence stays unverified');
+	assert.equal(copyWithoutReturn.commitUnknown, true);
+	api.create = async (...args) => {
+		const result = await copyCreate(...args);
+		const snapshot = { ...parts.get(result.getState_PrimitiveId()), component: { libraryUuid: 'project-library', uuid: 'different-native-return' } };
+		return primitive(snapshot);
+	};
+	const sourceDisagreement = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-disagreement' }, layer: 1, x: 302, y: 302 });
+	assert.equal(sourceDisagreement.ok, false, 'readback reference must agree with the native creation return');
+	assert.equal(sourceDisagreement.commitUnknown, true);
+	api.create = async (...args) => {
+		const result = await copyCreate(...args);
+		parts.get(result.getState_PrimitiveId()).x += 10;
+		return result;
+	};
+	const wrongCopyPlacement = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-wrong-placement' }, layer: 1, x: 303, y: 303 });
+	assert.equal(wrongCopyPlacement.ok, false, 'native reference normalization must not bypass placement verification');
+	assert.equal(wrongCopyPlacement.commitUnknown, true);
+	assert.equal(wrongCopyPlacement.after.x, 313);
+	api.create = copyCreate;
+	api.get = async id => primitive({ ...parts.get(id), primitiveId: 'wrong-readback-id' });
+	const wrongCopyId = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'source-wrong-id' }, layer: 1, x: 304, y: 304 });
+	assert.equal(wrongCopyId.ok, false, 'native reference normalization must retain exact primitive identity');
+	assert.equal(wrongCopyId.commitUnknown, true);
+	api.get = originalGet;
 	api.create = originalCreate;
 	api.create = async () => {
 		throw new Error('WebSocket connection closed');

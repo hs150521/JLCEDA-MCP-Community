@@ -362,6 +362,31 @@ async function main() {
 	assert.deepEqual([switched.commitUnknown, switched.nativeCallSettled], [true, true]);
 	pageUuid = 'pcb-1';
 	pourApi.create = nativeCreate;
+	const normalizedSource = [50.123456, 50.123456, 'L', 950.123456, 50.123456, 950.123456, 950.123456, 50.123456, 950.123456, 50.123456, 50.123456];
+	const reversedSource = [50.1235, 50.1235, 'L', 50.1235, 950.1235, 950.1235, 950.1235, 950.1235, 50.1235, 50.1235, 50.1235];
+	pourApi.create = async (...args) => {
+		const result = await nativeCreate(...args);
+		pours.get(result.getState_PrimitiveId()).polygonSource = reversedSource;
+		return result;
+	};
+	const normalizedCreate = await handlePcbPourManageTask({ action: 'create', net: 'GND', layer: 1, polygonSource: normalizedSource });
+	assert.deepEqual([normalizedCreate.ok, normalizedCreate.verified, normalizedCreate.normalization.reversed, normalizedCreate.normalization.precisionAdjusted], [true, true, true, true]);
+	assert.deepEqual(normalizedCreate.pour.polygonSource, reversedSource);
+	pourApi.modify = async (id, patch) => {
+		const result = await nativeModify(id, patch);
+		pours.get(id).polygonSource = reversedSource;
+		return result;
+	};
+	const normalizedModify = await handlePcbPourManageTask({ action: 'modify', primitiveId: normalizedCreate.primitiveId, property: { polygonSource: normalizedSource } });
+	assert.equal(normalizedModify.verified, true);
+	const genuinelyDifferent = [50, 50, 'L', 900, 50, 900, 950, 50, 950, 50, 50];
+	const differentModify = await handlePcbPourManageTask({ action: 'modify', primitiveId: normalizedCreate.primitiveId, property: { polygonSource: genuinelyDifferent } });
+	assert.equal(differentModify.ok, false, 'different geometry must still report the actual mismatch');
+	const serializedMismatch = JSON.parse(JSON.stringify(await toSerializableAsync(differentModify)));
+	assert.deepEqual(serializedMismatch.requestedMismatches[0].actual, reversedSource, 'actual geometry must not become Circular');
+	assert.deepEqual(serializedMismatch.requestedMismatches[0].expected, genuinelyDifferent);
+	pourApi.create = nativeCreate;
+	pourApi.modify = nativeModify;
 	console.log('PCB pour management tests passed');
 }
 

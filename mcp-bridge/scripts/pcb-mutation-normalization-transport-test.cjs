@@ -74,8 +74,10 @@ async function main() {
 	};
 	let componentWrites = 0;
 	let viaDeletes = 0;
+	let viaModifies = 0;
 	const vias = new Map([
 		['via-1', { primitiveId: 'via-1', net: 'GND', x: 20, y: 0, holeDiameter: 19.6, diameter: 47.2, viaType: 0, primitiveLock: false }],
+		['sample-via', { primitiveId: 'sample-via', net: 'GND', x: 20, y: 0, holeDiameter: 15.8, diameter: 31.4, viaType: 0, primitiveLock: false }],
 		['child-via', { primitiveId: 'child-via', net: 'GND', x: 30, y: 0, holeDiameter: 10, diameter: 20, viaType: 0, primitiveLock: false }],
 	]);
 	globalThis.eda = {
@@ -106,7 +108,12 @@ async function main() {
 			},
 		},
 		pcb_PrimitiveVia: {
-			async create() { return primitive({ primitiveId: 'via-1' }); },
+			async create(_net, _x, _y, hole) { return primitive({ primitiveId: hole === 15.748 ? 'sample-via' : 'via-1' }); },
+			async modify(id, property) {
+				viaModifies += 1;
+				Object.assign(vias.get(id), property, { holeDiameter: 15.8, diameter: 31.6 });
+				return primitive(vias.get(id));
+			},
 			async get(id) { return vias.has(id) ? primitive(vias.get(id)) : undefined; },
 			async getAll() { return [...vias.values()].map(primitive); },
 			async delete(id) {
@@ -146,7 +153,24 @@ async function main() {
 		assert.equal(via.error, undefined, 'normalized lines must not block the next write');
 		assert.equal(via.result.ok, true);
 		assert.equal(via.result.normalization.holeDiameter.actual, 19.6);
+		const sampleVia = await submit('sample-via-create', connectivityPath, { action: 'via_create', net: 'GND', x: 20, y: 0, holeDiameter: 15.748, diameter: 31.496 });
+		assert.equal(sampleVia.error, undefined);
+		assert.equal(sampleVia.result.ok, true);
+		assert.deepEqual([sampleVia.result.after.holeDiameter, sampleVia.result.after.diameter], [15.8, 31.4]);
+		assert.equal(sampleVia.result.normalization.holeDiameter.mode, 'round_0_2_mil');
 		const routingPath = '/bridge/jlceda/pcb/routing-edit';
+		const modifiedVia = await submit('sample-via-modify', routingPath, { action: 'modify', kind: 'via', primitiveId: 'sample-via', property: { holeDiameter: 15.7, diameter: 31.5 } });
+		assert.equal(modifiedVia.error, undefined, '原生格点归一化创建不得隔离后续修改');
+		assert.equal(modifiedVia.result.ok, true);
+		assert.equal(modifiedVia.result.verified, true);
+		assert.deepEqual([modifiedVia.result.primitive.holeDiameter, modifiedVia.result.primitive.diameter], [15.8, 31.6]);
+		assert.deepEqual(modifiedVia.result.normalization, {
+			kind: 'via_dimension_quantization',
+			holeDiameter: { requested: 15.7, actual: 15.8, mode: 'round_0_2_mil' },
+			diameter: { requested: 31.5, actual: 31.6, mode: 'round_0_2_mil' },
+		});
+		assert.equal(viaModifies, 1);
+
 		const child = await submit('child-via', routingPath, { action: 'delete', kind: 'via', primitiveId: 'child-via' });
 		assert.equal(child.error, undefined);
 		assert.equal(child.result.reason, 'footprint_owned_via');

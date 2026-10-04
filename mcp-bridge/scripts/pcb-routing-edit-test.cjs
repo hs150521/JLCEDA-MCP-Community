@@ -154,29 +154,68 @@ async function main() {
 	assert.equal(states.arc.get('arc-1').interactiveMode, 2);
 	assert.deepEqual(states.polyline.get('polyline-1').polygonSource, [0, 0, 'L', 50, 50]);
 
-	states.via.set('quantized-via', makeState('via', 'quantized-via', { holeDiameter: 15.6, diameter: 31.5 }));
+	states.via.set('quantized-via', makeState('via', 'quantized-via', { holeDiameter: 15.6, diameter: 47.2 }));
 	const originalViaModify = globalThis.eda.pcb_PrimitiveVia.modify;
+	let observedViaDimensions;
 	globalThis.eda.pcb_PrimitiveVia.modify = async (id, patch) => {
 		await originalViaModify(id, patch);
-		if (patch.holeDiameter === 15.748 || patch.holeDiameter === 15.7)
-			states.via.get(id).holeDiameter = 15.8;
+		Object.assign(states.via.get(id), observedViaDimensions);
 		return primitive(states.via.get(id));
 	};
-	for (const requestedHole of [15.748, 15.7]) {
+	// 创建与修改使用相同的 EDA Pro 3.2.181 实测格点，不重试已结束的原生写入。
+	for (const [hole, diameter, actualHole, actualDiameter] of [
+		[19.685, 47.244, 19.6, 47.2],
+		[15.748, 31.496, 15.8, 31.4],
+		[19.73, 31.55, 19.8, 31.6],
+		[15.7, 31.5, 15.8, 31.6],
+	]) {
+		observedViaDimensions = { holeDiameter: actualHole, diameter: actualDiameter };
 		const writesBefore = nativeWriteCount;
-		const mismatch = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: requestedHole } }));
-		assert.equal(mismatch.ok, false, 'unexplained native modify dimensions remain a failure');
+		const quantized = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: hole, diameter } }));
+		assert.equal(quantized.ok, true);
+		assert.equal(quantized.verified, true);
+		assert.equal(quantized.commitUnknown, undefined);
+		assert.deepEqual([quantized.primitive.holeDiameter, quantized.primitive.diameter], [actualHole, actualDiameter]);
+		assert.deepEqual(quantized.normalization, {
+			kind: 'via_dimension_quantization',
+			holeDiameter: { requested: hole, actual: actualHole, mode: 'round_0_2_mil' },
+			diameter: { requested: diameter, actual: actualDiameter, mode: 'round_0_2_mil' },
+		});
+		assert.equal(nativeWriteCount, writesBefore + 1);
+	}
+	observedViaDimensions = { holeDiameter: 15.8 };
+	const holeOnly = await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: 15.7 } });
+	assert.equal(holeOnly.ok, true);
+	assert.equal(holeOnly.primitive.holeDiameter, 15.8);
+	assert.deepEqual(holeOnly.normalization, { kind: 'via_dimension_quantization', holeDiameter: { requested: 15.7, actual: 15.8, mode: 'round_0_2_mil' } });
+	for (const [hole, diameter, actualHole, actualDiameter, field] of [
+		[19.685, 47.244, 19.7, 47.2, 'holeDiameter'],
+		[15.748, 31.496, 15.8, 31.5, 'diameter'],
+		[19.73, 31.55, 19.78, 31.6, 'holeDiameter'],
+		[15.7, 31.5, 15.6, 31.6, 'holeDiameter'],
+		[19.685, 47.268, 19.6, 47.3, 'diameter'],
+	]) {
+		observedViaDimensions = { holeDiameter: actualHole, diameter: actualDiameter };
+		const writesBefore = nativeWriteCount;
+		const mismatch = await toSerializableAsync(await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: hole, diameter } }));
+		assert.equal(mismatch.ok, false, '错误的相邻格点或非格点值仍需回读恢复');
 		assert.equal(mismatch.reason, 'post_write_readback_failed');
 		assert.equal(mismatch.commitUnknown, true);
 		assert.equal(mismatch.nativeCallSettled, true);
-		assert.equal(mismatch.after.holeDiameter, 15.8, 'return the actual native dimension after modification');
-		assert.deepEqual(mismatch.requested, { holeDiameter: requestedHole });
-		assert.deepEqual(mismatch.mismatches, [{ field: 'holeDiameter', requested: requestedHole, actual: 15.8 }]);
+		assert.deepEqual([mismatch.after.holeDiameter, mismatch.after.diameter], [actualHole, actualDiameter]);
+		assert.deepEqual(mismatch.requested, { holeDiameter: hole, diameter });
+		assert.deepEqual(mismatch.mismatches.map(item => item.field), [field]);
 		assert.equal(nativeWriteCount, writesBefore + 1, 'the handler must not retry a settled native modification');
 	}
+	observedViaDimensions = { holeDiameter: 15.8, diameter: 31.6, x: 149.9 };
+	const positionMismatch = await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: 15.7, diameter: 31.5, x: 150 } });
+	assert.equal(positionMismatch.ok, false, '尺寸量化不得放宽坐标校验');
+	assert.deepEqual(positionMismatch.mismatches, [{ field: 'x', requested: 150, actual: 149.9 }]);
+	observedViaDimensions = { holeDiameter: 15.6 };
 	const unchangedHole = await handlePcbRoutingEditTask({ action: 'modify', kind: 'via', primitiveId: 'quantized-via', property: { holeDiameter: 15.6 } });
 	assert.equal(unchangedHole.ok, true);
 	assert.equal(unchangedHole.primitive.holeDiameter, 15.6);
+	assert.equal(unchangedHole.normalization, undefined);
 	globalThis.eda.pcb_PrimitiveVia.modify = originalViaModify;
 	states.via.delete('quantized-via');
 	states.via.set('child-via', makeState('via', 'child-via', { parentComponentPrimitiveId: 'component-1' }));

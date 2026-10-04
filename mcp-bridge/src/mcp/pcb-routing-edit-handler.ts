@@ -1,4 +1,5 @@
 import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { pcbViaDimensionMode, pcbViaDimensionNormalization } from './pcb-native-normalization.ts';
 
 type Action = 'read' | 'create' | 'modify' | 'delete';
 type Kind = 'line' | 'arc' | 'polyline' | 'via';
@@ -293,6 +294,8 @@ function createPolygon(runtime: Record<string, unknown>, source: PolygonSource):
 function matchesRequested(actual: Primitive, requested: Record<string, unknown>): boolean {
 	return Object.entries(requested).every(([field, wanted]) => {
 		const observed = actual[field];
+		if ((field === 'holeDiameter' || field === 'diameter') && typeof wanted === 'number')
+			return pcbViaDimensionMode(observed, wanted) !== undefined;
 		if (field === 'polygonSource') {
 			const source = observed as PolygonSource;
 			return Array.isArray(source) && source.length === (wanted as PolygonSource).length
@@ -477,7 +480,7 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 				...(mismatches ? { mismatches, mismatchCount: mismatches.length } : {}),
 			});
 		}
-		return { ok: true, action, scope: SCOPE, pageUuid, kind: writableKind, primitiveId, primitive: observed, verified: true };
+		return { ok: true, action, scope: SCOPE, pageUuid, kind: writableKind, primitiveId, primitive: observed, ...(writableKind === 'via' ? pcbViaDimensionNormalization(observed, requested!) : {}), verified: true };
 	}
 	catch (error: unknown) {
 		return unknownAfterWrite(action, error, context);

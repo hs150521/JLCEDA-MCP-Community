@@ -1,4 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { comparePcbPolygonSource } from './pcb-polygon-equivalence.ts';
 
 type Action = 'read' | 'create' | 'modify' | 'delete' | 'rebuild';
 type PolygonSource = Array<'L' | 'ARC' | 'CARC' | 'C' | 'R' | 'CIRCLE' | number>;
@@ -259,20 +260,25 @@ function createPolygon(runtime: Record<string, unknown>, source: PolygonSource):
 	return polygon;
 }
 
-function matchingSource(actual: PolygonSource, expected: PolygonSource): boolean {
-	return actual.length === expected.length && actual.every((item, index) => {
-		const wanted = expected[index];
-		return typeof item === 'number' && typeof wanted === 'number'
-			? Math.abs(item - wanted) <= 1e-6
-			: item === wanted;
-	});
+function polygonNormalization(state: PourState, requested: Record<string, unknown>): Record<string, unknown> {
+	if (requested.polygonSource === undefined)
+		return {};
+	const comparison = comparePcbPolygonSource(state.polygonSource, requested.polygonSource);
+	if (!comparison.equivalent || !comparison.normalized)
+		return {};
+	const { equivalent: _equivalent, normalized: _normalized, ...diagnostic } = comparison;
+	return { normalization: { field: 'polygonSource', ...diagnostic } };
+}
+
+function diagnosticValue(value: unknown): unknown {
+	return Array.isArray(value) ? preserveBoundedArray([...value]) : value;
 }
 
 function matchesRequested(state: PourState, requested: Record<string, unknown>): boolean {
 	return Object.entries(requested).every(([key, value]) => {
 		const actual = state[key as keyof PourState];
 		if (key === 'polygonSource')
-			return matchingSource(state.polygonSource, value as PolygonSource);
+			return comparePcbPolygonSource(state.polygonSource, value).equivalent;
 		if (typeof value === 'number' && typeof actual === 'number')
 			return Math.abs(actual - value) <= 1e-6;
 		return actual === value;
@@ -414,11 +420,11 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 			const requestedMismatches = Object.entries(requested!).filter(([field, expected]) =>
 				!matchesRequested(created, { [field]: expected })).map(([field, expected]) => ({
 				field,
-				expected,
-				actual: created[field as keyof PourState],
+				expected: diagnosticValue(expected),
+				actual: diagnosticValue(created[field as keyof PourState]),
 			}));
 			const sideEffects: Array<{ primitiveId: string; field: string; before: unknown; after: unknown }>
-				= requestedMismatches.map(item => ({ primitiveId: created.primitiveId, field: item.field, before: item.expected, after: item.actual }));
+				= requestedMismatches.map(item => ({ primitiveId: created.primitiveId, field: item.field, before: diagnosticValue(item.expected), after: diagnosticValue(item.actual) }));
 			for (const oldPour of before.pours) {
 				const newPour = after.pours.find(pour => pour.primitiveId === oldPour.primitiveId);
 				if (!newPour) {
@@ -428,7 +434,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 				for (const field of EDITABLE_FIELDS) {
 					const previous = oldPour[field as keyof PourState];
 					if (!matchesRequested(newPour, { [field]: previous }))
-						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: previous, after: newPour[field as keyof PourState] });
+						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: diagnosticValue(previous), after: diagnosticValue(newPour[field as keyof PourState]) });
 				}
 			}
 			if (requestedMismatches.length || sideEffects.length) {
@@ -447,7 +453,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 					sideEffects,
 				};
 			}
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: created.primitiveId, pour: created, verified: true };
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId: created.primitiveId, pour: created, verified: true, ...polygonNormalization(created, requested!) };
 		}
 		if (action === 'modify') {
 			const modified = after.pours.find(pour => pour.primitiveId === primitiveId);
@@ -457,8 +463,8 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 			const requestedMismatches = Object.entries(requested!).filter(([field, expected]) =>
 				!matchesRequested(modified, { [field]: expected })).map(([field, expected]) => ({
 				field,
-				expected,
-				actual: modified[field as keyof PourState],
+				expected: diagnosticValue(expected),
+				actual: diagnosticValue(modified[field as keyof PourState]),
 			}));
 			const sideEffects: Array<{ primitiveId: string; field: string; before: unknown; after: unknown }> = [];
 			for (const oldPour of before.pours) {
@@ -472,7 +478,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 						continue;
 					const previous = oldPour[field as keyof PourState];
 					if (!matchesRequested(newPour, { [field]: previous })) {
-						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: previous, after: newPour[field as keyof PourState] });
+						sideEffects.push({ primitiveId: oldPour.primitiveId, field, before: diagnosticValue(previous), after: diagnosticValue(newPour[field as keyof PourState]) });
 					}
 				}
 			}
@@ -498,7 +504,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 					sideEffects,
 				};
 			}
-			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId, pour: modified, verified: true };
+			return { ok: true, action, scope: SCOPE, pageUuid, primitiveId, pour: modified, verified: true, ...polygonNormalization(modified, requested!) };
 		}
 		if (action === 'delete') {
 			const remainingPoured = after.poured.filter(item => item.pourPrimitiveId === primitiveId);
