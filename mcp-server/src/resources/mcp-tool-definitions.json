@@ -111,7 +111,7 @@
   },
   {
     "name": "api_invoke",
-    "description": "调用指定的 EDA API 接口。原理图器件 delete 的单 ID 或 ID 数组按当前图页逐项删除、逐项回读，不跨图页匹配同名 ID；PCB autoRouting 显式指定最多 3 个 RoutingNets 且原生 RPC 超时时，返回同页网络图元与长度的暂时回读 routingObservation；仍须按提交状态未知执行受控恢复。",
+    "description": "调用指定的 EDA API 接口。原理图器件 create 会先将裸器件引用解析为完整库对象，并自动使用唯一子部件；找不到器件时返回 DEVICE_NOT_FOUND，未调用原生创建。组件引脚的 Pin.modify 使用真实 ComponentPin 实例修改 noConnected/pinNumber，并核对同器件全部引脚；组件引脚几何需在符号库中修改。器件 delete 按当前图页逐项删除、回读。原生错误保留 code/reason/field/status。PCB autoRouting 指定最多 3 个 RoutingNets 且原生 RPC 超时时，返回暂时回读 routingObservation，仍须受控恢复。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -256,7 +256,7 @@
   },
   {
     "name": "schematic_wire_manage",
-    "description": "读取当前原理图页全部导线及样式，或按图元 ID 修改、删除单条导线。修改几何前预览现有网络接触，需明确允许接触的其他导线 ID；修改网络仅限未接触其他导线或显式网络标识的单条导线。写后核对当前页，结果不明时用 schematic_read includeConnectivityPrimitives=true 完整回读。",
+    "description": "读取当前原理图页全部导线及样式，或按 ID 修改、删除单条导线。几何修改先预览网络接触，需明确允许接触的其他导线 ID；修改网络仅限未接触其他导线或网络标识的导线。点导线改为带拐角路径会在原生写入前拒绝，可用 wire_create 新建、核对后显式删除旧点导线。回读不符时返回实际路径、请求路径和变化 ID；结果不明时用 schematic_read includeConnectivityPrimitives=true 完整回读。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -500,7 +500,7 @@
   },
   {
     "name": "component_place_auto",
-    "description": "自动将器件放置到原理图的指定坐标。支持网格/线性布局；逐件核对当前图页与图元 ID，已有器件位号变化时尝试恢复，无法核对时停止剩余批次。整批默认超时 300 秒，大批量可调 timeoutMs。",
+    "description": "按指定坐标或网格/线性布局在原理图放置器件。裸器件引用先解析为完整库对象；无效 UUID 返回 DEVICE_NOT_FOUND，不调用原生创建。逐件核对当前图页与图元 ID，已有位号变化时尝试恢复，无法核对则停止剩余批次。整批默认超时 300 秒，可调 timeoutMs。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -844,7 +844,7 @@
   },
   {
     "name": "pcb_component_edit",
-    "description": "完整读取当前 PCB 页器件，或在当前页按图元 ID 修改、删除器件；也可从器件或封装库在给定坐标创建一件。写入后核对位置和属性；结果不明时先恢复并完整回读当前页器件状态，避免重复创建或误改。",
+    "description": "完整读取当前 PCB 页器件，或按 ID 修改、删除；也可从器件或封装库按坐标创建一件。写后核对位置、属性与模 360° 等价的旋转；返回实际原生角度。部分属性修改不符时返回 after 和 requested/actual/unchanged 差异，仍要求完整回读后恢复，避免重复创建或误改。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -875,7 +875,7 @@
   },
   {
     "name": "pcb_pour_manage",
-    "description": "读取当前 PCB 的全部覆铜边框和填充摘要，或创建、修改、删除覆铜边框及显式重建填充。原生 create/modify 可能自动调整优先级，请求值或未请求字段偏差会返回 applied:true、verified:false 和 before/after/sideEffects；单件重建无填充或删除后残留关联填充也会返回 verified:false。创建或修改不会自动重建。写入结果不明时先恢复并以 action=read 回读全部边框和填充摘要，避免重复操作。",
+    "description": "读取当前 PCB 全部覆铜边框和填充摘要，或创建、修改、删除边框及显式重建。批量重建 API 不可用时使用每个原生覆铜实例的 rebuildCopperRegion；全部不可用则返回 EDA_CAPABILITY_UNAVAILABLE，未写入。原生优先级调整等偏差返回 before/after/sideEffects；重建无填充或删除后残留填充返回 verified:false。创建或修改不会自动重建。未知写入先恢复并用 action=read 完整回读。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -914,7 +914,7 @@
   },
   {
     "name": "pcb_routing_edit",
-    "description": "完整读取当前 PCB 页铜层的直线、圆弧、折线和过孔，或按类型及图元 ID 读取、修改、删除；不包含板框、丝印等非铜层图形。可创建圆弧与折线；直线和过孔创建使用 pcb_connectivity_action。删除后以同类 getAll 的 ID 列表核对，原生 get(id) 删除占位对象不会误报未知提交。写入结果不明时先恢复并回读全部走线、过孔和网络。",
+    "description": "完整读取当前 PCB 铜层直线、圆弧、折线和过孔，或按类型及 ID 读取、修改、删除；可创建圆弧/折线，直线/过孔创建使用 pcb_connectivity_action。修改不符时返回 after/requested/mismatches。明确属于封装的过孔在删除前拒绝；缺父字段时 ownership=unknown。过孔删除 verified 仅指当前页内存，durableDeletionVerified=false，持久性需保存重开核对。未知写入先恢复并回读全部走线、过孔和网络。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -964,7 +964,7 @@
   },
   {
     "name": "pcb_board_outline_manage",
-    "description": "读取当前 PCB 板框层的全部直线、圆弧、折线或指定图元；也可创建、按 ID 修改和删除板框图元。新建图元固定使用板框层 11 和空网络，EDA 回读可能为 null；若原生未新增图元则返回 applied:false，若新增图元与请求不符则返回 applied:true 和实际图元。写入结果不明时先恢复并回读全部 PCB 线、圆弧、折线、过孔及网络。",
+    "description": "读取、创建、修改或删除当前 PCB 板框层图元。新建固定用层 11 和空网络，回读可为 null。闭合轮廓接受反向绕序、循环起点和原生四位小数坐标归一化，保留圆弧方向、贝塞尔控制点及实际几何。未新增返回 applied:false，实际不符返回已写入图元；未知写入须恢复并完整回读 PCB 图元和网络。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1009,7 +1009,7 @@
   },
   {
     "name": "pcb_region_manage",
-    "description": "完整读取当前 PCB 的禁止区域与约束区域，或按 ID 读取单个区域；创建、修改、删除单个区域。读取支持多轮廓；原生创建和修改接口仅接受单轮廓 polygonSource。规则编号 2/5/6/7/8/9。创建无效或与请求不符时返回已知状态；部分修改返回 before/after 和 requestedMismatches；删除按完整区域列表核对。未知提交须在同一 PCB 完整回读全部区域。",
+    "description": "完整读取或按 ID 编辑当前 PCB 禁止/约束区域。读取支持多轮廓；创建、修改仅接受单轮廓 polygonSource。闭合路径接受反向绕序、循环起点和原生四位小数坐标归一化，返回实际几何及归一化说明。规则编号 2/5/6/7/8/9；实际不符返回已知状态或 before/after/requestedMismatches。删除按完整区域列表核对，未知提交需同 PCB 完整回读。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1067,7 +1067,7 @@
         "expansion": { "type": "number", "default": 0 },
         "mirror": { "type": "boolean", "default": false },
         "primitiveLock": { "type": "boolean", "default": false },
-        "property": { "$ref": "#/$defs/stringProperty" },
+        "property": { "anyOf": [{ "$ref": "#/$defs/stringProperty" }, { "$ref": "#/$defs/attributeProperty" }] },
         "timeoutMs": { "$ref": "#/$defs/timeoutMs" }
       },
       "required": ["action"],
@@ -1094,7 +1094,7 @@
   },
   {
     "name": "pcb_drc_check",
-    "description": "Run a read-only PCB design-rule check and return structured violations. The tool requires an active PCB document; it does not modify the design and does not open the EDA DRC panel unless showUi is explicitly true.",
+    "description": "只读运行当前 PCB DRC。以 offset/limit 对原生详情全局分页，保留图元 ID、网络、位置和规则；按 nextOffset 继续读取，原生缺少详情标 nativeTruncated，序列化预算截断标 serializationTruncated。showUi=true 打开 DRC 面板。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1108,6 +1108,8 @@
           "default": false,
           "description": "Whether to show the EDA DRC panel. Defaults to false."
         },
+        "offset": { "type": "integer", "minimum": 0, "default": 0, "description": "原生可用 DRC detail entries 的全局起始索引。" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 120, "description": "每次返回的 DRC detail entries 数量。" },
         "timeoutMs": {
           "type": "integer",
           "minimum": 5000,
@@ -1120,7 +1122,7 @@
   },
   {
     "name": "pcb_connectivity_action",
-    "description": "在当前 PCB 为指定网络创建单条直线导线或过孔。默认要求网络已存在；新网络须显式设置 allowNewNet:true。先用 pcb_net_query 和 pcb_layer_query 确认网络及可用铜层，再按当前 PCB 数据单位提供坐标与尺寸；写入后回读图元和网络，必要时执行 PCB DRC。",
+    "description": "在当前 PCB 为指定网络创建直线或过孔。默认要求网络存在，新网络用 allowNewNet:true。写后接受同网、同层、同宽、严格共线且连续覆盖请求段的原生拆分/合并，返回实际 primitiveIds；过孔创建接受已知 0.1 mil 量化并返回实际尺寸和模式。真实几何偏差仍需恢复回读；几何验证不代替 PCB DRC。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1226,7 +1228,7 @@
   },
   {
     "name": "schematic_document_action",
-    "description": "Inspect schematic coordinates, selection, filters, and primitives; navigate the active canvas; or perform explicitly requested selection/save/import actions.",
+    "description": "检查原理图坐标、选择、过滤和图元，导航当前画布，执行选择、保存或导入操作。按 ID 查询将原生误报为 Text 的绑定属性通过真实 Attribute 列表识别，返回 Attribute 类型、键值和父图元关系。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1882,7 +1884,7 @@
   },
   {
     "name": "manufacture_export",
-    "description": "Generate a whitelisted PCB or schematic manufacturing artifact and return metadata, text preview, or optional Base64 data.",
+    "description": "导出 PCB 或原理图制造文件，返回元数据、文本预览或可选 Base64。仅校验选定 domain/kind 的格式；BOM 用 csv/xlsx、文档用 PDF/PNG/SVG，其他导出按对应格式参数执行。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2074,7 +2076,7 @@
   },
   {
     "name": "library_search",
-    "description": "Search or retrieve official EasyEDA device, symbol, footprint, 3D-model, reusable-module, or panel-library assets, and search simulation models. Device searches also support exact properties and official LCSC C-number mapping. SDK keyword/property searches return one page and do not expose a complete hit count.",
+    "description": "搜索或读取官方器件、符号、封装、3D 模型、复用模块、面板库及仿真模型。器件属性查询精确核对 properties.name，原生名称过滤失效时以名称关键词补查并同时核对其他请求属性；支持 LCSC C 编号映射。每次返回一页，不把该页数量当完整命中总数。",
     "inputSchema": {
       "$defs": {
         "keyword": { "type": "string", "minLength": 1 },

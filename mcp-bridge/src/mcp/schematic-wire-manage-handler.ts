@@ -133,7 +133,7 @@ function normalizedLine(value: unknown): number[] {
 		else
 			line[index + 3] = line[index + 1];
 	}
-	return line;
+	return preserveBoundedArray(line);
 }
 
 function flatPaths(value: unknown): number[][] {
@@ -265,8 +265,8 @@ function unknownNativeWrite(action: 'modify' | 'delete', primitiveId: string, be
 	return { ok: false, action, scope: SCOPE, primitiveId, before, reason: 'native_call_result_unknown', error: message, commitUnknown: true, readbackRequired: true, nativeCallSettled: false };
 }
 
-function unknownAfterWrite(action: 'modify' | 'delete', primitiveId: string, before: WireState, error: unknown): Record<string, unknown> {
-	return { ok: false, action, scope: SCOPE, primitiveId, before, reason: 'post_write_readback_failed', error: toSafeErrorMessage(error), commitUnknown: true, readbackRequired: true, nativeCallSettled: true };
+function unknownAfterWrite(action: 'modify' | 'delete', primitiveId: string, before: WireState, error: unknown, details: Record<string, unknown> = {}): Record<string, unknown> {
+	return { ok: false, action, scope: SCOPE, primitiveId, before, ...details, reason: 'post_write_readback_failed', error: toSafeErrorMessage(error), commitUnknown: true, readbackRequired: true, nativeCallSettled: true };
 }
 
 export async function handleSchematicWireManageTask(payload: unknown): Promise<unknown> {
@@ -297,6 +297,23 @@ export async function handleSchematicWireManageTask(payload: unknown): Promise<u
 	const before = wires.find(wire => wire.primitiveId === primitiveId);
 	if (!before)
 		return { ok: false, action, scope: SCOPE, pageUuid: snapshot.pageUuid, primitiveId, reason: 'wire_not_found' };
+	if (action === 'modify' && property!.line !== undefined && segments(before.line).length === 0
+		&& segments(normalizedLine(property!.line)).length > 1) {
+		return {
+			ok: false,
+			action,
+			scope: SCOPE,
+			pageUuid: snapshot.pageUuid,
+			primitiveId,
+			reason: 'point_wire_path_conversion_unsupported',
+			before,
+			requested: { ...property!, line: preserveBoundedArray(normalizedLine(property!.line)) },
+			applied: false,
+			verified: false,
+			nativeCallAttempted: false,
+			guidance: 'EDA 原生接口可能把点导线转换为闭合三角形。请用 schematic_connectivity_action wire_create 新建目标路径，核对几何与连接后，再显式删除不再需要的点导线。',
+		};
+	}
 	const approvedOtherWireIds = new Set<string>();
 	if (action === 'modify' && (property!.line !== undefined || property!.net !== undefined)) {
 		const lines = property!.line === undefined ? flatPaths(before.line) : [normalizedLine(property!.line)];
@@ -346,8 +363,7 @@ export async function handleSchematicWireManageTask(payload: unknown): Promise<u
 			const afterWires = await readCurrentWires(api, afterSnapshot);
 			const after = afterWires.find(wire => wire.primitiveId === primitiveId);
 			await assertSamePage(runtime, snapshot.pageUuid);
-			if (!after || !requestedValuesMatch(after, update))
-				throw new Error('EDA wire state differs from the requested modification.');
+
 			const beforeById = new Map(wires.map(wire => [wire.primitiveId, wireStateKey(wire)]));
 			const afterIds = new Set(afterWires.map(wire => wire.primitiveId));
 			const changedOtherWireIds = afterWires.filter(wire => wire.primitiveId !== primitiveId
@@ -355,6 +371,23 @@ export async function handleSchematicWireManageTask(payload: unknown): Promise<u
 			const removedOtherWireIds = wires.filter(wire => wire.primitiveId !== primitiveId && !afterIds.has(wire.primitiveId)).map(wire => wire.primitiveId);
 			const addedWireIds = afterWires.filter(wire => !beforeById.has(wire.primitiveId)).map(wire => wire.primitiveId);
 			const unexpectedOtherWireIds = [...changedOtherWireIds, ...removedOtherWireIds].filter(id => !approvedOtherWireIds.has(id));
+			if (!after || !requestedValuesMatch(after, update)) {
+				const changedWireIds = preserveBoundedArray([
+					...afterWires.filter(wire => beforeById.has(wire.primitiveId) && beforeById.get(wire.primitiveId) !== wireStateKey(wire)).map(wire => wire.primitiveId),
+					...wires.filter(wire => !afterIds.has(wire.primitiveId)).map(wire => wire.primitiveId),
+					...addedWireIds,
+				]);
+				return unknownAfterWrite(action, primitiveId!, before, new Error('EDA wire state differs from the requested modification.'), {
+					pageUuid: snapshot.pageUuid,
+					after: after ?? null,
+					requested: update,
+					changedWireIds,
+					changedOtherWireIds: preserveBoundedArray(changedOtherWireIds),
+					removedOtherWireIds: preserveBoundedArray(removedOtherWireIds),
+					addedWireIds: preserveBoundedArray(addedWireIds),
+					unexpectedOtherWireIds: preserveBoundedArray(unexpectedOtherWireIds),
+				});
+			}
 			if (unexpectedOtherWireIds.length > 0 || addedWireIds.length > 0) {
 				return { ok: false, action, scope: SCOPE, pageUuid: snapshot.pageUuid, primitiveId, before, after, reason: 'unexpected_wire_changes', changedOtherWireIds, removedOtherWireIds, addedWireIds, unexpectedOtherWireIds, commitUnknown: true, readbackRequired: true, nativeCallSettled: true };
 			}

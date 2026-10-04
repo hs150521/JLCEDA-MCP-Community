@@ -57,6 +57,19 @@ function normalizeProperties(kind: LibrarySearchKind, raw: unknown): Record<stri
 	return properties;
 }
 
+// EDA 3.x 可能忽略 name 属性筛选；名称必须由返回记录精确确认。
+function matchesDeviceProperties(item: unknown, properties: Record<string, string>): boolean {
+	if (!isPlainObjectRecord(item))
+		return false;
+	const property = isPlainObjectRecord(item.property) ? item.property : {};
+	const otherProperty = isPlainObjectRecord(item.otherProperty) ? item.otherProperty : isPlainObjectRecord(property.otherProperty) ? property.otherProperty : {};
+	return Object.entries(properties).every(([key, expected]) => {
+		const association = key === 'symbolName' ? item.symbol : key === 'footprintName' ? item.footprint : undefined;
+		const actual = item[key] ?? property[key] ?? otherProperty[key] ?? (isPlainObjectRecord(association) ? association.name : undefined);
+		return actual !== undefined && actual !== null && String(actual).trim() === expected;
+	});
+}
+
 function normalizeLcscIds(raw: unknown): string[] | undefined {
 	if (raw === undefined || raw === null)
 		return undefined;
@@ -147,7 +160,27 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 				? await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, undefined, limit, page)
 				: await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, keyword, libraryUuid, undefined, limit, page);
 	}
-	const allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
+	let allRawItems = Array.isArray(rawResults) ? rawResults : rawResults === undefined || rawResults === null ? [] : [rawResults];
+	let searchImplementation: string | undefined;
+	let excludedNameMismatches = 0;
+	if (properties?.name) {
+		const exactNames = allRawItems.filter(item => matchesDeviceProperties(item, { name: properties.name }));
+		excludedNameMismatches = allRawItems.length - exactNames.length;
+		if (exactNames.length === 0 && typeof api.search === 'function') {
+			// 关键词搜索在同一版本中可找到被属性搜索漏掉的器件。
+			rawResults = await (api.search as (...args: unknown[]) => Promise<unknown>).call(api, properties.name, libraryUuid, undefined, undefined, limit, page);
+			allRawItems = Array.isArray(rawResults) ? rawResults : rawResults == null ? [] : [rawResults];
+			searchImplementation = 'keyword_name_fallback';
+		}
+		else {
+			searchImplementation = 'native_properties';
+		}
+	}
+	const rawPageLength = allRawItems.length;
+	if (properties?.name) {
+		// 回退搜索只筛名称；其余属性仍须逐项核对，不能选择不相干器件。
+		allRawItems = allRawItems.filter(item => matchesDeviceProperties(item, searchImplementation === 'keyword_name_fallback' ? properties : { name: properties.name }));
+	}
 	const items = await toSerializableAsync(allRawItems.slice(0, limit));
 	const response = {
 		ok: true,
@@ -156,6 +189,7 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		...(keyword ? { keyword } : properties ? { properties } : { lcscIds }),
 		...(simulationModelType ? { simulationModelType } : {}),
 		libraryUuid: libraryUuid ?? '',
+		...(properties?.name ? { exactNameVerified: true, searchImplementation, excludedNameMismatches } : {}),
 		returned: Array.isArray(items) ? items.length : 0,
 		items,
 	};
@@ -174,6 +208,6 @@ export async function handleLibrarySearchTask(payload: unknown): Promise<unknown
 		page,
 		pageSize: limit,
 		totalKnown: false,
-		mayHaveMore: allRawItems.length >= limit,
+		mayHaveMore: rawPageLength >= limit,
 	};
 }

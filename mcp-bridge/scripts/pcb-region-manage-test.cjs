@@ -128,6 +128,61 @@ async function main() {
 	assert.deepEqual(createMismatch.requestedMismatches, [{ field: 'regionName', expected: 'requested-name', actual: 'native-name' }]);
 	globalThis.eda.pcb_PrimitiveRegion.create = createSingle;
 
+	const ringPoints = Array.from({ length: 64 }, (_, index) => [
+		200 + Math.cos(index * Math.PI / 32) * 80.123456,
+		400 + Math.sin(index * Math.PI / 32) * 60.234567,
+	]);
+	const ringSource = [...ringPoints[0], 'L', ...ringPoints.slice(1).flat(), ...ringPoints[0]];
+	const normalizedPoints = [...ringPoints].reverse();
+	const shiftedPoints = [...normalizedPoints.slice(7), ...normalizedPoints.slice(0, 7)]
+		.map(point => point.map(value => Number(value.toFixed(4))));
+	const normalizedSource = [...shiftedPoints[0], 'L', ...shiftedPoints.slice(1).flat(), ...shiftedPoints[0]];
+	globalThis.eda.pcb_PrimitiveRegion.create = async (...args) => {
+		const result = await createSingle(...args);
+		regions.get(result.getState_PrimitiveId()).polygonSource = normalizedSource;
+		return result;
+	};
+	const ringCreated = await handlePcbRegionManageTask({ action: 'create', layer: 1, polygonSource: ringSource, ruleType: [2, 5], regionName: '轮廓规范化' });
+	assert.equal(ringCreated.ok, true, 'native winding and four-decimal coordinate rounding preserve region geometry');
+	assert.equal(ringCreated.verified, true);
+	assert.equal(ringCreated.normalization.reversed, true);
+	assert.equal(ringCreated.normalization.precisionAdjusted, true);
+	assert.equal(ringCreated.normalization.coordinateToleranceMil, 0.00005);
+	assert.deepEqual((await toSerializableAsync(ringCreated)).region.polygonSource, normalizedSource);
+	assert.equal(requiresHostRestartForResult(path, {}, ringCreated), false);
+	globalThis.eda.pcb_PrimitiveRegion.create = async (...args) => {
+		const result = await createSingle(...args);
+		const changedSource = [...normalizedSource];
+		changedSource[3] += 0.02;
+		regions.get(result.getState_PrimitiveId()).polygonSource = changedSource;
+		return result;
+	};
+	const changedRing = await handlePcbRegionManageTask({ action: 'create', layer: 1, polygonSource: ringSource, ruleType: [2, 5] });
+	assert.equal(changedRing.reason, 'create_readback_mismatch');
+	assert.equal(changedRing.verified, false);
+	const serializedChangedRing = await toSerializableAsync(changedRing);
+	assert.deepEqual(serializedChangedRing.requestedMismatches[0].actual, changedRing.after.polygonSource, 'the transport diagnostic must preserve the complete polygon instead of [Circular]');
+	globalThis.eda.pcb_PrimitiveRegion.create = createSingle;
+	globalThis.eda.pcb_PrimitiveRegion.create = async (...args) => {
+		const result = await createSingle(...args);
+		Object.assign(regions.get(result.getState_PrimitiveId()), { polygonSource: normalizedSource, layer: 12, ruleType: [9] });
+		return result;
+	};
+	const changedRegionProperties = await handlePcbRegionManageTask({ action: 'create', layer: 1, polygonSource: ringSource, ruleType: [2, 5] });
+	assert.equal(changedRegionProperties.verified, false, 'equivalent geometry cannot hide a wrong layer or region rule');
+	assert.deepEqual(changedRegionProperties.requestedMismatches.map(item => item.field), ['layer', 'ruleType']);
+	globalThis.eda.pcb_PrimitiveRegion.create = createSingle;
+	const beforeNormalizeModify = globalThis.eda.pcb_PrimitiveRegion.modify;
+	globalThis.eda.pcb_PrimitiveRegion.modify = async (...args) => {
+		const result = await beforeNormalizeModify(...args);
+		regions.get(args[0]).polygonSource = [normalizedSource];
+		return result;
+	};
+	const ringModified = await handlePcbRegionManageTask({ action: 'modify', primitiveId: ringCreated.primitiveId, property: { polygonSource: ringSource } });
+	assert.equal(ringModified.verified, true);
+	assert.equal(ringModified.normalization.reversed, true);
+	assert.deepEqual((await toSerializableAsync(ringModified)).region.polygonSource, [normalizedSource]);
+	globalThis.eda.pcb_PrimitiveRegion.modify = beforeNormalizeModify;
 	const created = await handlePcbRegionManageTask({ action: 'create', layer: 1, polygonSource: source, ruleType: [2, 5], regionName: '禁布区' });
 	assert.equal(created.verified, true);
 	assert.deepEqual(created.region.ruleType, [2, 5]);

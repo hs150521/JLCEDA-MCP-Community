@@ -12,6 +12,7 @@
 import type { DesignatorChange } from './component-designator-restore';
 import { getEdaRuntime, getSyncState, isPlainObjectRecord, toSafeErrorMessage } from '../utils';
 import { readSchematicDesignators, restoreChangedSchematicDesignators } from './component-designator-restore';
+import { resolveSchematicLibraryComponent } from './schematic-library-component.ts';
 
 interface ComponentPlaceAutoItem {
 	uuid: string;
@@ -48,7 +49,7 @@ interface ComponentCreateApi {
 	getAll?: (componentType?: unknown, allSchematicPages?: boolean) => Promise<unknown[]>;
 	modify?: (primitiveId: string, property: { designator: string; otherProperty: Record<string, string | number | boolean> }) => Promise<unknown>;
 	create: (
-		component: { libraryUuid: string; uuid: string },
+		component: Record<string, unknown>,
 		x: number,
 		y: number,
 		subPartName?: string,
@@ -375,6 +376,25 @@ export async function handleComponentPlaceAutoTask(payload: unknown): Promise<un
 		normalizeComponentPlaceAutoItem(item, index),
 	);
 
+	const resolvedComponents: Array<{ component: Record<string, unknown>; subPartName?: string }> = [];
+	for (const [index, component] of components.entries()) {
+		const resolved = await resolveSchematicLibraryComponent({ uuid: component.uuid, libraryUuid: component.libraryUuid }, component.subPartName);
+		if (resolved.ok === false) {
+			return {
+				...resolved,
+				needsReview: false,
+				placedCount: 0,
+				failedCount: 1,
+				totalCount: components.length,
+				notAttemptedCount: components.length - 1,
+				placedComponents: [],
+				failedComponents: [{ index, uuid: component.uuid, libraryUuid: component.libraryUuid, errorCode: resolved.errorCode, error: resolved.error, applied: false }],
+				designatorChanges: [],
+				restoredDesignators: [],
+			};
+		}
+		resolvedComponents.push(resolved);
+	}
 	const api = resolveComponentCreateApi();
 	let trackedDesignators: Map<string, string>;
 	let pageUuid: string;
@@ -431,10 +451,10 @@ export async function handleComponentPlaceAutoTask(payload: unknown): Promise<un
 			const createdComponent = await Promise.resolve(
 				api.create.call(
 					api.context,
-					{ uuid: component.uuid, libraryUuid: component.libraryUuid },
+					resolvedComponents[index].component,
 					position.x,
 					position.y,
-					component.subPartName || undefined,
+					resolvedComponents[index].subPartName,
 					component.rotation ?? 0,
 					component.mirror ?? false,
 					true,

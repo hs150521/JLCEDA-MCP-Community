@@ -21,7 +21,7 @@ import {
 } from '../mcp/component-place-handler.ts';
 import { BridgeStateManager } from '../state/state-manager.ts';
 import { BridgeStatusReporter } from '../state/status-reporter.ts';
-import { isPlainObjectRecord, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
+import { isPlainObjectRecord, safeCall, toSafeErrorDetails, toSafeErrorMessage, toSerializableAsync } from '../utils.ts';
 import { debugLog } from '../utils/debug-log.ts';
 import { getBridgeTaskHandler } from './bridge-handler-registry.ts';
 import { BridgeTransport } from './bridge-transport.ts';
@@ -587,8 +587,7 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 			}
 			debugLog('[DEBUG] handler threw error:', error);
 			taskError = {
-				message: toSafeErrorMessage(error),
-				name: error instanceof Error ? error.name : undefined,
+				...toSafeErrorDetails(error),
 				stack: error instanceof Error ? error.stack : undefined,
 				...(error instanceof BridgeTaskTimeoutError
 					? { code: 'BRIDGE_TASK_TIMEOUT', timeoutMs: error.timeoutMs }

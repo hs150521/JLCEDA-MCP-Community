@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', modu
 require('ts-node/register/transpile-only');
 
 const { handlePcbConnectivityTask } = require('../src/mcp/pcb-connectivity-handler.ts');
+const { toSerializableAsync } = require('../src/utils.ts');
 
 function linePrimitive(id, net, layer, startX, startY, endX, endY, lineWidth) {
 	return {
@@ -44,6 +45,7 @@ async function main() {
 	let viaCreates = 0;
 	let lineCreateMode = 'normal';
 	let viaReadbackMode = 'normal';
+	let lineScans = 0;
 	globalThis.eda = {
 		pcb_Net: { async getAllNets() { return nets; } },
 		pcb_Layer: { async getAllLayers() { return layers; } },
@@ -64,6 +66,12 @@ async function main() {
 				return primitive;
 			},
 			async get(id) { return lines.get(id); },
+			async getAll(net, layer) {
+				lineScans += 1;
+				assert.equal(net, 'GND', 'normalization scan is scoped to the requested net');
+				assert.equal(layer, 1);
+				return [...lines.values()].filter(item => item.getState_Net() === net && item.getState_Layer() === layer);
+			},
 		},
 		pcb_PrimitiveVia: {
 			async getAllPrimitiveId() { throw new Error('full-board via ID scan must not be used'); },
@@ -91,6 +99,7 @@ async function main() {
 	assert.equal(createdVia.ok, true);
 	assert.equal(createdVia.primitiveId, 'via-1');
 	assert.equal(createdVia.verified, true);
+	assert.equal(lineScans, 0, 'normal successful create keeps its targeted readback');
 
 	await assert.rejects(handlePcbConnectivityTask({ ...line, net: 'UNKNOWN' }), /does not exist/);
 	await assert.rejects(handlePcbConnectivityTask({ ...line, layer: 2 }), /unlocked copper/);
@@ -106,6 +115,73 @@ async function main() {
 	const planeLine = await handlePcbConnectivityTask({ ...line, layer: 15 });
 	assert.equal(planeLine.ok, true);
 	assert.equal(planeLine.layer, 15);
+
+	const lineApi = globalThis.eda.pcb_PrimitiveLine;
+	const originalLineCreate = lineApi.create;
+	const normalizedRequest = { ...line, startX: 1000, endX: 1200 };
+	lineApi.create = async () => {
+		lines.set('split-a', linePrimitive('split-a', 'GND', 1, 1000, 200, 1100, 200, 10));
+		lines.set('split-b', linePrimitive('split-b', 'GND', 1, 1200, 200, 1100, 200, 10));
+		return { getState_PrimitiveId: () => 'native-replaced' };
+	};
+	const split = await toSerializableAsync(await handlePcbConnectivityTask(normalizedRequest));
+	assert.equal(split.ok, true);
+	assert.equal(split.verified, true);
+	assert.equal(split.returnedPrimitiveId, 'native-replaced');
+	assert.deepEqual(split.primitiveIds, ['split-a', 'split-b']);
+	assert.equal(split.after.lines.length, 2);
+	assert.equal(split.normalization.kind, 'split_or_merged_line');
+	lines.delete('split-a');
+	lines.delete('split-b');
+	lineApi.create = async () => {
+		lines.set('merged', linePrimitive('merged', 'GND', 1, 1250, 200, 950, 200, 10));
+		return { getState_PrimitiveId: () => 'native-merged' };
+	};
+	const merged = await handlePcbConnectivityTask(normalizedRequest);
+	assert.equal(merged.ok, true);
+	assert.deepEqual(merged.primitiveIds, ['merged']);
+	lines.delete('merged');
+	lineApi.create = async () => {
+		lines.set('gap-a', linePrimitive('gap-a', 'GND', 1, 1000, 200, 1090, 200, 10));
+		lines.set('gap-b', linePrimitive('gap-b', 'GND', 1, 1100, 200, 1200, 200, 10));
+		lines.set('wrong-width', linePrimitive('wrong-width', 'GND', 1, 1000, 200, 1200, 200, 20));
+		lines.set('wrong-net', linePrimitive('wrong-net', 'VCC', 1, 1000, 200, 1200, 200, 10));
+		lines.set('wrong-layer', linePrimitive('wrong-layer', 'GND', 2, 1000, 200, 1200, 200, 10));
+		return { getState_PrimitiveId: () => 'native-gap' };
+	};
+	const gap = await handlePcbConnectivityTask(normalizedRequest);
+	assert.equal(gap.ok, false);
+	assert.equal(gap.commitUnknown, true, 'a gap or mismatching net/layer/width must retain the readback gate');
+	assert.equal(gap.nativeCallSettled, true);
+	lineApi.create = originalLineCreate;
+	const viaApi = globalThis.eda.pcb_PrimitiveVia;
+	const originalViaCreate = viaApi.create;
+	viaApi.create = async (net, x, y, hole, diameter) => {
+		const raw = viaPrimitive('quantized-via', net, x, y, Math.floor(hole * 10) / 10, Math.round(diameter * 10) / 10);
+		vias.set('quantized-via', raw);
+		return raw;
+	};
+	const quantized = await toSerializableAsync(await handlePcbConnectivityTask({ ...via, holeDiameter: 19.685, diameter: 47.244 }));
+	assert.equal(quantized.ok, true);
+	assert.equal(quantized.holeDiameter, 19.6);
+	assert.equal(quantized.diameter, 47.2);
+	assert.equal(quantized.after.holeDiameter, 19.6);
+	assert.equal(quantized.normalization.holeDiameter.requested, 19.685);
+	assert.equal(quantized.normalization.holeDiameter.mode, 'truncate_0_1_mil');
+	const rounded = await handlePcbConnectivityTask({ ...via, holeDiameter: 19.685, diameter: 47.268 });
+	assert.equal(rounded.ok, true);
+	assert.equal(rounded.diameter, 47.3);
+	assert.equal(rounded.normalization.diameter.mode, 'round_0_1_mil');
+	viaApi.create = async (net, x, y) => {
+		const raw = viaPrimitive('wrong-via', net, x, y, 19.64, 48);
+		vias.set('wrong-via', raw);
+		return raw;
+	};
+	const wrongVia = await handlePcbConnectivityTask({ ...via, holeDiameter: 19.685, diameter: 47.244 });
+	assert.equal(wrongVia.ok, false);
+	assert.equal(wrongVia.commitUnknown, true);
+	assert.equal(wrongVia.after.holeDiameter, 19.64, 'observed dimensions are available to reconcile a real mismatch');
+	viaApi.create = originalViaCreate;
 
 	lineCreateMode = 'undefined';
 	const noReturnedId = await handlePcbConnectivityTask(line);

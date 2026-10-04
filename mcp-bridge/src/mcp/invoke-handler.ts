@@ -13,6 +13,8 @@ import type { AutoRoutingSnapshot } from './pcb-auto-routing-observation';
 import { isReadOnlyBridgeRequest } from '../bridge/bridge-contract';
 import { getSyncState, isPlainObjectRecord, preserveBoundedArray, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils';
 import { AutoRoutingPageChangedError, compareAutoRoutingSnapshots, readAutoRoutingSnapshot, unavailableAutoRoutingObservation } from './pcb-auto-routing-observation';
+import { tryModifySchematicComponentPin } from './schematic-component-pin-edit.ts';
+import { resolveSchematicLibraryComponent } from './schematic-library-component.ts';
 
 const PCB_AUTO_LAYOUT = 'eda.pcb_document.autolayout';
 const PCB_AUTO_ROUTING = 'eda.pcb_document.autorouting';
@@ -238,6 +240,19 @@ export async function handleApiInvokeTask(payload: unknown): Promise<unknown> {
 		&& (payload.includeCompleteSchematicComponentIds !== true || normalizedPath !== SCHEMATIC_COMPONENT_GET_ALL_IDS
 			|| invokeArgs.length !== 2 || invokeArgs[0] !== null || invokeArgs[1] !== false)) {
 		throw new TypeError('includeCompleteSchematicComponentIds requires eda.sch_PrimitiveComponent.getAllPrimitiveId with args [null, false].');
+	}
+
+	if (normalizedPath === 'eda.sch_primitivepin.modify') {
+		const adapted = await tryModifySchematicComponentPin(invokeArgs);
+		if (adapted)
+			return { apiFullName: resolvedPath, ...adapted };
+	}
+	if (normalizedPath === 'eda.sch_primitivecomponent.create') {
+		const resolved = await resolveSchematicLibraryComponent(invokeArgs[0], invokeArgs[3]);
+		if (resolved.ok === false)
+			return { apiFullName: resolvedPath, ...resolved };
+		invokeArgs[0] = resolved.component;
+		invokeArgs[3] = resolved.subPartName;
 	}
 
 	// EDA 3.x 的 modify 会在省略 otherProperty 时清空已有的 BOM 属性。

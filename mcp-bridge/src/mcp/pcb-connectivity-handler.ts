@@ -1,4 +1,5 @@
-import { getEdaRuntime, getSyncState, isPlainObjectRecord, toSafeErrorMessage } from '../utils.ts';
+import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { pcbViaDimensionMode } from './pcb-native-normalization.ts';
 
 type PcbConnectivityAction = 'line_create' | 'via_create';
 const COORDINATE_EPSILON = 1e-6;
@@ -80,6 +81,77 @@ function unknownAfterWrite(
 	};
 }
 
+interface LineState {
+	primitiveId: string;
+	net: string;
+	layer: number;
+	startX: number;
+	startY: number;
+	endX: number;
+	endY: number;
+	lineWidth: number;
+}
+
+function readLine(raw: unknown): LineState {
+	return {
+		primitiveId: getSyncState(raw, 'getState_PrimitiveId', ''),
+		net: getSyncState(raw, 'getState_Net', ''),
+		layer: getSyncState(raw, 'getState_Layer', -1),
+		startX: getSyncState(raw, 'getState_StartX', Number.NaN),
+		startY: getSyncState(raw, 'getState_StartY', Number.NaN),
+		endX: getSyncState(raw, 'getState_EndX', Number.NaN),
+		endY: getSyncState(raw, 'getState_EndY', Number.NaN),
+		lineWidth: getSyncState(raw, 'getState_LineWidth', Number.NaN),
+	};
+}
+
+function sameLine(actual: LineState, requested: Omit<LineState, 'primitiveId'>): boolean {
+	if (actual.net !== requested.net || actual.layer !== requested.layer || !sameNumber(actual.lineWidth, requested.lineWidth))
+		return false;
+	const forward = sameNumber(actual.startX, requested.startX) && sameNumber(actual.startY, requested.startY)
+		&& sameNumber(actual.endX, requested.endX) && sameNumber(actual.endY, requested.endY);
+	const reversed = sameNumber(actual.endX, requested.startX) && sameNumber(actual.endY, requested.startY)
+		&& sameNumber(actual.startX, requested.endX) && sameNumber(actual.startY, requested.endY);
+	return forward || reversed;
+}
+
+function coveringLines(lines: LineState[], requested: Omit<LineState, 'primitiveId'>): LineState[] | undefined {
+	const dx = requested.endX - requested.startX;
+	const dy = requested.endY - requested.startY;
+	const length = Math.hypot(dx, dy);
+	const ux = dx / length;
+	const uy = dy / length;
+	const intervals: Array<{ start: number; end: number; line: LineState }> = [];
+	for (const line of lines) {
+		if (!line.primitiveId || line.net !== requested.net || line.layer !== requested.layer || !sameNumber(line.lineWidth, requested.lineWidth))
+			continue;
+		const points = [[line.startX, line.startY], [line.endX, line.endY]];
+		if (points.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y)
+			|| Math.abs((x - requested.startX) * uy - (y - requested.startY) * ux) > COORDINATE_EPSILON)) {
+			continue;
+		}
+		const projections = points.map(([x, y]) => (x - requested.startX) * ux + (y - requested.startY) * uy);
+		const start = Math.max(0, Math.min(...projections));
+		const end = Math.min(length, Math.max(...projections));
+		if (end - start > COORDINATE_EPSILON)
+			intervals.push({ start, end, line });
+	}
+	intervals.sort((a, b) => a.start - b.start);
+	let covered = 0;
+	const result: LineState[] = [];
+	for (const interval of intervals) {
+		if (interval.start > covered + COORDINATE_EPSILON)
+			return undefined;
+		if (interval.end > covered) {
+			covered = interval.end;
+			result.push(interval.line);
+		}
+		if (covered >= length - COORDINATE_EPSILON)
+			return preserveBoundedArray(result);
+	}
+	return undefined;
+}
+
 async function handleLineCreate(payload: Record<string, unknown>, eda: Record<string, unknown>, net: string, allowNewNet: boolean): Promise<unknown> {
 	const layer = requiredNumber(payload.layer, 'layer');
 	if (!Number.isInteger(layer) || layer <= 0)
@@ -91,6 +163,7 @@ async function handleLineCreate(payload: Record<string, unknown>, eda: Record<st
 	if (sameNumber(startX, endX) && sameNumber(startY, endY))
 		throw new TypeError('A PCB line must have different start and end points.');
 	const lineWidth = positiveNumber(payload.lineWidth, 'lineWidth');
+	const requested = { net, layer, startX, startY, endX, endY, lineWidth };
 	const lineApi = pcbApi(eda, 'pcb_PrimitiveLine', ['create', 'get']);
 	const layerApi = pcbApi(eda, 'pcb_Layer', ['getAllLayers']);
 	const netApi = allowNewNet ? undefined : pcbApi(eda, 'pcb_Net', ['getAllNets']);
@@ -105,25 +178,36 @@ async function handleLineCreate(payload: Record<string, unknown>, eda: Record<st
 	catch (error: unknown) {
 		return nativeCreateFailure('line_create', error);
 	}
-	const primitiveId = getSyncState(created, 'getState_PrimitiveId', '');
-	if (typeof primitiveId !== 'string' || primitiveId.length === 0)
+	const returnedPrimitiveId = getSyncState(created, 'getState_PrimitiveId', '');
+	if (typeof returnedPrimitiveId !== 'string' || returnedPrimitiveId.length === 0)
 		return unknownAfterWrite('line_create', '', 'EDA create returned no primitive ID.');
 	try {
-		const observed = await (lineApi.get as (id: string) => Promise<unknown>).call(lineApi, primitiveId);
-		const verified = getSyncState(observed, 'getState_PrimitiveId', '') === primitiveId
-			&& getSyncState(observed, 'getState_Net', '') === net
-			&& getSyncState(observed, 'getState_Layer', -1) === layer
-			&& sameNumber(getSyncState(observed, 'getState_StartX', Number.NaN), startX)
-			&& sameNumber(getSyncState(observed, 'getState_StartY', Number.NaN), startY)
-			&& sameNumber(getSyncState(observed, 'getState_EndX', Number.NaN), endX)
-			&& sameNumber(getSyncState(observed, 'getState_EndY', Number.NaN), endY)
-			&& sameNumber(getSyncState(observed, 'getState_LineWidth', Number.NaN), lineWidth);
-		if (!verified)
-			return unknownAfterWrite('line_create', primitiveId, 'EDA line readback differs from the requested net, layer, or geometry.');
-		return { ok: true, action: 'line_create', primitiveId, net, layer, startX, startY, endX, endY, lineWidth, verified: true };
+		const observed = readLine(await (lineApi.get as (id: string) => Promise<unknown>).call(lineApi, returnedPrimitiveId));
+		if (observed.primitiveId === returnedPrimitiveId && sameLine(observed, requested))
+			return { ok: true, action: 'line_create', primitiveId: returnedPrimitiveId, ...requested, after: observed, verified: true };
+		// 原生布线会在交点拆分线路，或把线路合并到已有铜线。
+		// 单 ID 回读不等价时，仅扫描所请求的网络和层。
+		const allApi = pcbApi(eda, 'pcb_PrimitiveLine', ['getAll']);
+		const raw = await (allApi.getAll as (net: string, layer: number) => Promise<unknown>).call(allApi, net, layer);
+		if (!Array.isArray(raw))
+			throw new TypeError('EDA pcb_PrimitiveLine.getAll did not return an array.');
+		const lines = coveringLines(raw.map(readLine), requested);
+		if (!lines)
+			return { ...unknownAfterWrite('line_create', returnedPrimitiveId, 'EDA line readback differs from the requested net, layer, or geometry.'), after: observed };
+		return {
+			ok: true,
+			action: 'line_create',
+			primitiveId: lines[0].primitiveId,
+			primitiveIds: preserveBoundedArray(lines.map(line => line.primitiveId)),
+			returnedPrimitiveId,
+			...requested,
+			after: { lines },
+			normalization: { kind: 'split_or_merged_line', verification: 'requested_segment_covered' },
+			verified: true,
+		};
 	}
 	catch (error: unknown) {
-		return unknownAfterWrite('line_create', primitiveId, error);
+		return unknownAfterWrite('line_create', returnedPrimitiveId, error);
 	}
 }
 
@@ -149,15 +233,25 @@ async function handleViaCreate(payload: Record<string, unknown>, eda: Record<str
 		return unknownAfterWrite('via_create', '', 'EDA create returned no primitive ID.');
 	try {
 		const observed = await (viaApi.get as (id: string) => Promise<unknown>).call(viaApi, primitiveId);
-		const verified = getSyncState(observed, 'getState_PrimitiveId', '') === primitiveId
-			&& getSyncState(observed, 'getState_Net', '') === net
-			&& sameNumber(getSyncState(observed, 'getState_X', Number.NaN), x)
-			&& sameNumber(getSyncState(observed, 'getState_Y', Number.NaN), y)
-			&& sameNumber(getSyncState(observed, 'getState_HoleDiameter', Number.NaN), holeDiameter)
-			&& sameNumber(getSyncState(observed, 'getState_Diameter', Number.NaN), diameter);
+		const after = {
+			primitiveId: getSyncState(observed, 'getState_PrimitiveId', ''),
+			net: getSyncState(observed, 'getState_Net', ''),
+			x: getSyncState(observed, 'getState_X', Number.NaN),
+			y: getSyncState(observed, 'getState_Y', Number.NaN),
+			holeDiameter: getSyncState(observed, 'getState_HoleDiameter', Number.NaN),
+			diameter: getSyncState(observed, 'getState_Diameter', Number.NaN),
+		};
+		const holeMode = pcbViaDimensionMode(after.holeDiameter, holeDiameter);
+		const diameterMode = pcbViaDimensionMode(after.diameter, diameter);
+		const verified = after.primitiveId === primitiveId && after.net === net
+			&& sameNumber(after.x, x) && sameNumber(after.y, y)
+			&& holeMode !== undefined && diameterMode !== undefined && after.diameter > after.holeDiameter;
 		if (!verified)
-			return unknownAfterWrite('via_create', primitiveId, 'EDA via readback differs from the requested net or geometry.');
-		return { ok: true, action: 'via_create', primitiveId, net, x, y, holeDiameter, diameter, verified: true };
+			return { ...unknownAfterWrite('via_create', primitiveId, 'EDA via readback differs from the requested net or geometry.'), after };
+		const normalization = holeMode !== 'exact' || diameterMode !== 'exact'
+			? { normalization: { kind: 'via_dimension_quantization', holeDiameter: { requested: holeDiameter, actual: after.holeDiameter, mode: holeMode }, diameter: { requested: diameter, actual: after.diameter, mode: diameterMode } } }
+			: {};
+		return { ok: true, action: 'via_create', ...after, after, ...normalization, verified: true };
 	}
 	catch (error: unknown) {
 		return unknownAfterWrite('via_create', primitiveId, error);

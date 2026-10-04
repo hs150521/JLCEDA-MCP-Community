@@ -163,6 +163,52 @@ async function main() {
 	assert.equal((await handlePcbComponentEditTask({ action: 'delete', primitiveId: 'new-1' })).reason, 'component_not_found');
 
 	const originalModify = api.modify;
+	api.modify = async (id, patch) => {
+		await originalModify(id, patch);
+		const state = parts.get(id);
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+	};
+	for (const [requested, actual] of [[-90, 270], [360, 0], [720, 0], [-450, 270]]) {
+		const rotated = await toSerializableAsync(await handlePcbComponentEditTask({ action: 'modify', primitiveId: 'r1', property: { x: 155, rotation: requested } }));
+		assert.equal(rotated.ok, true, `equivalent rotation ${requested}`);
+		assert.equal(rotated.verified, true);
+		assert.equal(rotated.after.rotation, actual);
+		assert.equal(rotated.after.x, 155);
+		assert.equal(rotated.normalization.rotation.mode, 'modulo_360');
+	}
+	api.modify = async (id, patch) => {
+		await originalModify(id, patch);
+		parts.get(id).rotation = 90;
+	};
+	const wrongOrientation = await handlePcbComponentEditTask({ action: 'modify', primitiveId: 'r1', property: { rotation: -90 } });
+	assert.equal(wrongOrientation.ok, false);
+	assert.equal(wrongOrientation.commitUnknown, true);
+	assert.equal(wrongOrientation.after.rotation, 90);
+	assert.equal(wrongOrientation.mismatches[0].field, 'rotation');
+	api.modify = originalModify;
+	parts.get('r1').otherProperty['LCSC Part Name'] = 'old part';
+	api.modify = async (id, patch) => {
+		const oldName = parts.get(id).otherProperty['LCSC Part Name'];
+		await originalModify(id, patch);
+		parts.get(id).otherProperty['LCSC Part Name'] = oldName;
+	};
+	const partial = await toSerializableAsync(await handlePcbComponentEditTask({ action: 'modify', primitiveId: 'r1', property: {
+		manufacturerId: 'AOD2610E',
+		supplierId: 'C282428',
+		otherProperty: { 'Device': 'AOD2610E', 'LCSC Part Name': 'new part' },
+	} }));
+	assert.equal(partial.ok, false);
+	assert.equal(partial.reason, 'post_write_readback_failed');
+	assert.equal(partial.failureKind, 'state_mismatch');
+	assert.equal(partial.nativeCallSettled, true);
+	assert.equal(partial.after.manufacturerId, 'AOD2610E');
+	assert.equal(partial.after.otherProperty.Device, 'AOD2610E');
+	assert.deepEqual(partial.mismatches, [{ field: 'otherProperty.LCSC Part Name', requested: 'new part', actual: 'old part', unchanged: true, requestedField: true }]);
+	assert.equal(partial.mismatchCount, 1);
+	assert.equal(partial.mismatchesComplete, true);
+	assert.equal(requiresHostRestartForResult(path, { action: 'modify' }, partial), false, 'settled partial metadata write needs readback, not a host restart');
+	api.modify = originalModify;
+
 	api.modify = async () => {
 		throw new Error('RPC call timed out');
 	};
@@ -191,6 +237,17 @@ async function main() {
 	pageUuid = 'pcb-1';
 	api.modify = originalModify;
 	const originalCreate = api.create;
+	api.create = async (...args) => {
+		const result = await originalCreate(...args);
+		const state = parts.get(result.getState_PrimitiveId());
+		state.rotation = ((state.rotation % 360) + 360) % 360;
+		return primitive(state);
+	};
+	const normalizedCreate = await handlePcbComponentEditTask({ action: 'create', source: { kind: 'device', libraryUuid: 'devices', uuid: 'device-4' }, layer: 1, x: 10, y: 20, rotation: -90 });
+	assert.equal(normalizedCreate.ok, true);
+	assert.equal(normalizedCreate.after.rotation, 270);
+	assert.equal(normalizedCreate.normalization.rotation.mode, 'modulo_360');
+	api.create = originalCreate;
 	api.create = async () => {
 		throw new Error('WebSocket connection closed');
 	};

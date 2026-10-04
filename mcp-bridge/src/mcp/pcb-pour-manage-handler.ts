@@ -146,7 +146,7 @@ function fillGeometryDigest(fills: unknown[]): string {
 function api(runtime: Record<string, unknown>, name: string, methods: string[]): Record<string, unknown> {
 	const value = runtime[name];
 	if (!isPlainObjectRecord(value) || methods.some(method => typeof value[method] !== 'function'))
-		throw new TypeError(`EDA ${name} ${methods.join('/')} API is unavailable. Open a PCB first.`);
+		throw new TypeError(`EDA ${name}.${methods.filter(method => !isPlainObjectRecord(value) || typeof value[method] !== 'function').join('/')} API is unavailable in this client version.`);
 	return value;
 }
 
@@ -305,7 +305,7 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 	const runtime = getEdaRuntime();
 	if (!runtime)
 		throw new TypeError('EDA runtime is unavailable.');
-	const pourApi = api(runtime, 'pcb_PrimitivePour', ['getAll', ...(action === 'read' ? [] : [action === 'rebuild' ? 'rebuildCopperRegions' : action])]);
+	const pourApi = api(runtime, 'pcb_PrimitivePour', ['getAll', ...(action === 'read' || action === 'rebuild' ? [] : [action])]);
 	const pageUuid = await currentPageUuid(runtime);
 	const before = await readSnapshot(runtime, pageUuid);
 	if (action === 'read')
@@ -317,6 +317,43 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 		context.all = payload.all === true;
 	if (primitiveId && !before.pours.some(pour => pour.primitiveId === primitiveId))
 		throw new TypeError(`PCB pour ${primitiveId} does not exist on the current page.`);
+	let rebuildInstances: Record<string, unknown>[] | undefined;
+	if (action === 'rebuild' && typeof pourApi.rebuildCopperRegions !== 'function') {
+		const rawPours = await (pourApi.getAll as () => Promise<unknown>).call(pourApi);
+		if (!Array.isArray(rawPours))
+			throw new TypeError('EDA pcb_PrimitivePour.getAll did not return an array.');
+		const targetIds = new Set(primitiveId ? [primitiveId] : before.pours.map(item => item.primitiveId));
+		const targets = rawPours.filter(item => targetIds.has(requiredId(readState(item, 'getState_PrimitiveId'), 'EDA pour primitiveId')));
+		if (targets.length !== targetIds.size)
+			throw new Error('PCB pour targets changed before rebuild.');
+		await assertSamePage(runtime, pageUuid);
+		if (targets.some(item => !isPlainObjectRecord(item) || typeof item.rebuildCopperRegion !== 'function')) {
+			const environment = runtime.sys_Environment;
+			let editorVersion: string | undefined;
+			try {
+				if (isPlainObjectRecord(environment) && typeof environment.getEditorCurrentVersion === 'function') {
+					const version = await environment.getEditorCurrentVersion();
+					if (typeof version === 'string')
+						editorVersion = version;
+				}
+			}
+			catch { /* 版本读取不影响未写入的能力诊断。 */ }
+			return {
+				ok: false,
+				action,
+				scope: SCOPE,
+				...context,
+				reason: 'unsupported_capability',
+				errorCode: 'EDA_CAPABILITY_UNAVAILABLE',
+				unavailableApis: ['eda.pcb_PrimitivePour.rebuildCopperRegions', 'eda.IPCB_PrimitivePour.rebuildCopperRegion'],
+				...(editorVersion ? { editorVersion } : {}),
+				error: 'The current EDA version exposes neither batch nor per-pour copper rebuilding for the requested pours.',
+				applied: false,
+				verified: false,
+			};
+		}
+		rebuildInstances = targets as Record<string, unknown>[];
+	}
 	if (requested?.net !== undefined)
 		await verifyNet(runtime, requested.net as string);
 	if (requested?.layer !== undefined)
@@ -348,6 +385,16 @@ export async function handlePcbPourManageTask(payload: unknown): Promise<unknown
 		}
 		else if (action === 'delete') {
 			nativeResult = await (pourApi.delete as (...args: unknown[]) => Promise<unknown>).call(pourApi, primitiveId);
+		}
+		else if (rebuildInstances) {
+			const results: unknown[] = [];
+			for (const target of rebuildInstances) {
+				await assertSamePage(runtime, pageUuid);
+				const result = await (target.rebuildCopperRegion as () => Promise<unknown>).call(target);
+				if (result !== undefined && result !== null)
+					results.push(result);
+			}
+			nativeResult = results;
 		}
 		else {
 			nativeResult = await (pourApi.rebuildCopperRegions as (...args: unknown[]) => Promise<unknown>).call(pourApi, payload.all === true ? undefined : [primitiveId]);

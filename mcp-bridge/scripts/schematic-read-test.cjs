@@ -210,14 +210,17 @@ async function main() {
 	globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId = async (id) => {
 		if (id !== 'device')
 			return [];
-		return [{
+		const pin = {
+			getState_PrimitiveId: () => 'device-pin-1',
+			getState_Rotation: () => 180,
 			getState_PinNumber: () => '1',
 			getState_PinName: () => 'IN',
 			getState_PinType: () => 'input',
 			getState_X: () => pinX,
 			getState_Y: () => pinY,
 			getState_NoConnected: () => false,
-		}];
+		};
+		return [pin, { ...pin, getState_PrimitiveId: () => 'device-pin-2', getState_PinNumber: () => '2', getState_X: () => 2000, getState_Y: () => 2000, getState_NoConnected: () => undefined }];
 	};
 	globalThis.eda.sch_PrimitiveWire.getAll = async () => [{
 		getState_Line: () => [[0, 0, 100, 0], [100, 0, 100, 100]],
@@ -226,6 +229,19 @@ async function main() {
 	const result = await handleSchematicReadTask({});
 	assert.equal(result.ok, true);
 	const snapshot = JSON.parse(result.schematicCircuitSnapshot);
+	const inspectedPin = snapshot.components.find(component => component.componentInstanceId === 'device').pins[0];
+	assert.deepEqual([inspectedPin.pinId, inspectedPin.x, inspectedPin.y, inspectedPin.rotation, inspectedPin.noConnected], ['device-pin-1', pinX, pinY, 180, false], 'complete readback keeps native pin identity, geometry and NC');
+	const unmarkedPin = snapshot.components.find(component => component.componentInstanceId === 'device').pins[1];
+	assert.equal(unmarkedPin.noConnected, false, 'an existing SDK getter returning undefined means the ordinary unmarked NC state');
+	assert.equal(unmarkedPin.hasNoConnectMark, false);
+	const completePinRead = globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId;
+	globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId = async id => (await completePinRead(id)).map((pin) => {
+		const { getState_NoConnected: _ncGetter, ...withoutGetter } = pin;
+		return withoutGetter;
+	});
+	const missingNcSnapshot = JSON.parse((await handleSchematicReadTask({})).schematicCircuitSnapshot);
+	assert.equal(missingNcSnapshot.components.find(component => component.componentInstanceId === 'device').pins[1].noConnected, null, 'missing getters remain a recovery capability failure');
+	globalThis.eda.sch_PrimitiveComponent.getAllPinsByPrimitiveId = completePinRead;
 	assert.deepEqual(snapshot.networks.find(network => network.networkName === 'SIG').connectedPinRefs, ['SIG.1', 'U1.1']);
 	portX = 50;
 	const portMidpoint = JSON.parse((await handleSchematicReadTask({})).schematicCircuitSnapshot);

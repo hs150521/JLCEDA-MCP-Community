@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [2.3.5] - 2026-10-04（待发布）
+
+- `pcb_text_manage` 的 Attribute 修改参数允许 `value`、`valueVisible`，补全对应的工具契约与分发回归。
+- `pcb_drc_check` 工具契约增加 `offset`、`limit`；Bridge 返回 `nextOffset`、原生详情数量及两层截断诊断，以分页获取原生可用详情。
+- 非字符串 Bridge 错误转换为可读错误，同时保留 `code`、`reason`、`field`、`status` 等诊断；主连接、中继和工具分发的回归覆盖完整传输，错误文本不再只剩通用提示或 `[object Object]`。
+- 同步说明器件库解析、名称过滤、ComponentPin 实例修改、覆铜回退、PCB 几何归一化、元数据实际回读与制造导出分支校验；ComponentPin 失败恢复归为完整连接回读，要求目标所属器件全部引脚 ID、位置、旋转及 NC 的真实状态。
+- 说明过孔删除仅验证当前页内存；缺失父 ID 不证明其独立归属。过孔修改尺寸偏差与独立封装上下文仍未解决，继续保留诊断与原生限制。
+- 源码及配套安装文件更新为 2.3.5；两轮本地全面审查、Server/Bridge 全量构建测试及 lint 通过。2.3.5 Server 与 Bridge 已运行，4 型号自动放置、无效引用预检、NC 切换、名称过滤及原理图 CSV/网表/PDF 导出实测成功；NetPort 属性读取修正与 PCB 验证仍待完成，详见 [23 项 Issue 验证记录](../docs/issue-validation-2.3.5.md)。
+
 ## [2.3.4] - 2026-09-26
 
 - 新增 `board_setup`：在当前工程一次创建 Board 及关联原理图/PCB，或把现有游离原理图与新 PCB 关联；结果不明时按同工程完整文档目录恢复。

@@ -1,4 +1,4 @@
-import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
 
 type Action = 'read' | 'create' | 'modify' | 'delete';
 type Kind = 'line' | 'arc' | 'polyline' | 'via';
@@ -190,6 +190,30 @@ async function getAllPrimitiveIds(runtime: Record<string, unknown>, kind: Kind, 
 	return ids;
 }
 
+interface ViaOwnership {
+	ownership: 'footprint_child' | 'unknown';
+	parentComponentPrimitiveId?: string;
+}
+
+async function readViaOwnership(runtime: Record<string, unknown>, via: Primitive, pageUuid: string): Promise<ViaOwnership> {
+	const netApi = runtime.pcb_Net;
+	if (!isPlainObjectRecord(netApi) || typeof netApi.getAllPrimitivesByNet !== 'function')
+		return { ownership: 'unknown' };
+	const raw = await (netApi.getAllPrimitivesByNet as (net: string) => Promise<unknown>).call(netApi, via.net);
+	await assertSamePage(runtime, pageUuid);
+	if (!Array.isArray(raw))
+		throw new TypeError('EDA pcb_Net.getAllPrimitivesByNet did not return an array.');
+	// 网络接口若保留了原生 parentId，可识别已知父图元；缺失父字段不证明独立归属。
+	const target = raw.find(item => isPlainObjectRecord(item)
+		&& (item.globalIndex ?? getSyncState(item, 'getState_PrimitiveId', item.primitiveId)) === via.primitiveId);
+	if (!isPlainObjectRecord(target))
+		return { ownership: 'unknown' };
+	const parentId = target.parentId ?? target.parentComponentPrimitiveId;
+	return typeof parentId === 'string' && parentId.length > 0
+		? { ownership: 'footprint_child', parentComponentPrimitiveId: parentId }
+		: { ownership: 'unknown' };
+}
+
 async function verifyNet(runtime: Record<string, unknown>, net: string): Promise<void> {
 	const netApi = api(runtime, 'pcb_Net', ['getAllNets']);
 	const nets = await (netApi.getAllNets as () => Promise<unknown>).call(netApi);
@@ -282,6 +306,16 @@ function matchesRequested(actual: Primitive, requested: Record<string, unknown>)
 	});
 }
 
+function requestedMismatches(actual: Primitive, requested: Record<string, unknown>): Array<Record<string, unknown>> {
+	return preserveBoundedArray(Object.entries(requested)
+		.filter(([field, wanted]) => !matchesRequested(actual, { [field]: wanted }))
+		.map(([field, wanted]) => ({
+			field,
+			requested: Array.isArray(wanted) ? preserveBoundedArray([...wanted]) : wanted,
+			actual: Array.isArray(actual[field]) ? preserveBoundedArray([...(actual[field] as unknown[])]) : actual[field],
+		})));
+}
+
 function unknownNativeWrite(action: Exclude<Action, 'read'>, error: unknown, context: Record<string, unknown>): Record<string, unknown> {
 	const message = toSafeErrorMessage(error);
 	if (!NATIVE_RESULT_UNKNOWN.test(message))
@@ -338,6 +372,24 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 	const before = primitiveId ? await getOne(runtime, writableKind, primitiveId, pageUuid) : undefined;
 	if (primitiveId && !before)
 		throw new TypeError(`PCB ${writableKind} ${primitiveId} does not exist on the current page.`);
+	const viaOwnership = action === 'delete' && writableKind === 'via'
+		? await readViaOwnership(runtime, before!, pageUuid)
+		: undefined;
+	if (viaOwnership?.ownership === 'footprint_child') {
+		return {
+			ok: false,
+			action,
+			scope: SCOPE,
+			...context,
+			...viaOwnership,
+			before,
+			reason: 'footprint_owned_via',
+			error: 'This via belongs to a placed footprint. Edit its footprint/component; routing deletion cannot confirm persistent removal of a footprint child.',
+			applied: false,
+			deleted: false,
+			verified: false,
+		};
+	}
 	const beforeIds = action === 'create'
 		? preserveBoundedArray((await getAll(runtime, writableKind)).map(item => item.primitiveId))
 		: undefined;
@@ -395,11 +447,36 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 			const ids = await getAllPrimitiveIds(runtime, writableKind, pageUuid);
 			if (nativeResult === false || ids.includes(primitiveId!))
 				throw new Error('EDA routing primitive still exists after delete.');
-			return { ok: true, action, scope: SCOPE, pageUuid, kind: writableKind, primitiveId, deleted: true, verified: true };
+			return {
+				ok: true,
+				action,
+				scope: SCOPE,
+				pageUuid,
+				kind: writableKind,
+				primitiveId,
+				deleted: true,
+				verified: true,
+				...(writableKind === 'via'
+					? {
+							...viaOwnership,
+							verificationScope: 'current_page_memory',
+							durableDeletionVerified: false,
+							requiredPersistenceVerification: 'save_and_reopen_pcb',
+						}
+					: {}),
+			};
 		}
 		const observed = await getOne(runtime, writableKind, primitiveId!, pageUuid);
-		if (!observed || !matchesRequested(observed, requested!))
-			throw new Error('EDA routing readback differs from the requested properties.');
+		if (!observed || !matchesRequested(observed, requested!)) {
+			const mismatches = observed ? requestedMismatches(observed, requested!) : undefined;
+			return unknownAfterWrite(action, new Error('EDA routing readback differs from the requested properties.'), {
+				...context,
+				after: observed ?? null,
+				requested,
+				failureKind: 'state_mismatch',
+				...(mismatches ? { mismatches, mismatchCount: mismatches.length } : {}),
+			});
+		}
 		return { ok: true, action, scope: SCOPE, pageUuid, kind: writableKind, primitiveId, primitive: observed, verified: true };
 	}
 	catch (error: unknown) {

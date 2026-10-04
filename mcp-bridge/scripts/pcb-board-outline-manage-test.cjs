@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', modu
 require('ts-node/register/transpile-only');
 
 const { handlePcbBoardOutlineManageTask } = require('../src/mcp/pcb-board-outline-manage-handler.ts');
+const { comparePcbPolygonSource } = require('../src/mcp/pcb-polygon-equivalence.ts');
 const { requiresHostRestartForResult } = require('../src/runtime/task-timeout.ts');
 const { toSerializableAsync } = require('../src/utils.ts');
 
@@ -82,6 +83,25 @@ function api(kind) {
 }
 
 async function main() {
+	const curve = [0, 0, 'L', 10, 0, 'ARC', 90, 10, 10, 'C', 6, 12, 0, 6, 0, 0];
+	const reversedCurve = [0, 0, 'C', 0, 6, 6, 12, 10, 10, 'ARC', -90, 10, 0, 'L', 0, 0];
+	assert.equal(comparePcbPolygonSource(reversedCurve, curve).equivalent, true, 'reverse winding also reverses arc angle and cubic controls');
+	assert.equal(comparePcbPolygonSource(reversedCurve, curve).reversed, true);
+	assert.equal(comparePcbPolygonSource([10, 0, 'ARC', 90, 10, 10, 'C', 6, 12, 0, 6, 0, 0, 'L', 10, 0], curve).equivalent, true, 'mixed contours may change their start edge');
+	const wrongArc = [...reversedCurve];
+	wrongArc[10] = 90;
+	assert.equal(comparePcbPolygonSource(wrongArc, curve).equivalent, false, 'reversed endpoints with an unchanged arc angle describe another arc');
+	const wrongControls = [...reversedCurve];
+	wrongControls.splice(3, 4, 6, 12, 0, 6);
+	assert.equal(comparePcbPolygonSource(wrongControls, curve).equivalent, false, 'reversing only curve endpoints changes the Bezier path');
+	assert.equal(comparePcbPolygonSource([0, 0, 'L', 10, 0, 10, 10, 0, 0], curve).equivalent, false, 'matching vertices do not allow replacing curves with straight edges');
+	assert.equal(comparePcbPolygonSource([0, 0, 'CARC', 90, 10, 10, 'L', 0, 0], [0, 0, 'ARC', 90, 10, 10, 'L', 0, 0]).equivalent, false, 'retain native arc command semantics');
+	assert.equal(comparePcbPolygonSource([0, 0, 'L', 10, 0, 10, 10, 0, 0], [0, 0, 'L', 10, 0, 10, 10]).equivalent, true, 'native Polygon closes the last edge automatically');
+	assert.equal(comparePcbPolygonSource([0, 0, 'L', 10, 0, 10, 10, 0, 0], [0, 0, 'L', 10, 0, 10, 10], 'polyline').equivalent, false, 'a polyline closing edge changes an open path');
+	assert.equal(comparePcbPolygonSource(['R', 0, 0, 10, 10, 0.00005, 0], ['R', 0, 0, 10, 10, 0, 0]).equivalent, false, 'coordinate precision must not weaken angular verification');
+	assert.equal(comparePcbPolygonSource(['CIRCLE', 1.2346, 5.6789, 10], ['CIRCLE', 1.23456, 5.67891, 10]).equivalent, true);
+	assert.equal(comparePcbPolygonSource(['CIRCLE', 0, 0, 10.02], ['CIRCLE', 0, 0, 10]).equivalent, false);
+	assert.equal(comparePcbPolygonSource([0, 0, 'L', 10.0001, 0, 10, 10, 0, 0], [0, 0, 'L', 10, 0, 10, 10, 0, 0]).equivalent, false, 'a full precision unit of displacement is outside the rounding tolerance');
 	for (let index = 0; index < 130; index++)
 		items.line.set(`outline-${index}`, state('line', `outline-${index}`));
 	items.line.set('copper-line', state('line', 'copper-line', { layer: 1, net: 'GND' }));
@@ -112,6 +132,40 @@ async function main() {
 	assert.equal(arc.primitive.interactiveMode, 2);
 	const polyline = await handlePcbBoardOutlineManageTask({ action: 'create', kind: 'polyline', polygonSource: source });
 	assert.deepEqual(polyline.primitive.polygonSource, source);
+	const closedSquare = [0, 0, 'L', 3937.008, 0, 3937.008, 3937.008, 0, 3937.008, 0, 0];
+	const reversedSquare = [0, 0, 'L', 0, 3937.008, 3937.008, 3937.008, 3937.008, 0, 0, 0];
+	const polygonFactory = globalThis.eda.pcb_MathPolygon.createPolygon;
+	globalThis.eda.pcb_MathPolygon.createPolygon = () => ({ getSource: () => [100, 0, 'L', 100, 100, 0, 0] });
+	const changedOpenPath = await handlePcbBoardOutlineManageTask({ action: 'create', kind: 'polyline', polygonSource: source });
+	assert.equal(changedOpenPath.ok, false, 'cycling an open L path replaces an actual edge and must fail');
+	assert.equal(changedOpenPath.reason, 'create_readback_mismatch');
+	assert.equal(changedOpenPath.requestedMismatches[0].field, 'polygonSource');
+	const reversedOpenSource = [100, 100, 'L', 100, 0, 0, 0];
+	globalThis.eda.pcb_MathPolygon.createPolygon = () => ({ getSource: () => reversedOpenSource });
+	const reversedOpenPath = await handlePcbBoardOutlineManageTask({ action: 'create', kind: 'polyline', polygonSource: source });
+	assert.equal(reversedOpenPath.ok, true, 'reversing the complete open path preserves both real edges');
+	assert.equal(reversedOpenPath.normalization.reversed, true);
+	assert.deepEqual(reversedOpenPath.primitive.polygonSource, reversedOpenSource);
+	globalThis.eda.pcb_MathPolygon.createPolygon = polygonFactory;
+	globalThis.eda.pcb_MathPolygon.createPolygon = () => ({ getSource: () => reversedSquare });
+	const windingNormalized = await handlePcbBoardOutlineManageTask({ action: 'create', kind: 'polyline', polygonSource: closedSquare, lineWidth: 1 });
+	assert.equal(windingNormalized.verified, true, 'native reversed winding is the same board outline');
+	assert.equal(windingNormalized.ok, true);
+	assert.deepEqual(windingNormalized.primitive.polygonSource, reversedSquare);
+	assert.equal(windingNormalized.normalization.reversed, true);
+	assert.equal(requiresHostRestartForResult(path, {}, windingNormalized), false);
+	const shiftedSquare = [3937.008, 3937.008, 'L', 0, 3937.008, 0, 0, 3937.008, 0, 3937.008, 3937.008];
+	globalThis.eda.pcb_MathPolygon.createPolygon = () => ({ getSource: () => shiftedSquare });
+	const shiftNormalized = await handlePcbBoardOutlineManageTask({ action: 'modify', kind: 'polyline', primitiveId: windingNormalized.primitiveId, property: { polygonSource: closedSquare } });
+	assert.equal(shiftNormalized.verified, true, 'a shifted contour start must not quarantine the write');
+	assert.equal(shiftNormalized.normalization.cyclicShift, 2);
+	assert.deepEqual((await toSerializableAsync(shiftNormalized)).primitive.polygonSource, shiftedSquare);
+	const crossedSquare = [0, 0, 'L', 3937.008, 3937.008, 0, 3937.008, 3937.008, 0, 0, 0];
+	globalThis.eda.pcb_MathPolygon.createPolygon = () => ({ getSource: () => crossedSquare });
+	const crossedOutline = await handlePcbBoardOutlineManageTask({ action: 'create', kind: 'polyline', polygonSource: closedSquare });
+	assert.equal(crossedOutline.verified, false, 'same vertices joined by different edges are not equivalent');
+	assert.equal(crossedOutline.reason, 'create_readback_mismatch');
+	globalThis.eda.pcb_MathPolygon.createPolygon = polygonFactory;
 	const modified = await handlePcbBoardOutlineManageTask({ action: 'modify', kind: 'polyline', primitiveId: polyline.primitiveId, property: { polygonSource: [0, 0, 'L', 200, 0], primitiveLock: true } });
 	assert.deepEqual(modified.primitive.polygonSource, [0, 0, 'L', 200, 0]);
 	assert.equal(modified.primitive.primitiveLock, true);

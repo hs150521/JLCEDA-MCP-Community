@@ -1588,7 +1588,7 @@ try {
   unverifiedWriteServer.close();
   unverifiedWriteServer = undefined;
 
-  for (const [action, nativeCallSettled] of [['wire_create', true], ['netport_create', true], ['netport_move', true], ['wire_create', false], ['netlabel_place', false], ['modify', true], ['delete', false]]) {
+  for (const [action, nativeCallSettled] of [['wire_create', true], ['netport_create', true], ['netport_move', true], ['wire_create', false], ['netlabel_place', false], ['modify', true], ['delete', false], ['pin_modify', true], ['pin_modify', false]]) {
     const connectivityRecoveryPort = await reservePort();
     const connectivityRecoveryServer = new EdaBridgeServer(connectivityRecoveryPort);
     let oldClient;
@@ -1613,10 +1613,10 @@ try {
           result: { ok: false, action, commitUnknown: true, nativeCallSettled },
         }));
       });
-      const writePath = action === 'netlabel_place' ? '/bridge/jlceda/netlabel/place'
+      const writePath = action === 'pin_modify' ? '/bridge/jlceda/api/invoke' : action === 'netlabel_place' ? '/bridge/jlceda/netlabel/place'
         : action === 'modify' || action === 'delete' ? '/bridge/jlceda/schematic/wire-manage'
         : '/bridge/jlceda/schematic/connectivity';
-      const writePayload = action === 'netlabel_place'
+      const writePayload = action === 'pin_modify' ? { apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] } : action === 'netlabel_place'
         ? { placements: [{ componentId: 'component-1', pinIdentifier: '1', netName: 'SIG' }] }
         : action === 'modify' ? { action, primitiveId: 'wire-1', property: { color: '#00AA00' } }
         : action === 'delete' ? { action, primitiveId: 'wire-1' }
@@ -1647,7 +1647,13 @@ try {
         netFlagCount: 1, netFlags: [{ primitiveId: 'flag-1', net: 'SIG', x: 20, y: 0 }],
         netLabelCount: 0, netLabels: [],
       };
-      const semantic = { componentCount: 0, networkCount: 0, components: [], networks: [] };
+      const semantic = action === 'pin_modify' ? { componentCount: 1, networkCount: 0, networks: [], components: [
+        { componentInstanceId: 'U1', pins: [
+          { pinId: 'pin-16', pinNumber: '16', x: 530, y: 330, rotation: 180, noConnected: false, hasNoConnectMark: false },
+          // schematic_read normalizes an available sibling NC getter returning undefined to false.
+          { pinId: 'pin-17', pinNumber: '17', x: 540, y: 330, rotation: 180, noConnected: false, hasNoConnectMark: false },
+        ] },
+      ] } : { componentCount: 0, networkCount: 0, components: [], networks: [] };
       let readbackResult = { ok: true, schematicCircuitSnapshot: JSON.stringify(semantic), connectivityPrimitivesSnapshot: JSON.stringify(primitives) };
       attachTaskResponder(freshClient.socket, `connectivity-${action}-fresh`, message => message.path === '/bridge/jlceda/context'
         ? {
@@ -1684,6 +1690,21 @@ try {
       readbackResult = { ok: true, schematicCircuitSnapshot: JSON.stringify(semantic), connectivityPrimitivesSnapshot: JSON.stringify({ ...primitives, pageUuid: 'other-page' }) };
       await assert.rejects(connectivityRecoveryServer.request('/bridge/admin/recover-client', readbackRequest, 2000), /from another page/);
       await assert.rejects(connectivityRecoveryServer.request(writePath, writePayload, 2000), /writes are blocked pending recovery readback/);
+      if (action === 'pin_modify') {
+        assert.equal(diagnostic.targetSchematicPinPrimitiveId, 'pin-16');
+        const badGeometry = structuredClone(semantic);
+        badGeometry.components[0].pins[1].y = null;
+        readbackResult = { ok: true, schematicCircuitSnapshot: JSON.stringify(badGeometry), connectivityPrimitivesSnapshot: JSON.stringify(primitives) };
+        await assert.rejects(connectivityRecoveryServer.request('/bridge/admin/recover-client', readbackRequest, 2000), /component pin state was incomplete/);
+        const badNc = structuredClone(semantic);
+        badNc.components[0].pins[0].noConnected = null;
+        readbackResult = { ok: true, schematicCircuitSnapshot: JSON.stringify(badNc), connectivityPrimitivesSnapshot: JSON.stringify(primitives) };
+        await assert.rejects(connectivityRecoveryServer.request('/bridge/admin/recover-client', readbackRequest, 2000), /component pin state was incomplete/);
+        const missingPin = structuredClone(semantic);
+        missingPin.components[0].pins.shift();
+        readbackResult = { ok: true, schematicCircuitSnapshot: JSON.stringify(missingPin), connectivityPrimitivesSnapshot: JSON.stringify(primitives) };
+        await assert.rejects(connectivityRecoveryServer.request('/bridge/admin/recover-client', readbackRequest, 2000), /target pin was absent/);
+      }
       readbackResult = { ok: true, schematicCircuitSnapshot: JSON.stringify(semantic), connectivityPrimitivesSnapshot: JSON.stringify(primitives) };
       const verified = await connectivityRecoveryServer.request('/bridge/admin/recover-client', readbackRequest, 2000);
       assert.equal(verified.readbackVerified, true);

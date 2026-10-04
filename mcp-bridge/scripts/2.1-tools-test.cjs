@@ -1323,6 +1323,35 @@ async function main() {
 	assert.equal(pagedDeviceSearch.total, undefined);
 	assert.equal(pagedDeviceSearch.totalKnown, false);
 	assert.equal(pagedDeviceSearch.mayHaveMore, true);
+	// #72：宿主忽略 name 时，不得把连接器当作精确电阻匹配。
+	const savedDeviceSearch = globalThis.eda.lib_Device.search;
+	const savedDeviceProperties = globalThis.eda.lib_Device.searchByProperties;
+	const resistorName = '0603WAF6202T5E';
+	globalThis.eda.lib_Device.searchByProperties = async () => [{ uuid: 'connector', name: '842-044-521-102' }];
+	globalThis.eda.lib_Device.search = async (keyword, libraryUuid, classification, symbolType, limit, page) => {
+		assert.deepEqual([keyword, libraryUuid, classification, symbolType, limit, page], [resistorName, 'system-library-1', undefined, undefined, 3, 2]);
+		return [{ uuid: 'prefix', name: `${resistorName}-ALT` }, { uuid: 'resistor', name: resistorName, supplierId: 'C23221' }, { uuid: 'other-supplier', name: resistorName, supplierId: 'C00000' }];
+	};
+	const exactNameQuery = { kind: 'device', properties: { name: resistorName }, libraryUuid: 'system-library-1', limit: 3, page: 2 };
+	const exactNameSearch = await handleLibrarySearchTask(exactNameQuery);
+	assert.deepEqual(exactNameSearch.items.map(item => item.uuid), ['resistor', 'other-supplier']);
+	assert.equal(exactNameSearch.exactNameVerified, true);
+	assert.equal(exactNameSearch.searchImplementation, 'keyword_name_fallback');
+	assert.equal(exactNameSearch.mayHaveMore, true, 'pagination uses the native candidate page, not the filtered hit count');
+	const combinedNameSearch = await handleLibrarySearchTask({ ...exactNameQuery, properties: { name: resistorName, supplierId: 'C23221' } });
+	assert.deepEqual(combinedNameSearch.items.map(item => item.uuid), ['resistor'], 'keyword fallback must also verify requested extra properties');
+	globalThis.eda.lib_Device.search = async () => [{ uuid: 'connector', name: '842-044-521-102' }];
+	assert.equal((await handleLibrarySearchTask(exactNameQuery)).returned, 0);
+	globalThis.eda.lib_Device.searchByProperties = async () => [{ uuid: 'resistor', name: resistorName }, { uuid: 'connector', name: '842-044-521-102' }];
+	globalThis.eda.lib_Device.search = async () => {
+		throw new Error('Native exact name matches must not call keyword fallback');
+	};
+	const nativeNameSearch = await handleLibrarySearchTask(exactNameQuery);
+	assert.deepEqual(nativeNameSearch.items.map(item => item.uuid), ['resistor']);
+	assert.equal(nativeNameSearch.searchImplementation, 'native_properties');
+	assert.equal(nativeNameSearch.excludedNameMismatches, 1);
+	globalThis.eda.lib_Device.search = savedDeviceSearch;
+	globalThis.eda.lib_Device.searchByProperties = savedDeviceProperties;
 	const classifications = await handleLibraryClassificationTask({ kind: 'symbol', libraryUuid: 'system-library-1' });
 	assert.equal(classifications.total, 2);
 	assert.equal(classifications.tree[0].children[0].name, 'Operational');
@@ -1421,6 +1450,38 @@ async function main() {
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'open_database', unit: 'mil' }), /unit must be one of: mm, inch/);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'pdf', template: 'ignored' }), /template is not supported/);
 	await assert.rejects(() => handleManufactureExportTask({ domain: 'pcb', kind: 'bom', unit: 'mm' }), /unit is not supported/);
+	// #75：只验证选中导出种类的参数，CSV/XLSX 与图像格式互不冲突。
+	const savedPcbManufacture = globalThis.eda.pcb_ManufactureData;
+	const savedSchManufacture = globalThis.eda.sch_ManufactureData;
+	let lastExportCall;
+	const fakeExport = method => async (...args) => {
+		lastExportCall = { method, args };
+		return Object.assign(new Blob(['Ref,Value\nR1,10k'], { type: 'text/csv' }), { name: 'Export_BOM.csv' });
+	};
+	globalThis.eda.pcb_ManufactureData = { getBomFile: fakeExport('pcb_BOM'), get3DFile: fakeExport('pcb_3d'), get3DShellFile: fakeExport('pcb_3d_shell') };
+	globalThis.eda.sch_ManufactureData = { getBomFile: fakeExport('sch_BOM'), getExportDocumentFile: fakeExport('sch_document'), getNetlistFile: fakeExport('sch_netlist'), getSimulationNetlistFile: fakeExport('sch_simulation') };
+	for (const domain of ['schematic', 'pcb']) {
+		for (const fileType of ['csv', 'xlsx']) {
+			const bomResult = await handleManufactureExportTask({ domain, kind: 'bom', fileType, includeData: true });
+			assert.equal(bomResult.ok, true);
+			assert.equal(lastExportCall.args[1], fileType);
+			assert.equal(globalThis.atob(bomResult.file.dataBase64), 'Ref,Value\nR1,10k');
+		}
+		await assert.rejects(handleManufactureExportTask({ domain, kind: 'bom', fileType: 'PDF' }), /xlsx, csv/);
+	}
+	for (const fileType of ['PDF', 'PNG', 'SVG']) {
+		assert.equal((await handleManufactureExportTask({ domain: 'schematic', kind: 'document', fileType })).ok, true);
+		assert.equal(lastExportCall.args[1], fileType);
+	}
+	await assert.rejects(handleManufactureExportTask({ domain: 'schematic', kind: 'document', fileType: 'csv' }), /PDF, PNG, SVG/);
+	for (const [kind, netlistType, method] of [['netlist', 'JLCEDA', 'sch_netlist'], ['simulation_netlist', 'Ngspice', 'sch_simulation']]) {
+		assert.equal((await handleManufactureExportTask({ domain: 'schematic', kind, netlistType })).ok, true);
+		assert.deepEqual(lastExportCall, { method, args: [undefined, netlistType] });
+	}
+	assert.equal((await handleManufactureExportTask({ domain: 'pcb', kind: '3d', fileType: 'step' })).ok, true);
+	assert.equal((await handleManufactureExportTask({ domain: 'pcb', kind: '3d_shell', fileType: 'stl' })).ok, true);
+	globalThis.eda.pcb_ManufactureData = savedPcbManufacture;
+	globalThis.eda.sch_ManufactureData = savedSchManufacture;
 	assert.equal(routingCalls, 0);
 	console.log('2.1 tool handler tests passed');
 }

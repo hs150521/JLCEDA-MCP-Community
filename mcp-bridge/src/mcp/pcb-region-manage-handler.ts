@@ -1,4 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { comparePcbPolygonSource } from './pcb-polygon-equivalence.ts';
 
 type Action = 'read' | 'create' | 'modify' | 'delete';
 type PolygonSource = Array<'L' | 'ARC' | 'CARC' | 'C' | 'R' | 'CIRCLE' | number>;
@@ -185,24 +186,20 @@ function createPolygon(runtime: Record<string, unknown>, source: PolygonSource):
 	return polygon;
 }
 
-function samePolygonSource(actual: RegionPolygonSource, wanted: RegionPolygonSource): boolean {
-	if (Array.isArray(actual[0]) !== Array.isArray(wanted[0])) {
-		const nested = Array.isArray(actual[0]) ? actual as PolygonSource[] : wanted as PolygonSource[];
-		const flat = Array.isArray(actual[0]) ? wanted as PolygonSource : actual as PolygonSource;
-		return nested.length === 1 && samePolygonSource(nested[0], flat);
-	}
-	if (actual.length !== wanted.length)
-		return false;
-	return actual.every((item, index) => {
-		const expected = wanted[index];
-		if (Array.isArray(item) || Array.isArray(expected)) {
-			return Array.isArray(item) && Array.isArray(expected)
-				&& samePolygonSource(item as PolygonSource, expected as PolygonSource);
-		}
-		return typeof item === 'number' && typeof expected === 'number'
-			? Math.abs(item - expected) <= 1e-6
-			: item === expected;
-	});
+function clonePolygonSource(source: RegionPolygonSource): RegionPolygonSource {
+	return Array.isArray(source[0])
+		? preserveBoundedArray((source as PolygonSource[]).map(contour => preserveBoundedArray([...contour])))
+		: preserveBoundedArray([...source] as PolygonSource);
+}
+
+function polygonNormalization(actual: RegionState, requested: Record<string, unknown>): Record<string, unknown> {
+	if (requested.polygonSource === undefined)
+		return {};
+	const comparison = comparePcbPolygonSource(actual.polygonSource, requested.polygonSource);
+	if (!comparison.equivalent || !comparison.normalized)
+		return {};
+	const { equivalent: _equivalent, normalized: _normalized, ...diagnostic } = comparison;
+	return { normalization: { field: 'polygonSource', ...diagnostic } };
 }
 
 function matchesRequested(actual: RegionState, requested: Record<string, unknown>): boolean {
@@ -213,7 +210,7 @@ function matchesRequested(actual: RegionState, requested: Record<string, unknown
 			return actual.ruleType.length === rules.length && rules.every(rule => actual.ruleType.includes(rule));
 		}
 		if (field === 'polygonSource') {
-			return samePolygonSource(actual.polygonSource, wanted as RegionPolygonSource);
+			return comparePcbPolygonSource(actual.polygonSource, wanted).equivalent;
 		}
 		return typeof observed === 'number' && typeof wanted === 'number'
 			? Math.abs(observed - wanted) <= 1e-6
@@ -292,7 +289,10 @@ export async function handlePcbRegionManageTask(payload: unknown): Promise<unkno
 				throw new Error('EDA read back multiple new PCB regions after one creation request.');
 			const created = added[0];
 			const requestedMismatches = Object.entries(requested!).filter(([field, expected]) =>
-				!matchesRequested(created, { [field]: expected })).map(([field, expected]) => ({ field, expected, actual: created[field as keyof RegionState] }));
+				!matchesRequested(created, { [field]: expected })).map(([field, expected]) => {
+				const actual = created[field as keyof RegionState];
+				return { field, expected, actual: field === 'polygonSource' ? clonePolygonSource(created.polygonSource) : Array.isArray(actual) ? preserveBoundedArray([...actual]) : actual };
+			});
 			if (requestedMismatches.length) {
 				return {
 					ok: false,
@@ -308,7 +308,7 @@ export async function handlePcbRegionManageTask(payload: unknown): Promise<unkno
 					requestedMismatches,
 				};
 			}
-			return { ok: true, action, scope: SCOPE, pageUuid: currentPage, primitiveId: created.primitiveId, region: created, verified: true };
+			return { ok: true, action, scope: SCOPE, pageUuid: currentPage, primitiveId: created.primitiveId, region: created, verified: true, ...polygonNormalization(created, requested!) };
 		}
 		const observed = await getOne(runtime, primitiveId!, currentPage);
 		if (action === 'modify') {
@@ -331,7 +331,7 @@ export async function handlePcbRegionManageTask(payload: unknown): Promise<unkno
 					verified: false,
 				};
 			}
-			return { ok: true, action, scope: SCOPE, pageUuid: currentPage, primitiveId, region: observed, verified: true };
+			return { ok: true, action, scope: SCOPE, pageUuid: currentPage, primitiveId, region: observed, verified: true, ...polygonNormalization(observed, requested!) };
 		}
 		if (observed !== undefined)
 			return { ok: false, action, scope: SCOPE, pageUuid: currentPage, primitiveId, reason: 'region_still_present', before, after: observed, applied: JSON.stringify(before) !== JSON.stringify(observed), verified: false };
