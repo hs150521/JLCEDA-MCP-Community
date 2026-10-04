@@ -452,6 +452,15 @@ for (const definition of definitions) {
   assertStrictParentDeclaresBranchProperties(definition.inputSchema, `tool:${definition.name}.inputSchema`);
 }
 
+const footprintDefinition = definitions.find((definition) => definition.name === 'footprint_read');
+assert.ok(footprintDefinition);
+const footprintSchema = z.fromJSONSchema(footprintDefinition.inputSchema);
+assert.equal(footprintSchema.safeParse({}).success, true);
+assert.equal(footprintSchema.safeParse({ timeoutMs: 120000 }).success, true);
+assert.equal(footprintSchema.safeParse({ sections: ['pads'] }).success, false);
+await dispatcher.dispatch({ name: 'footprint_read', arguments: {} });
+assert.deepEqual(calls.at(-1), { path: '/bridge/jlceda/footprint/read', payload: {}, timeoutMs: 62000 });
+
 const workspaceDefinition = definitions.find((definition) => definition.name === 'workspace_query');
 assert.ok(workspaceDefinition);
 const workspaceSchema = z.fromJSONSchema(workspaceDefinition.inputSchema);

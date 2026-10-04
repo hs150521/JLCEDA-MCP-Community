@@ -25,6 +25,7 @@ export interface BridgeOperation {
 
 interface BridgeContract {
   contractVersion: string;
+  footprintApi: { readOnlyApiFullNames: string[]; mutatingApiFullNames: string[] };
   protocol: { version: number; clientMessages: Record<string, MessageShape>; serverMessages: Record<string, MessageShape> };
   timeoutPolicies: Record<TimeoutPolicyName, TimeoutPolicy>;
   operations: BridgeOperation[];
@@ -65,6 +66,15 @@ export const BRIDGE_ROUTES = Object.freeze(Object.fromEntries(
 const operationByPath = new Map(BRIDGE_OPERATIONS.map(operation => [operation.path, operation]));
 const operationByTool = new Map(BRIDGE_CONTRACT.operations.filter(operation => operation.toolName).map(operation => [operation.toolName!, operation]));
 
+const footprintReadApis = new Set(BRIDGE_CONTRACT.footprintApi.readOnlyApiFullNames.map(name => name.toLowerCase()));
+const footprintWriteApis = new Set(BRIDGE_CONTRACT.footprintApi.mutatingApiFullNames.map(name => name.toLowerCase()));
+
+export function footprintApiAccess(apiFullName: unknown): 'read' | 'write' | undefined {
+  if (typeof apiFullName !== 'string') return undefined;
+  const name = apiFullName.trim().toLowerCase();
+  return footprintReadApis.has(name) ? 'read' : footprintWriteApis.has(name) ? 'write' : undefined;
+}
+
 export function operationForPath(path: string): BridgeOperation | undefined {
   return operationByPath.get(path);
 }
@@ -102,6 +112,8 @@ export function bridgeTimeoutForTool(toolName: string, payload: Record<string, u
 }
 
 export function isReadOnlyBridgeRequest(path: string, payload: unknown): boolean {
+  if (path === '/bridge/jlceda/api/invoke' && isRecord(payload) && footprintApiAccess(payload.apiFullName) === 'read')
+    return true;
   const operation = operationForPath(path);
   if (operation?.readOnlyIfNoArgsApiFullNames || operation?.readOnlyIfCurrentPageArgsApiFullNames) {
     if (!isRecord(payload)) return false;
@@ -141,9 +153,9 @@ function fieldMatches(kind: FieldKind, value: unknown): boolean {
     case 'context': {
       if (value === undefined) return true;
       if (!isRecord(value)) return false;
-      const stringFields = ['documentUuid', 'tabId', 'projectUuid', 'projectName', 'pageUuid', 'pageName'];
+      const stringFields = ['documentUuid', 'tabId', 'projectUuid', 'projectName', 'pageUuid', 'pageName', 'libraryUuid'];
       return (value.documentType === undefined || (typeof value.documentType === 'number' && Number.isFinite(value.documentType)))
-        && (value.pageKind === undefined || value.pageKind === 'schematic' || value.pageKind === 'pcb')
+        && (value.pageKind === undefined || value.pageKind === 'schematic' || value.pageKind === 'pcb' || value.pageKind === 'footprint')
         && stringFields.every(field => value[field] === undefined || typeof value[field] === 'string');
     }
     case 'debug-switch': return isRecord(value) && typeof value.enableSystemLog === 'boolean' && typeof value.enableConnectionList === 'boolean';

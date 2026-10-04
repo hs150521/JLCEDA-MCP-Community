@@ -10,6 +10,17 @@ function createToolInputSchema(
   // tool advertisement. Keep the canonical JSON definition unchanged, but
   // express this one conditional contract as a Zod union at registration time.
   if (name === 'bridge_recover_client') {
+    const properties = inputSchema.properties as Record<string, unknown> | undefined;
+    const readbackDefinition = properties?.readbackPath as { enum?: unknown; default?: unknown } | undefined;
+    const readbackPaths = readbackDefinition?.enum;
+    const readbackDefault = readbackDefinition?.default;
+    if (!Array.isArray(readbackPaths) || readbackPaths.length === 0
+      || readbackPaths.some(path => typeof path !== 'string' || !path.trim())) {
+      throw new Error('bridge_recover_client readbackPath enum must contain non-empty strings.');
+    }
+    if (typeof readbackDefault !== 'string' || !readbackPaths.includes(readbackDefault)) {
+      throw new Error('bridge_recover_client readbackPath default must belong to its enum.');
+    }
     const common = {
       confirm: z.literal(true),
       timeoutMs: z.number().int().min(5000).max(120000).default(60000),
@@ -21,23 +32,7 @@ function createToolInputSchema(
       expectedPageUuid: z.string().min(1).optional(),
       resolution: z.enum(['applied', 'cancelled']).optional(),
       hostRestartConfirmed: z.literal(true).optional(),
-      readbackPath: z.enum([
-        '/bridge/jlceda/context',
-        '/bridge/jlceda/api/invoke',
-        '/bridge/jlceda/schematic/read',
-        '/bridge/jlceda/schematic/component-edit',
-        '/bridge/jlceda/schematic/text-manage',
-        '/bridge/jlceda/pcb/component-edit',
-        '/bridge/jlceda/pcb/documents-manage',
-        '/bridge/jlceda/pcb/pour-manage',
-        '/bridge/jlceda/pcb/region-manage',
-        '/bridge/jlceda/pcb/text-manage',
-        '/bridge/jlceda/pcb/layer-manage',
-        '/bridge/jlceda/schematic/review',
-        '/bridge/jlceda/schematic/layout-check',
-        '/bridge/jlceda/pcb/drc-check',
-        '/bridge/jlceda/schematic/drc-check',
-      ]).default('/bridge/jlceda/context'),
+      readbackPath: z.enum(readbackPaths as [string, ...string[]]).default(readbackDefault),
       readbackPayload: z.record(z.string(), z.unknown()).default({}),
     };
     const recover = z.object({ ...common, action: z.literal('recover').default('recover'), requestId: z.string().min(1) }).strict();

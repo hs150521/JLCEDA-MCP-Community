@@ -1,5 +1,52 @@
 {
 	"contractVersion": "2.3.0",
+	"footprintApi": {
+		"readOnlyApiFullNames": [
+			"eda.pcb_PrimitivePad.get",
+			"eda.pcb_PrimitivePad.getAll",
+			"eda.pcb_PrimitivePad.getAllPrimitiveId",
+			"eda.pcb_PrimitiveVia.get",
+			"eda.pcb_PrimitiveVia.getAll",
+			"eda.pcb_PrimitiveVia.getAllPrimitiveId",
+			"eda.pcb_PrimitiveLine.get",
+			"eda.pcb_PrimitiveLine.getAll",
+			"eda.pcb_PrimitiveLine.getAllPrimitiveId",
+			"eda.pcb_PrimitiveArc.get",
+			"eda.pcb_PrimitiveArc.getAll",
+			"eda.pcb_PrimitiveArc.getAllPrimitiveId",
+			"eda.pcb_PrimitivePolyline.get",
+			"eda.pcb_PrimitivePolyline.getAll",
+			"eda.pcb_PrimitivePolyline.getAllPrimitiveId",
+			"eda.pcb_PrimitiveString.get",
+			"eda.pcb_PrimitiveString.getAll",
+			"eda.pcb_PrimitiveString.getAllPrimitiveId",
+			"eda.pcb_PrimitiveAttribute.get",
+			"eda.pcb_PrimitiveAttribute.getAll",
+			"eda.pcb_PrimitiveAttribute.getAllPrimitiveId"
+		],
+		"mutatingApiFullNames": [
+			"eda.pcb_PrimitivePad.create",
+			"eda.pcb_PrimitivePad.modify",
+			"eda.pcb_PrimitivePad.delete",
+			"eda.pcb_PrimitiveVia.create",
+			"eda.pcb_PrimitiveVia.modify",
+			"eda.pcb_PrimitiveVia.delete",
+			"eda.pcb_PrimitiveLine.create",
+			"eda.pcb_PrimitiveLine.modify",
+			"eda.pcb_PrimitiveLine.delete",
+			"eda.pcb_PrimitiveArc.create",
+			"eda.pcb_PrimitiveArc.modify",
+			"eda.pcb_PrimitiveArc.delete",
+			"eda.pcb_PrimitivePolyline.create",
+			"eda.pcb_PrimitivePolyline.modify",
+			"eda.pcb_PrimitivePolyline.delete",
+			"eda.pcb_PrimitiveString.create",
+			"eda.pcb_PrimitiveString.modify",
+			"eda.pcb_PrimitiveString.delete",
+			"eda.pcb_PrimitiveAttribute.modify",
+			"eda.pcb_PrimitiveAttribute.delete"
+		]
+	},
 	"protocol": {
 		"version": 1,
 		"clientMessages": {
@@ -320,6 +367,13 @@
 			"path": "/bridge/jlceda/netlabel/modify",
 			"owner": "bridge",
 			"timeoutPolicy": "default"
+		},
+		{
+			"toolName": "footprint_read",
+			"path": "/bridge/jlceda/footprint/read",
+			"owner": "bridge",
+			"timeoutPolicy": "extended-read",
+			"readOnly": true
 		},
 		{
 			"toolName": "pcb_read",

@@ -14,6 +14,7 @@ function deferred() {
 
 let activeTransport;
 let nextConnectGate;
+let nextReportReadyError;
 const transportReady = deferred();
 class MockBridgeTransport {
 	constructor(_url, _socketId, clientId, _version, _context, callbacks) {
@@ -69,10 +70,18 @@ class MockBridgeTransport {
 	}
 
 	refreshServerActivity() {}
-	reportReady() { this.ready = true; }
+	reportReady() {
+		if (nextReportReadyError) {
+			this.readyError = nextReportReadyError;
+			nextReportReadyError = undefined;
+			throw this.readyError;
+		}
+		this.ready = true;
+	}
+
 	reportSelectionProbeAck(probeId) { this.probeAcks.push(probeId); }
 	updateContext() {}
-	close() {}
+	close() { this.closed = true; }
 }
 
 // Keep the real runtime, route registry, and API handler; replace only the socket transport.
@@ -90,6 +99,8 @@ async function waitUntil(predicate, timeoutMs = 10_000) {
 }
 
 async function main() {
+	const headerMenus = require('../extension.json').headerMenus;
+	assert.deepEqual(headerMenus.footprint, headerMenus.pcb, 'footprint editors must expose the same MCP actions');
 	const deleteEntered = deferred();
 	const finishDelete = deferred();
 	let idReads = 0;
@@ -101,6 +112,7 @@ async function main() {
 	let currentSchematicPage = 'schematic-one';
 	let schematicDocumentOverride;
 	let gatedDocumentRead;
+	let documentReadHook;
 	let hangingDocumentReads = 0;
 	let hangingEditablePageReads = false;
 	let hungEditableGetterCalls = 0;
@@ -114,6 +126,7 @@ async function main() {
 		sys_Message: { showToastMessage() {} },
 		dmt_SelectControl: {
 			async getCurrentDocumentInfo() {
+				documentReadHook?.();
 				if (hangingDocumentReads > 0) {
 					hangingDocumentReads -= 1;
 					return new Promise(() => {});
@@ -283,6 +296,41 @@ async function main() {
 		assert.equal(deleteCalls, 0, 'the new page must not receive the old page deletion');
 		assert.equal(idReads, 0);
 		currentSchematicPage = 'schematic-one';
+		const rawCreate = { apiFullName: 'eda.sch_PrimitiveComponent.create', args: [{ libraryType: '2', uuid: 'symbol', libraryUuid: 'system' }, 100, 200] };
+		transport.afterStarted = (requestId) => {
+			if (requestId === 'page-switch-before-create')
+				currentSchematicPage = 'schematic-two';
+		};
+		submit('page-switch-before-create', { ...rawCreate, expectedSchematicCreatePageUuid: 'schematic-two' });
+		const switchedBeforeCreate = await transport.resultFor('page-switch-before-create');
+		assert.match(switchedBeforeCreate.error.message, /创建前原理图图页已切换/);
+		assert.equal(transport.startedContexts.get('page-switch-before-create').pageUuid, 'schematic-one');
+		assert.equal(secondWriteCalls, 0, 'runtime must bind raw creation to its execution page');
+		currentSchematicPage = 'schematic-one';
+		let createDocumentReads = 0;
+		transport.afterStarted = (requestId) => {
+			if (requestId !== 'lease-change-before-create')
+				return;
+			documentReadHook = () => {
+				if (++createDocumentReads === 3) {
+					transport.callbacks.onRoleChanged({
+						type: 'bridge/role',
+						clientId: transport.clientId,
+						activeClientId: transport.clientId,
+						role: 'active',
+						leaseTerm: 5,
+					});
+				}
+			};
+		};
+		submit('lease-change-before-create', rawCreate);
+		const leaseChangedBeforeCreate = await transport.resultFor('lease-change-before-create');
+		assert.match(leaseChangedBeforeCreate.error.message, /lease changed before the native mutation/);
+		assert.equal(createDocumentReads, 3, 'lease changes during the final identity read after the baseline');
+		assert.equal(secondWriteCalls, 0, 'the final native guard must prevent the raw create');
+		documentReadHook = undefined;
+		submittedLease = 5;
+		readCalls = 0;
 		transport.afterStarted = undefined;
 		submit('uncertain-delete', { apiFullName: 'eda.sch_PrimitiveComponent.delete', args: ['to-delete'] });
 		await deleteEntered.promise;
@@ -370,7 +418,20 @@ async function main() {
 		assert.equal(activeTransport, newerConnectingTransport, 'an old context timeout must not clear the newer attempt or start a third connection');
 		newConnectGate.release.resolve();
 		await waitUntil(() => newerConnectingTransport.ready, 2000);
-		process.stdout.write('Bridge context timeout and queue barrier tests passed\n');
+		nextReportReadyError = new Error('WebSocket is not open');
+		newerConnectingTransport.callbacks.onLost('Server restarted');
+		await waitUntil(() => activeTransport !== newerConnectingTransport && activeTransport.readyError, 5000);
+		const failedReadyTransport = activeTransport;
+		assert.equal(failedReadyTransport.closed, true, 'a failed ready send must close the adopted transport');
+		assert.equal(failedReadyTransport.ready, undefined);
+		await waitUntil(() => activeTransport !== failedReadyTransport && activeTransport.ready, 5000);
+		const recoveredTransport = activeTransport;
+		assert.equal(recoveredTransport.closed, undefined, 'automatic reconnect must produce a live transport');
+		failedReadyTransport.callbacks.onLost('late failure from the previous connection');
+		await new Promise(resolve => setTimeout(resolve, 100));
+		assert.equal(activeTransport, recoveredTransport, 'a stale loss callback must preserve the new connection');
+		assert.equal(recoveredTransport.closed, undefined);
+		process.stdout.write('Bridge context timeout, queue barrier, and ready-send reconnect tests passed\n');
 	}
 	finally {
 		oldConnectGate?.release.resolve();

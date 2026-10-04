@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [2.3.6] - 2026-10-05
+
+- 新增独立封装支持：公开 `footprint_read`，同步独立封装文档及 `libraryUuid` 上下文；默认提供 60 秒 Bridge 读取预算，可按需要延长至 120 秒。
+- 共享契约声明首批 21 个封装画布读取方法和 20 个写入方法，与 Bridge 路由及输入定义保持同步；Attribute.create 不开放。
+- 封装写入按 task-started 的真实执行身份分类，未知提交、超时和失联要求同库同文档七类完整 `footprint_read`。恢复允许新标签，但回读前后的库/文档/标签必须一致，错误库或不完整状态不会解除写入隔离。
+- 新增主连接/中继的三类未确认提交恢复及分发回归，更新 Agent 操作指引。正式 footprint_state 实机恢复返回 readbackVerified:true、writesRemainBlocked:false；个人封装原生源码写回后重开，5 控制图元完整 DTO 一致。最终 SMD x130 状态已保存并重开核对；#80 持久 PCB 子过孔删除继续开放。
+
+- 原理图 raw component.create 复用已有位号保护与完整 placement 恢复，保留正式设备/符号重载及原生参数。实机新件 BOM/PCB false 保留、9 旧件完整 DTO 不变；本次没有位号重排，U4/U5 恢复由本地 fixture 验证。
+- 配合 Bridge 的无孔 Pad DTO：原生空值或 NaN 孔旋转按不适用表示为 null，带孔状态仍要求有限孔旋转。完整恢复接受真实 `specialPad:[]`，同时要求焊盘或特殊焊盘至少有一个非空形状。
+- 配合 Bridge 七类 modify 等待一次 done 并重新读取；可确认的字段差异返回 fieldMismatches 和实际 after，按已知部分结果处理。SMD 80×60 尺寸请求未生效；Attribute 未进行非空 native 验证，首次 Arc 未登记原因未确定，EDA v4 未验证。
+- MCP SDK 的恢复 `readbackPath` enum/default 直接来自工具定义，补齐封装和工程目录回读入口；实际 stdio `tools/list`、`tools/call` 回归覆盖两个协议版本，未知路径仍拒绝。
+
 ## [2.3.5] - 2026-10-05
 
 - 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。

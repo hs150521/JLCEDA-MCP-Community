@@ -1,10 +1,16 @@
 # JLCEDA MCP 社区版
 
-当前源码版本：Bridge `2.3.5`，MCP Server `2.3.5`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+当前源码版本：Bridge `2.3.6`，MCP Server `2.3.6`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+
+2.3.6新增独立封装编辑器支持：以官方 `documentType:4` 和库文档身份建立 Bridge 连接，使用 `footprint_read` 完整读取七类图元，通过 `api_invoke` 操作首批 41 个封装画布 API。无孔 Pad 的空值或原生 NaN 孔旋转表示为 `null`，没有额外特殊轮廓的 `specialPad:[]` 原样保留。正式恢复、5 个控制图元的源码写回后重开，以及 Via/Line/Polyline/String/独立 Arc 新案例的创建、修改、删除已实测通过。Pad 尺寸请求未生效、首次 Arc 未登记原因未确定、Attribute 无非空实机样本，#80 和 EDA v4 仍未解决或未验证。完整证据、范围和限制见 [2.3.6 发布说明](docs/releases/v2.3.6.md)。
 
 2.3.4 新增 `board_setup`：传当前工程 UUID 和 `confirm:true`，可新建 Board 及关联的原理图、PCB；提供尚未关联 Board 的原理图 UUID 时，会创建 PCB 并将两者关联到新 Board。工具回读三个文档的归属，不会自动打开 PCB 或导入原理图变更。
 
-2.3.5 已通过发布验证：补充器件库引用解析、器件引脚实例修改、覆铜重建回退、PCB 图元等价回读、DRC 分页和结构化错误诊断。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 三种查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。全部 23 个 Issue 的证据、待验证项及未解决限制见 [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)。
+## 原理图 raw 创建位号保护
+
+`api_invoke eda.sch_PrimitiveComponent.create` 现在复用自动放置的当前页位号基线和恢复流程：恢复被原生创建重排的已有位号，保留 BOM 扩展属性并回读新图元。成功返回 `designatorChanges`、`restoredDesignators`；无法确认恢复时给出 `needsReview` 或未知提交诊断。未知提交沿用 placement 恢复，须读回原页完整 ID、位号及 BOM，不能仅查上下文。完整 DeviceItem、DeviceSearchItem、SymbolItem、SymbolSearchItem 与正式库引用保留原生重载和参数。实机新件的 BOM/PCB false 保留，已有 9 件完整 DTO 不变；本次未发生位号重排，`restoredDesignators:[]`。U4/U5 重排后的恢复、显式 false 参数与恢复超时由本地回归验证。
+
+稳定版 [2.3.5](https://github.com/hs150521/JLCEDA-MCP-Community/releases/tag/v2.3.5) 已发布：补充器件库引用解析、器件引脚实例修改、覆铜重建回退、PCB 图元等价回读、DRC 分页和结构化错误诊断。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，2.3.5 的发布实机验证使用匹配的 Server 与 Bridge。器件批量放置、NC 切换、名称筛选、NetPort Name 三种查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。全部 23 个 Issue 的证据、待验证项及未解决限制见 [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)。
 
 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
 
@@ -43,6 +49,7 @@ PCB `autoRouting` 指定网络时使用 `RoutingNets:["网络名"]`；返回值�
 - `editor_navigate`：在当前工程中按文档 UUID 打开原理图图页或 PCB；也可按已有 `tabId` 激活，并提供文档 UUID 供切换前后核对。成功时回读工程、文档、图页与标签 ID；结果不明时先按目标文档回读，不要盲目重复切换。
 - `pcb_drc_check`：分页读取 PCB 设计规则检查详情；支持 `offset`、`limit`，返回 `nextOffset`，并区分原生详情缺失与 Bridge 序列化截断。
 - `pcb_net_query`：按条件和数量限制查询当前 PCB 网络；精确网络图元过滤接受官方 `EPCB_PrimitiveType` 名称，由 Bridge 对 EDA 返回的图元筛选。
+- `footprint_read`：完整读取当前独立封装文档的 Pad、Via、Line、Arc、Polyline、String 和 Attribute，返回真实库/文档/标签身份及不截断状态；封装写入结果不明时用该快照受控恢复。
 - `pcb_read`：一次读取当前 PCB 页选定的语义部分；默认包含器件与网络，可选焊盘、布线、覆铜、板框、区域和文本，`sections:["all"]` 读取全部。所选部分返回不截断的图元数组，并在读取前后核对 PCB UUID。
 - `pcb_component_edit`：完整读取当前 PCB 器件，或按库引用放置、按 ID 修改层、坐标、角度、锁定状态、位号和 BOM 属性及删除单件。旋转按模 360 度比较；部分修改失败返回实际 `after`、`failureKind` 和字段差异，按诊断回读后再判断是否重试。
 - `pcb_pour_manage`：读取当前 PCB 的全部覆铜边框、填充关联和几何摘要，使用可序列化的轮廓源数组创建或修改单个覆铜边框，并可删除或明确重建填充。创建和修改后不会自动重建；若 EDA 自动调整优先级等字段，会明确返回请求值、写后状态及副作用。单件重建无目标填充、删除后仍有关联填充时也不会误报成功。结果不明时需在同一 PCB 回读全部边框和填充摘要。
@@ -92,10 +99,10 @@ PCB `import_changes` 返回 `pending_confirmation` 后，全局写入暂停，�
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.3.5
+       JLCEDA MCP Server 2.3.6
                   | 本机 WebSocket
                   v
-       MCP Bridge 社区版 2.3.5
+       MCP Bridge 社区版 2.3.6
                   | JLCEDA 扩展 API
                   v
            嘉立创 EDA 专业版
@@ -103,18 +110,18 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.3.5
+## 安装 2.3.6
 
-以下为 2.3.5 的安装文件名；发布验证完成前，请以发布页实际提供的版本为准，并保持 Bridge 与 Server 版本一致。
+以下为 2.3.6 的安装文件名；发布验证完成前，请以发布页实际提供的版本为准，并保持 Bridge 与 Server 版本一致。
 
 需要 Node.js 20 或更高版本。
 
-1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.5.eext`。
+1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.6.eext`。
    安装后在“已安装”的扩展详情中确认已允许“外部交互”，否则 Bridge 无法连接本机 MCP Server。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.3.5.tgz
+   npm install --global .\jlceda-mcp-server-2.3.6.tgz
    Get-Command jlceda-mcp
    ```
 
@@ -140,7 +147,7 @@ codex mcp list
 }
 ```
 
-4. 打开嘉立创 EDA 原理图或 PCB 页面，Bridge 默认连接 `ws://127.0.0.1:8765/bridge/ws`。
+4. 打开嘉立创 EDA 原理图、PCB 或独立封装文档，Bridge 默认连接 `ws://127.0.0.1:8765/bridge/ws`。
 
 生产使用建议配置随机 `JLCEDA_BRIDGE_TOKEN`。详细步骤和多客户端说明见[原生 MCP 安装说明](docs/native-mcp-setup.md)。
 
@@ -169,7 +176,7 @@ codex mcp list
 - 现有点导线改成多线段路径会在写入前返回 `point_wire_path_conversion_unsupported`；可新建目标导线并核对连接，再显式删除原点导线。
 - `pcb_connectivity_action via_create` 与 `pcb_routing_edit` 的过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 `round_0_2_mil` 结果，返回请求值与实际孔径/外径；真实尺寸差异仍失败。创建与修改已实测通过：15.748/31.496→15.8/31.4、15.7/31.5→15.8/31.6。
 - 过孔删除只确认当前页内存中目标消失，返回 `verificationScope:"current_page_memory"` 和 `durableDeletionVerified:false`。已知封装子过孔拒绝删除；缺少父 ID 时归属未知，必须保存并重新打开 PCB 后核对持久性。
-- 独立封装编辑器尚无专用 Bridge 上下文，不能作为普通 PCB 页完整控制。
+- 2.3.6 为独立封装编辑器提供单独上下文、七类完整回读和首批画布 API。七类 modify 等待一次 `done()` 并重新读取，实际字段未生效返回 `fieldMismatches` 和真实 `after`；实机 SMD x130 生效，80×60 形状请求仍为 60×60，属于已知部分结果。个人封装的最终 5 个控制图元（含 SMD x130）源码写回后重开已一致；没有新增封装专用保存工具，PCB 封装子过孔持久删除（#80）继续开放。
 
 ## 开发与发布
 
@@ -188,7 +195,8 @@ npm run build
 - [隐私与本地数据流](PRIVACY.md)
 - [发布检查表](docs/publishing.md)
 - [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)
-- [v2.3.5 发布说明草稿](docs/releases/v2.3.5.md)
+- [v2.3.6 发布说明与回归清单](docs/releases/v2.3.6.md)
+- [v2.3.5 发布说明](docs/releases/v2.3.5.md)
 - [v2.3.4 发布说明](docs/releases/v2.3.4.md)
 - [v2.3.3 发布说明](docs/releases/v2.3.3.md)
 - [嘉立创扩展广场发布要求](https://prodocs.lceda.cn/cn/api/guide/extensions-marketplace.html)

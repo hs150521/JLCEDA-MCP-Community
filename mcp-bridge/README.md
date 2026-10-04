@@ -2,9 +2,36 @@
 
 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
 
-## 2.3.5
+## 2.3.6 独立封装编辑
 
-当前源码版本为 2.3.5，已通过发布验证。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，Server 与实机 Bridge 均为 2.3.5。器件批量放置、NC 切换、名称筛选、NetPort Name 查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。安装包的可用状态以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 为准。完整 Issue 矩阵见 [2.3.5 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.3.5/docs/issue-validation-2.3.5.md)。
+Bridge 将官方 `getCurrentDocumentInfo()` 返回的 `documentType:4` 识别为 `pageKind:"footprint"`，身份包含 `documentUuid`、`pageUuid`、`libraryUuid` 和 `tabId`；其中 `pageUuid` 为该封装文档 UUID，库身份来自 `parentLibraryUuid`。独立封装可建立连接，无需工程 UUID；已有 PCB 或工程缓存不作为封装身份。`eda_context` 返回 `footprintContext`，`bridge_clients` 显示同一组身份。
+
+先调用 `footprint_read` 获取当前文档全部图元。仅支持可选 `timeoutMs`（5–120 秒，默认 60 秒），不支持 sections 或过滤；成功结果包含 `scope:"current_footprint_document"`、`complete:true`、七类数组及数量。Pad 保留焊盘/孔形状、孔偏移、孔旋转和 `padType`，Polyline 保留原生 `polygonSource` 数组，Attribute 保留父 ID、key/value、显示状态及可为空的坐标。对象与全 ID 清单不一致、必要 getter 缺失、读取中换库/文档/标签或超出 10000 图元/8 MiB 时返回 `complete:false`，不会以截断数据声明完整。
+
+无孔 Pad（`hole:null`）的原生 `holeRotation` 为 `null`、`undefined` 或数值 NaN 时，DTO 明确返回 `null`；有限值原样保留，带孔状态仍要求有限孔旋转。`specialPad:[]` 表示没有额外特殊轮廓，原样保留；`pad` 或 `specialPad` 至少有一个真实非空形状，必要 getter 和焊盘/孔形状检查仍保留。同库同封装 3 个 Pad、1 个 Via、1 个 String 的 `complete:true` 快照、正式受控恢复，以及原生源码写回后重开的 5 个完整 DTO 一致已实测通过。最终 SMD x130/y80、60×60 状态已再次源码写回并关闭重开，5 个完整 DTO 一致。
+
+启用透传 API 工具后，`api_invoke` 支持以下首批封装画布方法，共 21 个读取方法和 20 个写入方法：
+
+| 原生模块 | 读取 | 写入 |
+| --- | --- | --- |
+| `pcb_PrimitivePad/Via/Line/Arc/Polyline/String`（六个模块） | `get`、`getAll`、`getAllPrimitiveId` | `create`、`modify`、`delete` |
+| `pcb_PrimitiveAttribute` | `get`、`getAll`、`getAllPrimitiveId` | `modify`、`delete` |
+
+方法名使用完整路径，例如 `eda.pcb_PrimitiveLine.modify`。参数按当前官方签名传入；修改/删除目标须来自本次实际回读的 ID。Polyline 创建可传原生轮廓源数组，修改可传 `polygonSource`；Bridge 转换成 `pcb_MathPolygon` 对象后调用。`get`、`getAll` 及创建/修改后的 `after` 使用完整 DTO，`getAllPrimitiveId` 返回 ID 列表；`identityVerified:true` 只表示操作前后库、文档和标签一致，字段值应以实际 `after` 为准。七类 `modify` 等待一次 `done()` 后重新读取，字段未生效时返回 `ok:false`、`reason:"native_footprint_modify_incomplete"`、`fieldMismatches`（field/requested/actual）和真实 `after`；已完成且完整回读可确认的差异不触发未知提交隔离。Polyline 的等价闭合轮廓方向、起点及已有精度规范化不误报字段差异，仍保留原生 source。删除返回 `deletedIds` 和 `remainingIds`。
+
+封装编辑器拒绝 PCB/原理图专用工具和未列入首批范围的画布 API。官方 `pcb_PrimitiveAttribute.create` 为内部空实现，因此不开放；库资源查询及 `lib_Footprint.openInEditor` 等全局 API 保持通用调用方式。写入前最后一次身份检查后立即核对连接、活动角色和租约，切换客户端或断连会停止尚未开始的原生写入。
+
+封装写入返回 `commitUnknown:true`、超时或中途失联时，按 `bridge_clients` 的诊断先执行 `bridge_recover_client action:recover`。诊断要求宿主重启时，重启原 EDA 并打开同库同封装文档；使用恢复会话后的全新客户端做 `action:readback`，指定 `readbackPath:"/bridge/jlceda/footprint/read"` 和 `readbackPayload:{}`。Server 核对执行时库/文档身份、七类完整状态及本次回读前后的标签。重开后的新 `tabId` 可以不同于旧任务，但同一次回读不能换标签；仅查询 `/context` 无法解除该隔离。
+
+Via/Line/Polyline/String/独立 Arc 新案例的创建、修改和删除已实测通过。SMD Pad 位置改到 x130 生效，但 80×60 形状请求仍为 60×60，返回已知部分结果；首次 layer3 水平弦 Arc 未登记，具体原因未确定。Attribute 没有实际非空样本，未进行 native 修改/删除验证。个人封装的 5 个控制图元持久回读不能证明 PCB 封装子过孔持久删除（#80），该 Issue 继续开放。封装菜单可见，菜单重启后新客户端 ready、公开选择与 count5 完整回读通过；就绪报告发送失败后的重连分支仅由本地 fixture 验证。发布状态以同版本 GitHub Release 及关联 PR 为准，EDA v4 未验证。详见 [2.3.6 发布说明与回归清单](../docs/releases/v2.3.6.md)。
+
+## 原理图 raw 创建位号保护
+
+`api_invoke eda.sch_PrimitiveComponent.create` 现在复用自动放置的当前页位号基线和恢复流程：恢复被原生创建重排的已有位号，保留 BOM 扩展属性并回读新图元。成功返回 `designatorChanges`、`restoredDesignators`；无法确认恢复时给出 `needsReview` 或未知提交诊断。未知提交沿用 placement 恢复，须读回原页完整 ID、位号及 BOM，不能仅查上下文。完整 DeviceItem、DeviceSearchItem、SymbolItem、SymbolSearchItem 与正式库引用保留原生重载和参数；实机新件的 BOM/PCB false 保留，已有 9 件完整 DTO 不变；本次未发生位号重排，`restoredDesignators:[]`。U4/U5 重排后的恢复、显式 false 参数与恢复超时由本地回归验证。
+
+## 2.3.5 发布检查记录
+
+稳定版 [2.3.5](https://github.com/hs150521/JLCEDA-MCP-Community/releases/tag/v2.3.5) 已发布，GitHub 发布状态以 Release 页面为准。两轮本地全面审查、Bridge/Server 全量构建测试及 lint 已通过，2.3.5 的发布实机验证使用匹配的 Server 与 Bridge。器件批量放置、NC 切换、名称筛选、NetPort Name 查询、原理图导出，以及 PCB BOM、板框、区域、直线覆盖、旋转、属性、元数据和覆铜重建已实测通过；过孔创建/修改、工程库来源核对、覆铜等价轮廓创建/修改及真实 DRC 28 条详情的 14 页连续读取均已实测通过。安装包的可用状态以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 为准。完整 Issue 矩阵见 [2.3.5 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.3.5/docs/issue-validation-2.3.5.md)。
 
 发布审查补修：普通 Pin 与 ComponentPin 按实际执行路径区分超时恢复；ComponentPin 仍要求所属器件全部引脚的完整回读。直线拆分/合并核验记录同网络、同层写前快照，要求本次新增或改变的有效线路，并返回 `changedPrimitiveIds`。过孔修改核对实际外径大于孔径，量化后的零环宽返回实际状态与差异。
 
@@ -22,7 +49,7 @@ Bridge 会记录任务开始、完成、返回失败、异常和超时的结构�
 
 配套的 MCP Server 2.3.5 提供连接失联后的写入诊断和同图页恢复回读，并公开 Board 建立、原理图导线预览、创建及 NetPort 操作。
 
-交互放置检查可能清理完全重叠的重复器件。若清理或位号恢复的结果不明，`commitUnknown:true` 会隔离后续写入；恢复时通过 `api_invoke` 调用 `eda.sch_PrimitiveComponent.getAllPrimitiveId`，传入 `args:[null,false]` 和 `includeCompleteSchematicComponentIds:true`，可获取不截断的当前图页 `schematicComponentIds`、`schematicComponentStates`（ID 与位号）及数量，供 Server 核对原图页。
+交互放置检查可能清理完全重叠的重复器件。若清理、坐标放置或 `api_invoke eda.sch_PrimitiveComponent.create` 的位号恢复结果不明，`commitUnknown:true` 会隔离后续写入；恢复时通过 `api_invoke` 调用 `eda.sch_PrimitiveComponent.getAllPrimitiveId`，传入 `args:[null,false]` 和 `includeCompleteSchematicComponentIds:true`，可获取不截断的当前图页 `schematicComponentIds`、`schematicComponentStates`（ID、位号与 BOM 扩展属性）及数量，供 Server 核对原图页。
 
 ## 2.3.5 回读与操作说明
 
@@ -30,7 +57,7 @@ Bridge 会记录任务开始、完成、返回失败、异常和超时的结构�
 
 `component_place`、`component_place_auto` 及原理图设备引用创建在客户端提供 `lib_Device.get()` 时先读取设备库，将有效裸引用解析为完整 DeviceItem 后调用原生创建；找不到设备时返回 `DEVICE_NOT_FOUND` 且不启动创建。完整 DeviceItem/SearchItem 与符号引用保留各自原生重载；客户端未提供设备查询时保留裸引用的原生兼容路径。单子件设备可自动采用唯一的 `subPartName`。33 字符的错误设备 UUID 与其正确 32 字符系统库记录已区分。2.3.4 实机一次性图页中，通过 `lib_Device.get()` 的完整 DeviceItem 与唯一 `subPartName`，连续创建 0603 C23221 及 0805 C96346/C84376/C110775；四次原生创建各约 1–2 秒，`schematic_read` 完整回读确认 4 件且无写入隔离。2.3.5 实机中，无效 UUID 立即返回 `DEVICE_NOT_FOUND`；随后 `component_place_auto` 的上述 4 型号批次全部成功，合计约 8.9 秒。
 
-设备 `library_search` 的 `properties.name` 搜索会精确核对实际返回名称；各页固定使用关键词搜索并同时核对全部请求属性，返回 `exactNameVerified`、`searchImplementation` 和 `excludedNameMismatches`。2.3.5 实机精确名称查询返回 1 条匹配记录，排除 20 条无关记录。这些结果仍受原生分页范围限制。
+设备 `library_search` 的 `properties.name` 搜索会精确核对实际返回名称；各页固定使用关键词搜索并同时核对全部请求属性，返回 `exactNameVerified`、`searchImplementation` 和 `excludedNameMismatches`。2.3.5 最终实机以 limit:1 连续查询两页，分别返回 1 条精确匹配和空页，均采用 keyword_name_filter，第二页 mayHaveMore:false。这些结果仍受原生分页范围限制。
 
 `api_invoke` 调用 `eda.sch_PrimitivePin.modify` 时，若目标为当前页器件的 ComponentPin，Bridge 改用真实实例的 `toAsync()`、`setState_NoConnected()`/`setState_PinNumber()` 和 `done()`，只支持 `noConnected`、`pinNumber`。提交前后核对该器件各引脚状态；不会为 NC 修改重写符号引脚几何。失败恢复归为 `schematic_connectivity_primitives`：使用 `bridge_recover_client action=readback`，指定 `readbackPath:"/bridge/jlceda/schematic/read"`、`readbackPayload:{"includeConnectivityPrimitives":true}`。语义快照包含 `pinId`、`x`、`y`、`rotation`、`noConnected`，恢复时须核对目标所属器件全部引脚的真实状态；仅查询 `/context` 不会解除隔离。诊断要求宿主重启时先重启原 EDA 宿主。2.3.5 实机对同一 ComponentPin 的 NC `true`→`false` 两次均 `verified:true`，目标坐标与同器件其他引脚均保持不变。失败后的恢复路径已有本地回归，未在该成功场景中触发。
 
@@ -56,7 +83,7 @@ Bridge 会记录任务开始、完成、返回失败、异常和超时的结构�
 
 结构化错误在 Bridge、WebSocket、中继和工具分发层保留可用的 `message`、`name`、`code`、`reason`、`field`、`status`；非字符串对象错误不会只显示为 `[object Object]`。错误正文不透传任意源对象或设计源字段。
 
-独立封装编辑器尚无专用 Bridge 文档上下文，当前图页连接仍针对原理图和 PCB；该场景留待后续架构扩展。
+2.3.5 的独立封装编辑器尚无专用 Bridge 文档上下文；2.3.6已补充单独的封装身份和首批读写能力，实机结果按上方回归清单记录。
 
 ## 2.1 PCB 工具
 
@@ -193,16 +220,16 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 1. EDA Bridge
 
-以下文件名对应 2.3.5；发布验证完成前，以发布页实际提供的包为准。
+以下文件名对应 2.3.6；发布验证完成前，以发布页实际提供的包为准。
 
-从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.5.eext`，重启 EDA，然后打开原理图或 PCB 页面。
+从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.6.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
 
 ### 2. 原生 MCP Server
 
-从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.5.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.6.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.3.5.tgz
+npm install --global .\jlceda-mcp-server-2.3.6.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。
@@ -226,7 +253,7 @@ Claude Desktop、Claude Code、Cursor 等客户端应将 `jlceda-mcp` 注册为�
 - `api_invoke` 是可选的 API 透传能力，只应在信任的 MCP 客户端中启用。
 - 扩展清单仅声明支持嘉立创 EDA 专业版 3.x，已在 3.2.181 上测试；其他 3.x 版本需自行验证，v4 需等待未来兼容版本。
 - `createNetLabel` 从 EDA v4 起提供；本版扩展不支持 v4，因此不能用它创建普通网络标签。Bridge 在 3.x 上立即返回 `EDA_VERSION_UNSUPPORTED` 和 `commitStatus: not_started`；电源和地网络标识仍可使用。
-- 扩展只在原理图或 PCB 页面建立 Bridge 连接。
+- 2.3.6可在原理图、PCB 或独立封装文档建立 Bridge 连接；2.3.5 仅支持原理图和 PCB。
 
 ## 状态说明
 
@@ -235,7 +262,7 @@ Claude Desktop、Claude Code、Cursor 等客户端应将 `jlceda-mcp` 注册为�
 - **第一行（桥接状态）**：活动页面显示"已连接"；待命页面显示"当前活动客户端：xxx"；连接失败显示"连接失败"。
 - **第二行（WebSocket 状态）**：正在连接时显示"连接中"；连接成功后显示"当前客户端：xxx"；连接失败时显示具体错误原因。
 
-仅在原理图或 PCB 页面可连接，连接失败后系统会自动重试。
+2.3.6在原理图、PCB 或独立封装文档可连接，连接失败后系统会自动重试。
 
 ## 交互与注意事项
 

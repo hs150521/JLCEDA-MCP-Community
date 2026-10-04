@@ -8,6 +8,10 @@
 
 ## 工具调用约束
 
+- 独立封装文档以官方 `documentType:4`、`documentUuid/pageUuid`、`libraryUuid` 和 `tabId` 为身份；不要用 PCB 或工程缓存推断。先用 `footprint_read` 完整读取 Pad/Via/Line/Arc/Polyline/String/Attribute 和实际 ID，仅可选 `timeoutMs`，不能传 sections 或过滤。必要状态缺失或换页会返回 `complete:false`，不能当成完整快照。
+- 封装画布操作使用 `api_invoke` 的首批 `pcb_PrimitivePad/Via/Line/Arc/Polyline/String` 的 get/getAll/getAllPrimitiveId/create/modify/delete，以及 Attribute 的 get/getAll/getAllPrimitiveId/modify/delete。Attribute.create 为官方内部空实现，不可调用；PCB/原理图专用工具不能编辑独立封装。Polyline 可用真实 `polygonSource` 数组，写后检查实际 `after`；`identityVerified:true` 不证明所有请求字段均已生效。
+- 封装写入结果不明时先建立 `bridge_recover_client action:recover` 会话；按诊断重启原宿主后，使用全新客户端在同库同文档执行 `action:readback`、`readbackPath:"/bridge/jlceda/footprint/read"`、`readbackPayload:{}`。新标签可与旧任务不同，但一次回读必须保持库/文档/标签稳定，仅上下文或局部图元查询不能解除隔离。当前编辑内存中的修改/删除不证明保存重开后持久生效，#80 继续开放。
+
 - `bridge_clients`：列出所有已连接 EDA 页面及其官方 API 返回的项目、文档、图页身份。在存在多个客户端，或用户指定了项目/页面时，任何 EDA 读取或修改操作前必须先调用并核对目标。
 - `bridge_select_client`：仅使用 `bridge_clients` 返回的精确 `clientId` 显式选择目标。待命客户端先经过双向队列探活；若提示旧扩展不支持探活，升级该页面的 Bridge 后再选择。不得依据连接顺序、名称相似或猜测选择；目标不唯一时必须请用户确认。单客户端且身份符合任务时无需重复选择。
 - EDA 修改超时、已开始的写任务中途失联，或工具返回 `commitUnknown: true` 后，查看 `bridge_clients` 的 `requestId`、`uncertaintyReason`、文档身份和 `lastHeartbeatMsAgo`，先用 `bridge_recover_client` 的 `action=recover` 建立恢复会话。隔离期间可查询只读状态，但原调用尚未结束时读回只是暂时快照。若调用持续挂起，再重启原 EDA 宿主以终止旧调用，打开目标图页，等待恢复会话建立后的新 Bridge 连接和全新 `clientId`；最后以 `action=readback` 验证新客户端身份和当前页状态。恢复请求本身不能取消 EDA 调用；普通掉线自动重连保留旧 `clientId`，建立恢复会话时已连接的客户端即使更换 WebSocket 也不能用于本次回读。
@@ -26,6 +30,7 @@
 - 检查当前 PCB 时可用 `pcb_read` 一次按需读取器件、焊盘、网络、布线、覆铜、板框、区域和文本。默认只读器件与网络；完整板级分析传 `sections:["all"]`，大 PCB 可提高 `timeoutMs`。结果中的 `omittedSections` 表示未请求的部分；读取失败或图页改变时不要使用旧页快照。
 - `pcb_connectivity_action` 创建直线或过孔的提交状态不明时，使用无参数 `eda.pcb_PrimitiveLine.getAll` 作为恢复回读入口；Server 会继续读回全部直线、圆弧、折线、过孔的网络与几何及网络长度。若诊断包含 `hostRestartRequired:true`，先重启原 EDA 宿主并在读回时传 `hostRestartConfirmed:true`；原生创建已经结束而图元回读失败时，只需原客户端断开、恢复会话后的新客户端和完整同板回读。
 - 交互放置的 `component/place/start` 或 `component/place/check` 若返回 `commitUnknown:true`，恢复回读须用 `eda.sch_PrimitiveComponent.getAllPrimitiveId` 和 `args:[null,false]`；Server 会自动请求不截断的 `schematicComponentIds`、位号及 BOM 属性，并核对执行时图页及回读前后的图页身份。查看候选 `primitiveIds` 在完整列表中是否仍存在后再决定是否清理或重试；诊断要求重启时先退出放置模式并重启原宿主。
+- raw `eda.sch_PrimitiveComponent.create` 保护当前页已有位号并保留 BOM；查看 `restoredDesignators`、`designatorChanges` 与 `needsReview`。创建或恢复结果不明时，用同页 `getAllPrimitiveId`、`args:[null,false]` 的完整 ID、位号和 BOM 回读恢复；原生未结束时按诊断重启宿主，不重复创建。
 - 可写 `api_invoke` 遇到原生 RPC 超时或断线时会保留未确认写入诊断。诊断要求重启时，先重启原宿主，再用全新 Bridge 核对目标文档和受影响图元；只读调用的失败不进入写入恢复。
 - `schematic_read`：读取当前激活原理图页的器件、网络和按需请求的连接图元，适合当前页定位、局部连线核查、写后验证及受控恢复。返回 `PAGE_NOT_READY` 时等待图页加载并重试，不要使用旧页数据推断当前页。需要全工程网表、多页关系或完整 BOM 时使用 `schematic_review`。
   返回字段说明：`drcCheckPassed` 为 DRC 检查是否通过；`components` 为器件列表，每个器件含 `componentDesignator`（位号）、`componentSymbolName`（符号名）、`pins`（引脚列表，每个引脚含 `pinNumber`、`pinSignalName`、`pinElectricalType`、`connectedNetworkName`（引脚所连网络名，空字符串表示工具未能识别到连接——可能是引脚真正悬空，也可能是该引脚位于复用块（Reuse Block）内部、复用块内部导线对 API 不可见所致；若 `drcCheckPassed` 为 `true`，则空值大概率属于工具限制而非真实错误，应提示用户自行在原理图中核实）、`hasNoConnectMark`）；`networks` 为网络列表，每个网络含 `networkName` 和 `connectedPinRefs`（连接该网络的所有引脚引用，格式为位号.引脚号）。
@@ -73,7 +78,7 @@
 
 **工具选择**：优先使用与目标操作直接对应的专用工具，包括本文件列出的原理图、PCB、导航、库和恢复工具；其输入、回读和写入保护通常比通用透传更适合。没有合适的专用工具，或专用工具不支持所需能力时，再使用 `api_invoke`。可复用本次会话中已取得的有效身份和参数，避免重复查询。
 
-- `eda_context`：获取当前 EDA 工作区环境快照，包括当前文档类型（原理图 / PCB）、工程信息、当前图页信息、已选中图元 ID 列表。适用场景：①执行 `api_invoke` 前需要确认当前文档类型或获取选中图元 ID 时；②任务描述依赖当前环境状态时。已明确知道当前上下文的情况下禁止重复调用。
+- `eda_context`：获取当前 EDA 工作区环境快照，包括当前文档类型（原理图 / PCB / 独立封装）及封装 `footprintContext`、工程信息、当前图页信息、已选中图元 ID 列表。适用场景：①执行 `api_invoke` 前需要确认当前文档类型或获取选中图元 ID 时；②任务描述依赖当前环境状态时。已明确知道当前上下文的情况下禁止重复调用。
 
 - `api_index`：列出精选 EDA API 的模块索引，每条包含 `fullName`（如 `eda.sch_Symbol.addSymbol`）和摘要描述，**不含**参数签名。适用场景：不确定目标功能属于哪个模块时，先调用此工具浏览命名空间，定位目标模块名。已知模块名时可直接跳过此步。
 

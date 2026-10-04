@@ -32,29 +32,154 @@
   },
   {
     "name": "bridge_recover_client",
-    "description": "处理 EDA 写操作超时、执行中失联、提交未确认状态及 PCB 导入待确认状态。先从 bridge_clients 取得 requestId，以 action=recover、confirm=true 建立恢复会话；诊断含 hostRestartRequired:true 时须重启原宿主。等待原 Bridge 断开及恢复会话后的全新 clientId，就原文档和图页只读回读并以 action=readback 完成。原客户端和先前已连接客户端的普通重连不能用于回读；交互或坐标放置须完整读回当前页器件 ID、位号与 BOM 扩展属性，PCB 自动布局须完整读回器件位置，自动布线及 PCB 直线/过孔创建须完整读回导线、过孔及网络。import_changes 返回 pending_confirmation 后全局阻止写入；用户在原生对话框应用或取消后，以 action=resolve_import、confirm=true、resolution=applied/cancelled 显式确认，Server 核对同一 PCB 并完整读回器件和网络后解除。无法确认弹框已关闭时，先 action=recover，再重启原 EDA 宿主，以全新连接 action=readback，另需 hostRestartConfirmed=true。隔离期间只读查询可用。",
+    "description": "处理 EDA 写操作超时、执行中失联、提交未确认状态及 PCB 导入待确认状态。先从 bridge_clients 取得 requestId，以 action=recover、confirm=true 建立恢复会话；诊断含 hostRestartRequired:true 时须重启原宿主。等待原 Bridge 断开及恢复会话后的全新 clientId，就原文档和图页只读回读并以 action=readback 完成。原客户端和先前已连接客户端的普通重连不能用于回读；交互或坐标放置，以及 api_invoke 的原理图器件 create 须完整读回当前页器件 ID、位号与 BOM 扩展属性，PCB 自动布局须完整读回器件位置，自动布线及 PCB 直线/过孔创建须完整读回导线、过孔及网络。import_changes 返回 pending_confirmation 后全局阻止写入；用户在原生对话框应用或取消后，以 action=resolve_import、confirm=true、resolution=applied/cancelled 显式确认，Server 核对同一 PCB 并完整读回器件和网络后解除。无法确认弹框已关闭时，先 action=recover，再重启原 EDA 宿主，以全新连接 action=readback，另需 hostRestartConfirmed=true。隔离期间只读查询可用。",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["recover", "readback", "resolve_import"], "default": "recover" },
-        "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000, "description": "恢复读取执行预算；大原理图可提高至 120000 毫秒。" },
-        "confirm": { "const": true, "description": "必须显式确认恢复和可能已完成的修改。" },
-        "requestId": { "type": "string", "minLength": 1, "description": "bridge_clients 返回的具体超时、失联或提交未确认写操作 requestId。" },
-        "recoveryId": { "type": "string", "minLength": 1 },
-        "clientId": { "type": "string", "minLength": 1, "description": "readback 时 bridge_clients 返回的全新 Bridge clientId。" },
-        "expectedDocumentUuid": { "type": "string", "minLength": 1 },
-        "expectedProjectUuid": { "type": "string", "minLength": 1 },
-        "expectedPageUuid": { "type": "string", "minLength": 1, "description": "可选的执行图页 UUID 核对值，必须与诊断记录一致；不能补充缺失的执行图页身份。" },
-        "resolution": { "type": "string", "enum": ["applied", "cancelled"], "description": "resolve_import 时确认用户已在 EDA 原生导入对话框点击应用修改或取消，并且对话框已关闭。" },
-        "hostRestartConfirmed": { "const": true, "description": "诊断包含 hostRestartRequired:true 时，确认执行未定写入的原 EDA 宿主已重启。" },
-        "readbackPath": { "type": "string", "enum": ["/bridge/jlceda/context", "/bridge/jlceda/api/invoke", "/bridge/jlceda/project/info", "/bridge/jlceda/schematic/read", "/bridge/jlceda/schematic/component-edit", "/bridge/jlceda/schematic/text-manage", "/bridge/jlceda/pcb/component-edit", "/bridge/jlceda/pcb/documents-manage", "/bridge/jlceda/pcb/pour-manage", "/bridge/jlceda/pcb/region-manage", "/bridge/jlceda/pcb/text-manage", "/bridge/jlceda/pcb/layer-manage", "/bridge/jlceda/schematic/review", "/bridge/jlceda/schematic/layout-check", "/bridge/jlceda/pcb/drc-check", "/bridge/jlceda/schematic/drc-check"], "default": "/bridge/jlceda/context" },
-        "readbackPayload": { "type": "object", "default": {}, "description": "Board 建立结果不明时使用 project_info 完整回读 Board、原理图和 PCB（includePages=false、includeBoards/includeSchematics/includePcbs=true、limit=500）；PCB 文档创建、复制或重命名使用 pcb_documents_manage 及 {\"operation\":\"list\",\"projectUuid\":\"原工程UUID\"} 完整回读工程 PCB 目录；PCB 覆铜写入结果不明时使用 pcb_pour_manage 及 {\"action\":\"read\"}，完整读回当前 PCB 页全部覆铜边框、填充图元 ID、边框关联和填充数量及几何摘要；PCB 区域写入使用 pcb_region_manage 及 {\"action\":\"read\"} 完整回读区域；PCB 文本或属性写入使用 pcb_text_manage 及 {\"action\":\"read\"} 完整回读文本与属性；PCB 铜层数量写入使用 pcb_layer_manage 及 {\"action\":\"read\"} 回读铜层数量和图层清单；PCB 器件创建、修改或删除同理使用 pcb_component_edit；PCB 走线编辑、autoRouting 与直线/过孔创建使用无参 eda.pcb_PrimitiveLine.getAll，恢复流程会补读全部圆弧、折线、过孔及网络；通过 schematic_component_edit 进行的单件原理图器件修改或删除使用 schematic_component_edit；通过 api_invoke 调用 eda.sch_PrimitiveComponent.delete 的单件或批量删除使用 schematic_read 及 {\"includeConnectivityPrimitives\":true}；原理图文字写入使用 schematic_text_manage 的无过滤 read 完整回读；原理图连接写入使用 schematic_read 及 {\"includeConnectivityPrimitives\":true}；交互或坐标放置须用 {\"apiFullName\":\"eda.sch_PrimitiveComponent.getAllPrimitiveId\",\"args\":[null,false]}；PCB autoLayout 用无参 eda.pcb_PrimitiveComponent.getAll。" }
+        "action": {
+          "type": "string",
+          "enum": [
+            "recover",
+            "readback",
+            "resolve_import"
+          ],
+          "default": "recover"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 120000,
+          "default": 60000,
+          "description": "恢复读取执行预算；大原理图可提高至 120000 毫秒。"
+        },
+        "confirm": {
+          "const": true,
+          "description": "必须显式确认恢复和可能已完成的修改。"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "bridge_clients 返回的具体超时、失联或提交未确认写操作 requestId。"
+        },
+        "recoveryId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "readback 时 bridge_clients 返回的全新 Bridge clientId。"
+        },
+        "expectedDocumentUuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedProjectUuid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "可选工程身份核对值；独立封装恢复不要求工程 UUID。"
+        },
+        "expectedPageUuid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "可选的执行图页 UUID 核对值，必须与诊断记录一致；不能补充缺失的执行图页身份。"
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "applied",
+            "cancelled"
+          ],
+          "description": "resolve_import 时确认用户已在 EDA 原生导入对话框点击应用修改或取消，并且对话框已关闭。"
+        },
+        "hostRestartConfirmed": {
+          "const": true,
+          "description": "诊断包含 hostRestartRequired:true 时，确认执行未定写入的原 EDA 宿主已重启。"
+        },
+        "readbackPath": {
+          "type": "string",
+          "enum": [
+            "/bridge/jlceda/footprint/read",
+            "/bridge/jlceda/context",
+            "/bridge/jlceda/api/invoke",
+            "/bridge/jlceda/project/info",
+            "/bridge/jlceda/schematic/read",
+            "/bridge/jlceda/schematic/component-edit",
+            "/bridge/jlceda/schematic/text-manage",
+            "/bridge/jlceda/pcb/component-edit",
+            "/bridge/jlceda/pcb/documents-manage",
+            "/bridge/jlceda/pcb/pour-manage",
+            "/bridge/jlceda/pcb/region-manage",
+            "/bridge/jlceda/pcb/text-manage",
+            "/bridge/jlceda/pcb/layer-manage",
+            "/bridge/jlceda/schematic/review",
+            "/bridge/jlceda/schematic/layout-check",
+            "/bridge/jlceda/pcb/drc-check",
+            "/bridge/jlceda/schematic/drc-check"
+          ],
+          "default": "/bridge/jlceda/context",
+          "description": "独立封装图元写入必须使用 /bridge/jlceda/footprint/read，readbackPayload 不带过滤项；完整核对同库同文档七类状态，一次回读期间标签须稳定，恢复新标签可与旧执行标签不同。"
+        },
+        "readbackPayload": {
+          "type": "object",
+          "default": {},
+          "description": "Board 建立结果不明时使用 project_info 完整回读 Board、原理图和 PCB（includePages=false、includeBoards/includeSchematics/includePcbs=true、limit=500）；PCB 文档创建、复制或重命名使用 pcb_documents_manage 及 {\"operation\":\"list\",\"projectUuid\":\"原工程UUID\"} 完整回读工程 PCB 目录；PCB 覆铜写入结果不明时使用 pcb_pour_manage 及 {\"action\":\"read\"}，完整读回当前 PCB 页全部覆铜边框、填充图元 ID、边框关联和填充数量及几何摘要；PCB 区域写入使用 pcb_region_manage 及 {\"action\":\"read\"} 完整回读区域；PCB 文本或属性写入使用 pcb_text_manage 及 {\"action\":\"read\"} 完整回读文本与属性；PCB 铜层数量写入使用 pcb_layer_manage 及 {\"action\":\"read\"} 回读铜层数量和图层清单；PCB 器件创建、修改或删除同理使用 pcb_component_edit；PCB 走线编辑、autoRouting 与直线/过孔创建使用无参 eda.pcb_PrimitiveLine.getAll，恢复流程会补读全部圆弧、折线、过孔及网络；通过 schematic_component_edit 进行的单件原理图器件修改或删除使用 schematic_component_edit；通过 api_invoke 调用 eda.sch_PrimitiveComponent.delete 的单件或批量删除使用 schematic_read 及 {\"includeConnectivityPrimitives\":true}；原理图文字写入使用 schematic_text_manage 的无过滤 read 完整回读；原理图连接写入使用 schematic_read 及 {\"includeConnectivityPrimitives\":true}；交互或坐标放置，以及 api_invoke 的原理图器件 create 须用 {\"apiFullName\":\"eda.sch_PrimitiveComponent.getAllPrimitiveId\",\"args\":[null,false]}；PCB autoLayout 用无参 eda.pcb_PrimitiveComponent.getAll。"
+        }
       },
-      "required": ["confirm"],
+      "required": [
+        "confirm"
+      ],
       "allOf": [
-        { "if": { "properties": { "action": { "const": "recover" } } }, "then": { "required": ["requestId"] } },
-        { "if": { "properties": { "action": { "const": "readback" } }, "required": ["action"] }, "then": { "required": ["recoveryId", "clientId"] } },
-        { "if": { "properties": { "action": { "const": "resolve_import" } }, "required": ["action"] }, "then": { "required": ["requestId", "resolution"] } }
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "recover"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "requestId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "readback"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "recoveryId",
+              "clientId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "resolve_import"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "requestId",
+              "resolution"
+            ]
+          }
+        }
       ],
       "additionalProperties": false
     }
@@ -111,7 +236,7 @@
   },
   {
     "name": "api_invoke",
-    "description": "调用指定的 EDA API 接口。原理图器件 create 会先将裸器件引用解析为完整库对象，并自动使用唯一子部件；找不到器件时返回 DEVICE_NOT_FOUND，未调用原生创建。组件引脚的 Pin.modify 使用真实 ComponentPin 实例修改 noConnected/pinNumber，并核对同器件全部引脚；组件引脚几何需在符号库中修改。器件 delete 按当前图页逐项删除、回读。原生错误保留 code/reason/field/status。PCB autoRouting 指定最多 3 个 RoutingNets 且原生 RPC 超时时，返回暂时回读 routingObservation，仍须受控恢复。",
+    "description": "调用指定的 EDA API 接口。原理图器件 create 会先将裸器件引用解析为完整库对象，并自动使用唯一子部件；找不到器件时返回 DEVICE_NOT_FOUND，未调用原生创建。组件引脚的 Pin.modify 使用真实 ComponentPin 实例修改 noConnected/pinNumber，并核对同器件全部引脚；组件引脚几何需在符号库中修改。器件 delete 按当前图页逐项删除、回读。原生错误保留 code/reason/field/status。PCB autoRouting 指定最多 3 个 RoutingNets 且原生 RPC 超时时，返回暂时回读 routingObservation，仍须受控恢复。原理图器件 create 还会读回当前页既有位号、恢复原生自动重排并保留 BOM 属性，返回 designatorChanges/restoredDesignators；无法恢复时明确 needsReview，未确认写入按完整当前页 ID、位号和 BOM 回读恢复。独立封装使用允许的 pcb_Primitive API；七类 modify 等待一次 done 后重新读取实际 after。已完成且可完整回读的字段差异返回 ok:false、native_footprint_modify_incomplete 和 fieldMismatches（field/requested/actual），不因该已知部分结果触发未知提交隔离；Polyline 等价闭合轮廓规范化保留实际 source。提交未确认时用 footprint_read 完整回读恢复。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -182,6 +307,22 @@
         "includeData": { "type": "boolean", "default": false, "description": "Include Base64 image data when it fits maxBytes." },
         "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 8388608, "default": 4194304, "description": "Maximum image size returned as Base64." },
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "footprint_read",
+    "description": "完整读取当前独立封装编辑器（DocumentType 4）的焊盘、过孔、直线、圆弧、折线、文本和属性。返回库 UUID、文档 UUID、标签身份及七类不截断图元和数量；读取前后核对同一库、文档与标签。封装编辑不使用 PCB 专用工具；通过 api_invoke 调用允许的 pcb_Primitive API，提交未确认时必须用本工具完整回读同库同文档后恢复。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 120000,
+          "default": 60000
+        }
       },
       "additionalProperties": false
     }

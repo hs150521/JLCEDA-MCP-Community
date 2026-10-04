@@ -12,8 +12,9 @@
 import type { BridgeClientContext, BridgeDebugSwitch, BridgeRole, BridgeServerRoleMessage } from '../bridge/protocol.ts';
 import type { UnifiedLogEntry } from '../logging/log.ts';
 import extensionConfig from '../../extension.json';
-import { isReadOnlyBridgeRequest, operationForBridgePath } from '../bridge/bridge-contract.ts';
+import { footprintApiAccess, isReadOnlyBridgeRequest, operationForBridgePath } from '../bridge/bridge-contract.ts';
 import { getConfiguredMcpUrl, getMcpServerUrlChangedTopic } from '../bridge/config.ts';
+import { editorDocumentPageKind, footprintIdentityFromDocument, readCurrentEditorDocument } from '../bridge/editor-context.ts';
 import { BridgeLogDispatchPipeline } from '../logging/log-dispatch.ts';
 import { bridgeLogPipeline } from '../logging/log.ts';
 import {
@@ -241,43 +242,47 @@ async function withPageContextTimeout<T>(read: Promise<T>, operation: string): P
 }
 
 // 使用官方上下文 API 读取当前目标身份，避免多页面时仅按连接顺序选择。
-async function readBridgeClientContext(expectedPageKind?: BridgeClientContext['pageKind']): Promise<BridgeClientContext | undefined> {
-	const [document, project, schematicPage, pcb] = await withPageContextTimeout(Promise.all([
-		safeCall(() => eda.dmt_SelectControl.getCurrentDocumentInfo()),
-		safeCall(() => eda.dmt_Project.getCurrentProjectInfo()),
-		safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo()),
-		safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
-	]), 'EDA page context read');
-	if (!document && !project && !schematicPage && !pcb) {
-		if (expectedPageKind)
+async function readBridgeClientContext(expectedPageKind?: BridgeClientContext['pageKind'], allowFootprintApi = false): Promise<BridgeClientContext | undefined> {
+	return withPageContextTimeout((async () => {
+		const document = await safeCall(() => readCurrentEditorDocument(eda as unknown as Record<string, unknown>));
+		const documentPageKind = editorDocumentPageKind(document);
+		if (documentPageKind === 'footprint') {
+			if (expectedPageKind && expectedPageKind !== 'footprint' && !(allowFootprintApi && expectedPageKind === 'pcb'))
+				throw new Error(`Current editor is footprint; ${expectedPageKind} operation was not started.`);
+			return footprintIdentityFromDocument(document);
+		}
+		const [project, schematicPage, pcb] = await Promise.all([
+			safeCall(() => eda.dmt_Project.getCurrentProjectInfo()),
+			safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo()),
+			safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
+		]);
+		if (!document && !project && !schematicPage && !pcb) {
+			if (expectedPageKind)
+				throw new Error(`Cannot verify the current ${expectedPageKind} page before writing; the operation was not started.`);
+			return undefined;
+		}
+		if (expectedPageKind && documentPageKind && expectedPageKind !== documentPageKind)
+			throw new Error(`Current editor is ${documentPageKind}; ${expectedPageKind} write was not started.`);
+		if (expectedPageKind && document?.documentType !== undefined && !documentPageKind)
+			throw new Error(`Current editor is not a ${expectedPageKind} page; the write was not started.`);
+		if (expectedPageKind && schematicPage && pcb && !documentPageKind)
+			throw new Error(`Cannot distinguish the current ${expectedPageKind} page from cached EDA page information; the write was not started.`);
+		const pageKind = expectedPageKind ?? documentPageKind
+			?? (schematicPage && !pcb ? 'schematic' : pcb && !schematicPage ? 'pcb' : undefined);
+		const page = pageKind === 'schematic' ? schematicPage : pageKind === 'pcb' ? pcb : undefined;
+		if (expectedPageKind && !page?.uuid)
 			throw new Error(`Cannot verify the current ${expectedPageKind} page before writing; the operation was not started.`);
-		return undefined;
-	}
-	const documentTypes = (eda as unknown as { EDMT_EditorDocumentType?: Record<string, unknown> }).EDMT_EditorDocumentType;
-	const documentPageKind = document?.documentType !== undefined && document?.documentType === documentTypes?.SCHEMATIC_PAGE
-		? 'schematic'
-		: document?.documentType !== undefined && document?.documentType === documentTypes?.PCB ? 'pcb' : undefined;
-	if (expectedPageKind && documentPageKind && expectedPageKind !== documentPageKind)
-		throw new Error(`Current editor is ${documentPageKind}; ${expectedPageKind} write was not started.`);
-	if (expectedPageKind && document?.documentType !== undefined && documentTypes && !documentPageKind)
-		throw new Error(`Current editor is not a ${expectedPageKind} page; the write was not started.`);
-	if (expectedPageKind && schematicPage && pcb && !documentPageKind)
-		throw new Error(`Cannot distinguish the current ${expectedPageKind} page from cached EDA page information; the write was not started.`);
-	const pageKind = expectedPageKind ?? documentPageKind
-		?? (schematicPage && !pcb ? 'schematic' : pcb && !schematicPage ? 'pcb' : undefined);
-	const page = pageKind === 'schematic' ? schematicPage : pageKind === 'pcb' ? pcb : undefined;
-	if (expectedPageKind && !page?.uuid)
-		throw new Error(`Cannot verify the current ${expectedPageKind} page before writing; the operation was not started.`);
-	return {
-		documentType: document?.documentType,
-		documentUuid: document?.uuid,
-		tabId: document?.tabId,
-		projectUuid: document?.parentProjectUuid ?? project?.uuid,
-		projectName: project?.friendlyName,
-		pageKind,
-		pageUuid: page?.uuid,
-		pageName: page?.name,
-	};
+		return {
+			documentType: typeof document?.documentType === 'number' ? document.documentType : undefined,
+			documentUuid: typeof document?.uuid === 'string' ? document.uuid : undefined,
+			tabId: typeof document?.tabId === 'string' ? document.tabId : undefined,
+			projectUuid: typeof document?.parentProjectUuid === 'string' ? document.parentProjectUuid : project?.uuid,
+			projectName: project?.friendlyName,
+			pageKind,
+			pageUuid: page?.uuid,
+			pageName: page?.name,
+		};
+	})(), 'EDA page context read');
 }
 
 function writeTaskPageKind(path: string, payload: unknown): BridgeClientContext['pageKind'] {
@@ -290,7 +295,7 @@ function writeTaskPageKind(path: string, payload: unknown): BridgeClientContext[
 		if (apiFullName.startsWith('eda.sch_'))
 			return 'schematic';
 	}
-	if (path.startsWith('/bridge/jlceda/pcb/'))
+	if (path.startsWith('/bridge/jlceda/pcb/') || path === '/bridge/jlceda/net/query-pcb')
 		return 'pcb';
 	if (path.startsWith('/bridge/jlceda/schematic/')
 		|| path.startsWith('/bridge/jlceda/component/')
@@ -299,6 +304,33 @@ function writeTaskPageKind(path: string, payload: unknown): BridgeClientContext[
 		return 'schematic';
 	}
 	return undefined;
+}
+
+function canvasInvokeName(path: string, payload: unknown): string | undefined {
+	if (path !== '/bridge/jlceda/api/invoke' || !isPlainObjectRecord(payload) || typeof payload.apiFullName !== 'string')
+		return undefined;
+	const name = payload.apiFullName.trim().toLowerCase();
+	return name.startsWith('eda.pcb_') || name.startsWith('eda.sch_') ? name : undefined;
+}
+
+async function readFootprintReadTaskContext(path: string, payload: unknown): Promise<BridgeClientContext | undefined> {
+	if (!writeTaskPageKind(path, payload) && !path.startsWith('/bridge/jlceda/pcb/'))
+		return undefined;
+	const document = await withPageContextTimeout(safeCall(() => readCurrentEditorDocument(eda as unknown as Record<string, unknown>)), 'EDA page context read');
+	return editorDocumentPageKind(document) === 'footprint' ? footprintIdentityFromDocument(document) : undefined;
+}
+
+function assertFootprintTaskAllowed(path: string, payload: unknown, context: BridgeClientContext | undefined): void {
+	if (context?.pageKind !== 'footprint')
+		return;
+	const canvasApi = canvasInvokeName(path, payload);
+	if (canvasApi) {
+		if (!footprintApiAccess(canvasApi))
+			throw Object.assign(new Error(`Unsupported footprint canvas API: ${canvasApi}.`), { code: 'UNSUPPORTED_FOOTPRINT_API' });
+		return;
+	}
+	if (path.startsWith('/bridge/jlceda/pcb/') || writeTaskPageKind(path, payload))
+		throw new Error('This board/schematic tool cannot operate on a footprint document.');
 }
 
 function getUnknownWriteRejection(): string | undefined {
@@ -491,18 +523,31 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 				&& isPlainObjectRecord(task.payload)
 				&& typeof task.payload.apiFullName === 'string'
 				&& task.payload.apiFullName.trim().toLowerCase() === 'eda.pcb_document.autolayout';
+			const schematicCreateTask = task.path === '/bridge/jlceda/api/invoke'
+				&& isPlainObjectRecord(task.payload)
+				&& typeof task.payload.apiFullName === 'string'
+				&& task.payload.apiFullName.trim().toLowerCase() === 'eda.sch_primitivecomponent.create';
 			const schematicDeleteTask = task.path === '/bridge/jlceda/api/invoke'
 				&& isPlainObjectRecord(task.payload)
 				&& typeof task.payload.apiFullName === 'string'
 				&& task.payload.apiFullName.trim().toLowerCase() === 'eda.sch_primitivecomponent.delete';
 			const executionContext = readOnly
-				? undefined
+				? await readFootprintReadTaskContext(task.path, task.payload)
 				: autoLayoutTask
 					? await readPcbAutoLayoutTaskContext()
-					: await readBridgeClientContext(writeTaskPageKind(task.path, task.payload));
+					: await readBridgeClientContext(writeTaskPageKind(task.path, task.payload), canvasInvokeName(task.path, task.payload)?.startsWith('eda.pcb_'));
+			assertFootprintTaskAllowed(task.path, task.payload, executionContext);
 			let handlerPayload: unknown = task.payload;
+			if (executionContext?.pageKind && canvasInvokeName(task.path, task.payload)) {
+				handlerPayload = { ...(task.payload as Record<string, unknown>), expectedEditorPageKind: executionContext.pageKind, ...(executionContext.pageKind === 'footprint' ? { expectedFootprintIdentity: executionContext } : {}) };
+			}
 			if (autoLayoutTask) {
 				handlerPayload = { ...(task.payload as Record<string, unknown>), expectedPcbUuid: executionContext!.pageUuid };
+			}
+			else if (schematicCreateTask) {
+				if (!executionContext?.pageUuid || executionContext.pageUuid !== executionContext.documentUuid)
+					throw new Error('Current schematic page and editor document are not synchronized; creation was not started.');
+				handlerPayload = { ...(handlerPayload as Record<string, unknown>), expectedSchematicCreatePageUuid: executionContext.pageUuid };
 			}
 			else if (schematicDeleteTask) {
 				if (!executionContext?.pageUuid || executionContext.pageUuid !== executionContext.documentUuid)
@@ -528,6 +573,11 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 						if (currentRole !== 'active' || task.leaseTerm !== currentLeaseTerm)
 							throw new Error('Bridge role or lease changed before the pin mutation started.');
 						currentTransport.reportTaskStarted(task.requestId, task.leaseTerm, executionContext, adapter);
+					}, () => {
+						if (taskGeneration !== transportGeneration || transport !== currentTransport)
+							throw new Error('Bridge connection changed before the native mutation started.');
+						if (currentRole !== 'active' || task.leaseTerm !== currentLeaseTerm)
+							throw new Error('Bridge role or lease changed before the native mutation started.');
 					}));
 					if (task.path === '/bridge/jlceda/pcb/document'
 						&& task.payload && typeof task.payload === 'object' && !Array.isArray(task.payload)
@@ -633,7 +683,7 @@ export function enqueueSelectionProbe(probeId: string, currentTransport: BridgeT
 }
 
 // 建立桥接连接。
-async function ensureConnected(): Promise<void> {
+async function ensureConnected(checkEditablePage = false): Promise<void> {
 	if (!started || connecting || transport) {
 		return;
 	}
@@ -646,6 +696,15 @@ async function ensureConnected(): Promise<void> {
 	const activeClientId = getClientId();
 	let initialContext: BridgeClientContext | undefined;
 	try {
+		if (checkEditablePage && !await isEditablePage()) {
+			if (ownsAttempt()) {
+				connecting = false;
+				statusReporter.markNotOnEditablePage();
+			}
+			return;
+		}
+		if (!started || !ownsAttempt())
+			return;
 		initialContext = await readBridgeClientContext();
 	}
 	catch (error: unknown) {
@@ -726,6 +785,9 @@ async function ensureConnected(): Promise<void> {
 	catch (error: unknown) {
 		instance.close();
 		if (ownsAttempt()) {
+			// ready 发送失败时也要释放已接管的连接，避免重连被旧引用阻塞。
+			if (transport === instance)
+				stopTransport();
 			statusReporter.markFailed(toSafeErrorMessage(error));
 			scheduleReconnect();
 		}
@@ -820,13 +882,21 @@ function subscribeConfigChange(): void {
 	});
 }
 
-// 检查当前页面是否为原理图或 PCB 可编辑页。
+// 检查当前页面是否为原理图、PCB 或封装可编辑页。
 async function isEditablePage(): Promise<boolean> {
-	const [schPageInfo, pcbInfo] = await withPageContextTimeout(Promise.all([
-		safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo()),
-		safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
-	]), 'EDA editable page detection');
-	return schPageInfo != null || pcbInfo != null;
+	return withPageContextTimeout((async () => {
+		const document = await safeCall(() => readCurrentEditorDocument(eda as unknown as Record<string, unknown>));
+		const kind = editorDocumentPageKind(document);
+		if (kind === 'footprint')
+			return true;
+		if (document?.documentType !== undefined && kind === undefined)
+			return false;
+		const [schPageInfo, pcbInfo] = await Promise.all([
+			safeCall(() => eda.dmt_Schematic.getCurrentSchematicPageInfo()),
+			safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
+		]);
+		return schPageInfo != null || pcbInfo != null;
+	})(), 'EDA editable page detection');
 }
 
 // 周期同步页面上下文和连接状态。
@@ -839,7 +909,7 @@ function startContextSync(): void {
 		void isEditablePage().then(async (editable) => {
 			if (editable) {
 				transport?.updateContext(await readBridgeClientContext());
-				// 在原理图或 PCB 页时正常维持连接。
+				// 在原理图、PCB 或封装页时正常维持连接。
 				void ensureConnected();
 				// 心跳刷新状态快照，让设置页的过期检测能区分活跃连接与历史遗留数据。
 				if (transport && currentLeaseTerm > 0) {
@@ -850,7 +920,7 @@ function startContextSync(): void {
 				}
 			}
 			else if (transport) {
-				// 离开原理图/PCB 页时主动断开，避免首页无意义占用连接。
+				// 离开原理图/PCB/封装页时主动断开，避免首页无意义占用连接。
 				clearReconnectTimer();
 				stopTransport();
 				currentRole = 'standby';
@@ -880,7 +950,7 @@ export function startBridgeRuntime(): void {
 	});
 	subscribeConfigChange();
 	startContextSync();
-	// 启动时检查页面类型，仅在原理图或 PCB 页才立即发起连接。
+	// 启动时检查页面类型，仅在原理图、PCB 或封装页才立即发起连接。
 	void isEditablePage().then((editable) => {
 		if (editable) {
 			void ensureConnected();
@@ -925,14 +995,5 @@ export function restartBridgeServer(): void {
 	currentLeaseTerm = 0;
 	currentActiveClientId = '';
 	statusReporter.markConnecting();
-	void isEditablePage().then((editable) => {
-		if (editable) {
-			void ensureConnected();
-		}
-		else {
-			statusReporter.markNotOnEditablePage();
-		}
-	}).catch((error: unknown) => {
-		statusReporter.markFailed(toSafeErrorMessage(error));
-	});
+	void ensureConnected(true);
 }

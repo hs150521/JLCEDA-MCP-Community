@@ -19,6 +19,7 @@ import { handleDesignArchiveExportTask } from '../mcp/design-archive-export-hand
 import { handleDesignCompareTask } from '../mcp/design-compare-handler.ts';
 import { handleDesignSourceExportTask } from '../mcp/design-source-export-handler.ts';
 import { handleEditorNavigateTask } from '../mcp/editor-navigate-handler.ts';
+import { handleFootprintReadTask } from '../mcp/footprint-read-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleLibraryClassificationTask } from '../mcp/library-classification-handler.ts';
 import { handleLibraryPreviewTask } from '../mcp/library-preview-handler.ts';
@@ -59,7 +60,7 @@ import { handleSchematicWireManageTask } from '../mcp/schematic-wire-manage-hand
 import { handleWorkspaceQueryTask } from '../mcp/workspace-query-handler.ts';
 import { handlePcbImportResolveTask } from './pcb-import-confirm-barrier.ts';
 
-export type BridgeTaskHandler = (payload: unknown, reportPinAdapter?: (adapter: SchematicPinAdapter) => void) => Promise<unknown>;
+export type BridgeTaskHandler = (payload: unknown, reportPinAdapter?: (adapter: SchematicPinAdapter) => void, beforeNativeMutation?: () => void) => Promise<unknown>;
 
 const handlers: Readonly<Record<string, BridgeTaskHandler>> = {
 	'/bridge/jlceda/api/index': handleApiIndexTask,
@@ -92,6 +93,7 @@ const handlers: Readonly<Record<string, BridgeTaskHandler>> = {
 	'/bridge/jlceda/pcb/component-edit': handlePcbComponentEditTask,
 	'/bridge/jlceda/pcb/pour-manage': handlePcbPourManageTask,
 	'/bridge/jlceda/pcb/read': handlePcbReadTask,
+	'/bridge/jlceda/footprint/read': handleFootprintReadTask,
 	'/bridge/jlceda/pcb/routing-edit': handlePcbRoutingEditTask,
 	'/bridge/jlceda/pcb/board-outline-manage': handlePcbBoardOutlineManageTask,
 	'/bridge/jlceda/pcb/region-manage': handlePcbRegionManageTask,

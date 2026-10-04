@@ -42,7 +42,7 @@ export class BridgeStatusReporter {
 	}
 
 	/**
-	 * 标记当前页面不是原理图或 PCB 编辑页，连接已暂停。
+	 * 标记当前页面不是原理图、PCB 或封装编辑页，连接已暂停。
 	 */
 	public markNotOnEditablePage(): void {
 		saveConnectionStatus(bridgeStateManager.createNotEditablePageSnapshot());

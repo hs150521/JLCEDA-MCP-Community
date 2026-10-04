@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
-import { BRIDGE_CONTRACT, BRIDGE_PROTOCOL_VERSION, isReadOnlyBridgeRequest, operationForPath, validateBridgeClientMessage } from './bridge-contract.js';
+import { BRIDGE_CONTRACT, BRIDGE_PROTOCOL_VERSION, footprintApiAccess, isReadOnlyBridgeRequest, operationForPath, validateBridgeClientMessage } from './bridge-contract.js';
 import { BRIDGE_MAX_PAYLOAD_BYTES, decodeBridgeMessage, sendBridgeJson, tokensMatch } from './bridge-wire.js';
 
 export function formatInternalClientEndpoint(port: number): string {
@@ -33,9 +33,10 @@ interface BridgeClientContext {
   tabId?: string;
   projectUuid?: string;
   projectName?: string;
-  pageKind?: 'schematic' | 'pcb';
+  pageKind?: 'schematic' | 'pcb' | 'footprint';
   pageUuid?: string;
   pageName?: string;
+  libraryUuid?: string;
 }
 
 type SchematicPinAdapter = 'component_pin_instance' | 'native_pin';
@@ -78,7 +79,7 @@ interface RecoveryDiagnostic {
   sourceSchematicPageUuid?: string;
   targetPageMayBeAbsent?: boolean;
   targetPcbUuid?: string;
-  requiredReadback?: 'pcb_component_positions' | 'pcb_component_state' | 'pcb_pour_state' | 'pcb_region_state' | 'pcb_text_state' | 'pcb_layer_state' | 'pcb_routing_state' | 'pcb_document_inventory' | 'board_document_inventory' | 'schematic_page_inventory' | 'schematic_connectivity_primitives' | 'schematic_component_ids' | 'schematic_component_state' | 'schematic_text_state';
+  requiredReadback?: 'pcb_component_positions' | 'pcb_component_state' | 'pcb_pour_state' | 'pcb_region_state' | 'pcb_text_state' | 'pcb_layer_state' | 'pcb_routing_state' | 'pcb_document_inventory' | 'board_document_inventory' | 'schematic_page_inventory' | 'schematic_connectivity_primitives' | 'schematic_component_ids' | 'schematic_component_state' | 'schematic_text_state' | 'footprint_state';
   hostRestartRequired?: boolean;
   pendingNativeConfirmation?: boolean;
   importContextConflict?: boolean;
@@ -261,10 +262,12 @@ function isSchematicConnectivityMutation(path: string, payload: unknown): boolea
       && (payload.action === 'wire_create' || payload.action === 'netport_create' || payload.action === 'netport_move'));
 }
 
-function isSchematicPlacementWrite(path: string): boolean {
+function isSchematicPlacementWrite(path: string, payload: unknown): boolean {
   return path === '/bridge/jlceda/component/place/start'
     || path === '/bridge/jlceda/component/place/check'
-    || path === '/bridge/jlceda/component/place-auto';
+    || path === '/bridge/jlceda/component/place-auto'
+    || (path === '/bridge/jlceda/api/invoke' && isRecord(payload)
+      && optionalString(payload.apiFullName)?.toLowerCase() === 'eda.sch_primitivecomponent.create');
 }
 
 function isSchematicConnectivityReadbackRequest(path: string, payload: Record<string, unknown>): boolean {
@@ -488,7 +491,7 @@ function parseClientContext(value: unknown): BridgeClientContext | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
-  const pageKind = value.pageKind === 'schematic' || value.pageKind === 'pcb'
+  const pageKind = value.pageKind === 'schematic' || value.pageKind === 'pcb' || value.pageKind === 'footprint'
     ? value.pageKind
     : undefined;
   const documentType = typeof value.documentType === 'number' && Number.isFinite(value.documentType)
@@ -503,6 +506,7 @@ function parseClientContext(value: unknown): BridgeClientContext | undefined {
     pageKind,
     pageUuid: optionalString(value.pageUuid),
     pageName: optionalString(value.pageName),
+    libraryUuid: optionalString(value.libraryUuid),
   };
 }
 
@@ -531,6 +535,10 @@ function updatePendingPcbImportContext(diagnostic: RecoveryDiagnostic, result: u
 function extractReadbackIdentity(value: unknown, pageKind?: BridgeClientContext['pageKind']): { documentUuid?: string; projectUuid?: string; pageUuid?: string } {
   if (!isRecord(value)) {
     return {};
+  }
+  if (pageKind === 'footprint') {
+    const footprint = parseClientContext(value.footprintContext);
+    return { documentUuid: footprint?.documentUuid, pageUuid: footprint?.pageUuid };
   }
   const document = isRecord(value.currentDocumentInfo) ? value.currentDocumentInfo : isRecord(value.currentDocument) ? value.currentDocument : undefined;
   const project = isRecord(value.currentProjectInfo) ? value.currentProjectInfo : isRecord(value.project) ? value.project : undefined;
@@ -985,7 +993,8 @@ export class EdaBridgeServer {
             || diagnostic.requiredReadback === 'pcb_layer_state'
             || diagnostic.requiredReadback === 'schematic_component_ids'
             || diagnostic.requiredReadback === 'schematic_component_state'
-            || diagnostic.requiredReadback === 'schematic_connectivity_primitives')
+            || diagnostic.requiredReadback === 'schematic_connectivity_primitives'
+            || diagnostic.requiredReadback === 'footprint_state')
             && message.result.nativeCallSettled === true)))
         diagnostic.hostRestartRequired = false;
       const pendingImport = diagnostic?.clientId === peer.clientId
@@ -1426,7 +1435,7 @@ export class EdaBridgeServer {
         ? { requiredReadback: 'pcb_routing_state' as const,
             hostRestartRequired: !nativeCallSettled || isPcbAutoRoutingRequest(pending.path ?? '', pending.payload) }
         : {}),
-      ...(mutating && isSchematicPlacementWrite(pending.path ?? '')
+      ...(mutating && isSchematicPlacementWrite(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_component_ids' as const, hostRestartRequired: !nativeCallSettled }
         : {}),
       ...(mutating && pending.path === '/bridge/jlceda/schematic/component-edit'
@@ -1438,6 +1447,9 @@ export class EdaBridgeServer {
 		? { targetSchematicPinPrimitiveId: optionalString(pending.payload.args[0]), schematicPinAdapter: pending.schematicPinAdapter } : {}),
       ...(mutating && isTargetedSchematicPageMutation(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_page_inventory' as const, ...schematicPageMutationTarget(pending.path ?? '', pending.payload) } : {}),
+      ...(mutating && pending.path === '/bridge/jlceda/api/invoke' && isRecord(pending.payload)
+        && footprintApiAccess(pending.payload.apiFullName) === 'write' && pending.context?.pageKind === 'footprint'
+        ? { requiredReadback: 'footprint_state' as const, hostRestartRequired: !nativeCallSettled } : {}),
       uncertaintyReason,
       context: pending.context,
     };
@@ -1559,6 +1571,9 @@ export class EdaBridgeServer {
     }
     const readbackPath = String(payload.readbackPath ?? '/bridge/jlceda/context');
     const readbackPayload = isRecord(payload.readbackPayload) ? payload.readbackPayload : {};
+    if (session.diagnostic.requiredReadback === 'footprint_state'
+      && (readbackPath !== '/bridge/jlceda/footprint/read' || Object.keys(readbackPayload).some(key => key !== 'timeoutMs')))
+      throw new Error('Footprint primitive write requires complete footprint_read without filters for recovery readback.');
     if (!isReadOnlyRequest(readbackPath, readbackPayload)) {
       throw new Error('readbackPath and readbackPayload must describe a read-only operation; schematic layout mode=fix is not allowed.');
     }
@@ -1701,6 +1716,11 @@ export class EdaBridgeServer {
     if (session.preRecoverySockets.has(target.socket) || session.preRecoveryClientIds.has(target.clientId))
       throw new Error('clientId is not a fresh Bridge generation created after recovery was requested.');
     const executionContext = session.diagnostic.context;
+    if (session.diagnostic.requiredReadback === 'footprint_state'
+      && (executionContext?.pageKind !== 'footprint' || executionContext.documentType !== 4
+        || !executionContext.documentUuid || executionContext.pageUuid !== executionContext.documentUuid
+        || !executionContext.libraryUuid || !executionContext.tabId))
+      throw new Error('Footprint write has no verified execution-time document and library identity; writes remain blocked.');
     if (session.diagnostic.pageBound && (!executionContext?.pageKind || !executionContext.pageUuid))
       throw new Error('Timed-out write has no verified execution-time page identity; writes remain blocked.');
     const requestedPageUuid = optionalString(payload.expectedPageUuid);
@@ -1721,6 +1741,7 @@ export class EdaBridgeServer {
       pageUuid: executionContext?.pageUuid,
       documentUuid: executionContext?.documentUuid,
       projectUuid: executionContext?.projectUuid,
+      libraryUuid: executionContext?.libraryUuid,
     };
     if (!expectedDocumentUuid && !expectedProjectUuid)
       throw new Error('Recovery requires a target expectedDocumentUuid or expectedProjectUuid for this write.');
@@ -1733,6 +1754,9 @@ export class EdaBridgeServer {
     this.selectClient(targetClientId, true, true);
     session.targetClientId = targetClientId;
     session.targetSocket = target.socket;
+    const footprintBefore = session.diagnostic.requiredReadback === 'footprint_state'
+      ? this.assertFootprintIdentity(await this.dispatchToEda('/bridge/jlceda/context', {}, Math.min(timeoutMs, RECOVERY_READBACK_TIMEOUT_MS), undefined, true, targetClientId), executionContext!)
+      : undefined;
     if (session.diagnostic.requiredReadback === 'pcb_routing_state'
       || session.diagnostic.requiredReadback === 'pcb_component_state'
       || session.diagnostic.requiredReadback === 'pcb_pour_state'
@@ -1801,10 +1825,14 @@ export class EdaBridgeServer {
       this.validateCompleteSchematicComponentState(readback, session.diagnostic);
     if (session.diagnostic.requiredReadback === 'schematic_text_state')
       this.validateCompleteSchematicTextState(readback, session.diagnostic);
+    if (session.diagnostic.requiredReadback === 'footprint_state')
+      this.validateCompleteFootprintState(readback, session.diagnostic, footprintBefore!);
     const identityReadback = readbackPath === '/bridge/jlceda/context'
       ? readback
       : await this.dispatchToEda('/bridge/jlceda/context', {}, Math.min(timeoutMs, RECOVERY_READBACK_TIMEOUT_MS), undefined, true, targetClientId);
     const identity = extractReadbackIdentity(identityReadback, expectedPageKind);
+    if (session.diagnostic.requiredReadback === 'footprint_state')
+      this.assertFootprintIdentity(identityReadback, executionContext!, footprintBefore!.tabId);
     if (expectedDocumentUuid && identity.documentUuid !== expectedDocumentUuid) {
       throw new Error('Readback documentUuid does not match expectedDocumentUuid; writes remain blocked.');
     }
@@ -1830,7 +1858,8 @@ export class EdaBridgeServer {
     if (session.diagnostic.context?.pageKind !== executionIdentity.pageKind
       || session.diagnostic.context?.pageUuid !== executionIdentity.pageUuid
       || session.diagnostic.context?.documentUuid !== executionIdentity.documentUuid
-      || session.diagnostic.context?.projectUuid !== executionIdentity.projectUuid) {
+      || session.diagnostic.context?.projectUuid !== executionIdentity.projectUuid
+      || session.diagnostic.context?.libraryUuid !== executionIdentity.libraryUuid) {
       throw new Error('Write execution identity changed during recovery readback; retry against the actual page.');
     }
     if (session.diagnostic.importContextConflict)
@@ -1855,6 +1884,83 @@ export class EdaBridgeServer {
       identityReadback,
       warningAcknowledged: true,
     };
+  }
+
+  private assertFootprintIdentity(value: unknown, expected: BridgeClientContext, tabId?: string): BridgeClientContext {
+    const identity = isRecord(value) ? parseClientContext(value.footprintContext) : undefined;
+    if (identity?.pageKind !== 'footprint' || identity.documentType !== 4
+      || identity.documentUuid !== expected.documentUuid || identity.pageUuid !== expected.documentUuid
+      || identity.libraryUuid !== expected.libraryUuid || !identity.tabId
+      || (tabId !== undefined && identity.tabId !== tabId))
+      throw new Error('Footprint document, library, or tab identity changed during readback; writes remain blocked.');
+    return identity;
+  }
+
+  private validateCompleteFootprintState(value: unknown, diagnostic: RecoveryDiagnostic, before: BridgeClientContext): void {
+    if (!isRecord(value) || value.ok !== true || value.complete !== true || value.scope !== 'current_footprint_document'
+      || value.pageKind !== 'footprint' || value.documentType !== 4
+      || value.documentUuid !== diagnostic.context?.documentUuid || value.pageUuid !== value.documentUuid
+      || value.libraryUuid !== diagnostic.context?.libraryUuid || value.tabId !== before.tabId)
+      throw new Error('Footprint readback was incomplete or from another document or library; writes remain blocked.');
+    const groups = [
+      ['pads', 'padCount', 'Pad'], ['vias', 'viaCount', 'Via'], ['lines', 'lineCount', 'Line'],
+      ['arcs', 'arcCount', 'Arc'], ['polylines', 'polylineCount', 'Polyline'],
+      ['strings', 'stringCount', 'String'], ['attributes', 'attributeCount', 'Attribute'],
+    ] as const;
+    const ids = new Set<string>();
+    let total = 0;
+    for (const [arrayName, countName, primitiveType] of groups) {
+      const items = value[arrayName];
+      if (!Array.isArray(items) || !Number.isSafeInteger(value[countName]) || value[countName] !== items.length)
+        throw new Error('Footprint primitive lists or counts were incomplete; writes remain blocked.');
+      total += items.length;
+      for (const item of items) {
+        if (!isRecord(item) || !optionalString(item.primitiveId) || ids.has(item.primitiveId as string)
+          || item.primitiveType !== primitiveType || typeof item.primitiveLock !== 'boolean')
+          throw new Error('Footprint primitive identity was incomplete; writes remain blocked.');
+        ids.add(item.primitiveId as string);
+        const finite = (fields: string[]): boolean => fields.every(field => typeof item[field] === 'number' && Number.isFinite(item[field]));
+        const strings = (fields: string[]): boolean => fields.every(field => typeof item[field] === 'string');
+        const nullableArray = (fields: string[], allowEmpty = false): boolean => fields.every(field => item[field] === null
+          || (Array.isArray(item[field]) && (allowEmpty || item[field].length > 0)));
+        const nullableRecord = (fields: string[]): boolean => fields.every(field => item[field] === null || isRecord(item[field]));
+        const nullableNet = item.net === null || typeof item.net === 'string';
+        let complete = false;
+        if (primitiveType === 'Pad') {
+          complete = finite(['layer', 'x', 'y', 'rotation', 'holeOffsetX', 'holeOffsetY'])
+            && ((item.hole === null && item.holeRotation === null) || finite(['holeRotation']))
+            && strings(['padNumber']) && nullableNet && typeof item.metallization === 'boolean'
+            && [0, 1, 2].includes(item.padType as number) && nullableArray(['pad', 'hole']) && nullableArray(['specialPad'], true)
+            && ((Array.isArray(item.pad) && item.pad.length > 0) || (Array.isArray(item.specialPad) && item.specialPad.length > 0))
+            && nullableRecord(['solderMaskAndPasteMaskExpansion', 'heatWelding']);
+        } else if (primitiveType === 'Via') {
+          complete = finite(['x', 'y', 'holeDiameter', 'diameter']) && strings(['net'])
+            && [0, 1, 2].includes(item.viaType as number)
+            && (item.designRuleBlindViaName === null || typeof item.designRuleBlindViaName === 'string')
+            && nullableRecord(['solderMaskExpansion']);
+        } else if (primitiveType === 'Line' || primitiveType === 'Arc') {
+          complete = nullableNet && finite(['layer', 'startX', 'startY', 'endX', 'endY', 'lineWidth'])
+            && (primitiveType !== 'Arc' || (finite(['arcAngle']) && [1, 2].includes(item.interactiveMode as number)));
+        } else if (primitiveType === 'Polyline') {
+          complete = nullableNet && finite(['layer', 'lineWidth']) && Array.isArray(item.polygonSource)
+            && item.polygonSource.length > 0 && item.polygonSource.every(part => (typeof part === 'string'
+              && ['L', 'ARC', 'CARC', 'C', 'R', 'CIRCLE'].includes(part)) || (typeof part === 'number' && Number.isFinite(part)));
+        } else {
+          complete = finite(['layer', 'fontSize', 'lineWidth', 'alignMode', 'rotation', 'expansion'])
+            && Number.isInteger(item.alignMode) && Number(item.alignMode) >= 1 && Number(item.alignMode) <= 9
+            && strings(['fontFamily']) && typeof item.reverse === 'boolean' && typeof item.mirror === 'boolean';
+          complete = complete && (primitiveType === 'String'
+            ? strings(['text']) && finite(['x', 'y'])
+            : strings(['key', 'value']) && !!optionalString(item.parentPrimitiveId)
+              && typeof item.keyVisible === 'boolean' && typeof item.valueVisible === 'boolean'
+              && ['x', 'y'].every(field => item[field] === null || (typeof item[field] === 'number' && Number.isFinite(item[field]))));
+        }
+        if (!complete)
+          throw new Error('Footprint primitive state was incomplete; writes remain blocked.');
+      }
+    }
+    if (!Number.isSafeInteger(value.primitiveCount) || value.primitiveCount !== total)
+      throw new Error('Footprint total primitive count was incomplete; writes remain blocked.');
   }
 
   private assertPcbIdentity(value: unknown, documentUuid: string | undefined, projectUuid: string | undefined, pageUuid: string): void {

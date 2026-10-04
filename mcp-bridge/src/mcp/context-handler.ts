@@ -9,11 +9,23 @@
  * ------------------------------------------------------------------------
  */
 
-import { isPlainObjectRecord, safeCall, toSerializable } from '../utils';
+import { editorDocumentPageKind, footprintIdentityFromDocument } from '../bridge/editor-context.ts';
+import { isPlainObjectRecord, safeCall, toSafeErrorMessage, toSerializable } from '../utils';
 
 // 组装上下文快照。
 async function buildContextSnapshot(scope: string): Promise<Record<string, unknown>> {
 	const currentDocumentInfo = await safeCall(() => eda.dmt_SelectControl.getCurrentDocumentInfo());
+	let footprintContext: unknown;
+	let footprintContextError: string | undefined;
+	if (editorDocumentPageKind(currentDocumentInfo) === 'footprint') {
+		try {
+			footprintContext = footprintIdentityFromDocument(currentDocumentInfo);
+		}
+		catch (error: unknown) {
+			footprintContext = null;
+			footprintContextError = toSafeErrorMessage(error);
+		}
+	}
 	const currentProjectInfo = await safeCall(() => eda.dmt_Project.getCurrentProjectInfo());
 	const currentBoardInfo = await safeCall(() => eda.dmt_Board.getCurrentBoardInfo());
 	const currentSchematicInfo = await safeCall(() => eda.dmt_Schematic.getCurrentSchematicInfo());
@@ -37,6 +49,8 @@ async function buildContextSnapshot(scope: string): Promise<Record<string, unkno
 		scope,
 		capturedAt: new Date().toISOString(),
 		currentDocumentInfo: toSerializable(currentDocumentInfo),
+		...(footprintContext !== undefined ? { footprintContext } : {}),
+		...(footprintContextError ? { footprintContextError } : {}),
 		currentProjectInfo: toSerializable(currentProjectInfo),
 		currentBoardInfo: toSerializable(currentBoardInfo),
 		currentSchematicInfo: toSerializable(currentSchematicInfo),

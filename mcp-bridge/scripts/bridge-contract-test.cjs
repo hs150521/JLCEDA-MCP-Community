@@ -5,6 +5,7 @@ process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', modu
 require('ts-node/register/transpile-only');
 
 const {
+	footprintApiAccess,
 	isReadOnlyBridgeRequest,
 	resolveContractTimeoutMs,
 	validateBridgeServerMessage,
@@ -29,6 +30,19 @@ assert.equal(resolveContractTimeoutMs('/bridge/jlceda/component/place-auto', {})
 assert.equal(resolveContractTimeoutMs('/bridge/jlceda/netlabel/place', { timeoutMs: 420000 }), 420000);
 assert.throws(() => resolveContractTimeoutMs('/bridge/jlceda/component/place-auto', { timeoutMs: 600001 }), /600000/);
 assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/schematic/read', {}), true);
+assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/footprint/read', {}), true);
+assert.equal(contract.footprintApi.readOnlyApiFullNames.length, 21);
+assert.equal(contract.footprintApi.mutatingApiFullNames.length, 20);
+for (const name of contract.footprintApi.readOnlyApiFullNames) {
+	assert.equal(footprintApiAccess(name), 'read');
+	assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/api/invoke', { apiFullName: name, args: ['primitive-1'] }), true);
+}
+for (const name of contract.footprintApi.mutatingApiFullNames) {
+	assert.equal(footprintApiAccess(name), 'write');
+	assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/api/invoke', { apiFullName: name, args: [] }), false);
+}
+assert.equal(footprintApiAccess('eda.pcb_PrimitiveAttribute.create'), undefined);
+assert.equal(footprintApiAccess('eda.pcb_PrimitiveComponent.create'), undefined);
 assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/pcb/documents-manage', { operation: 'list', projectUuid: 'project-1' }), true);
 assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/editor/navigate', { operation: 'open', projectUuid: 'project-1', documentUuid: 'page-1' }), false);
 for (const operation of ['create', 'copy', 'rename'])
