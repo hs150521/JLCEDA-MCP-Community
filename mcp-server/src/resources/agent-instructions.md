@@ -40,7 +40,7 @@
   返回字段说明：`drcCheckPassed` 为 DRC 检查是否通过；`netlistText` 为全工程网表文件原始文本，包含所有原理图页面的器件与网络连接关系。
   根据用户问题报告相关发现；全面设计审查可覆盖电路功能、器件选型、电源、信号连线、保护可靠性和整体可用性，但无需为简单问题强制输出六张表。作全工程结论时检查相关页面和网络，不把当前页快照当成全工程依据。
 - `schematic_connectivity_action`：创建导线前先用 `wire_preview` 查看当前页电气接触；没有连接点的纯十字交叉不算接触。确认意图后在 `wire_create.allowedWireIds` 中明确列出允许接触的导线 ID。每次 `wire_create` 成功后，必须调用 `schematic_read` 并设置 `includeConnectivityPrimitives:true`，核对同一图页的新导线图元及预期引脚、导线的实际语义连接；`wire_create` 返回的 `net` 是请求值，几何回读不是写后网络核验。读回不可用时不要重复创建或声称电气连接已验证；涉及跨页关系时再用 `schematic_review`。若返回 `commitUnknown: true`，按受控恢复流程处理，避免直接重复写入；按时或迟到的未知结果都会保留恢复诊断。`netport_create` 是创建同页连接/层次图端口的选项，结果会回读当前页图元和目标网络；它不等于跨页连接标识。移动已有端口用 `netport_move`，不要对 NetPort 调用仅支持普通器件的 `sch_PrimitiveComponent.modify`。
-- `schematic_wire_manage`：修改或删除已有导线前先 `action:read` 核对当前图页目标 ID；几何修改传平铺正交 `property.line`，接触其他导线时明确列出 `allowedWireIds`。修改网络名只用于没有接触其他导线或显式网络标识的导线。写入后审查网表；结果不明时用 `schematic_read`、`includeConnectivityPrimitives:true` 完整回读原图页，诊断要求时先重启原宿主。
+- `schematic_wire_manage`：修改或删除已有导线前先 `action:read` 核对当前图页目标 ID；几何修改传平铺正交 `property.line`，接触其他导线时明确列出 `allowedWireIds`。修改网络名只用于没有接触其他导线或显式网络标识的导线。写入后审查网表；结果不明时用 `schematic_read`、`includeConnectivityPrimitives:true` 完整回读原图页，诊断要求时先重启原宿主。原生读取的 `Wire.line` 每 4 个坐标为一条独立端点对，不连接相邻端点对之间的空隙；创建/修改的连续路径请求格式不变，实际 DTO 原样保留。
 - `component_select`：需要搜索或筛选器件时调用；`keyword` 或精确 `properties` 应反映用户给定的型号及封装、尺寸、引脚数等实际约束，电阻、电容、电感的数值须带单位。用户已明确授权代为选型且候选满足约束时，可按规格、库存和价格选择并继续；若候选有会影响设计的取舍且用户未授权决定，再请用户选择。用户已提供可用的精确器件 `uuid` 和 `libraryUuid` 时，无需重复搜索或确认。用户取消或跳过当前选型时停止该次尝试；用户后来提出新要求时可重新选择。
 - `component_place`：用于按顺序交互放置普通器件；放置前核对每件的 `uuid`、`libraryUuid` 与当前设计意图。电源/地网络标识应使用 `netlabel_place` 在指定引脚放置 NetFlag 并回读连接，不能把它当作普通器件搜索或放置。
 
