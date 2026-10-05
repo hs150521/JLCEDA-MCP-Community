@@ -1,5 +1,11 @@
 # MCP Bridge 社区版
 
+## 2.3.9 自动布线执行前保护
+
+`eda.pcb_Document.autoRouting` 无参数、全网与选网调用均绑定 runtime 实际执行 PCB。内部 `expectedPcbUuid` 覆盖调用者提供的目标；handler 核对当前编辑器文档和 PCB，并在选网观察读取后再次读取两者。最后身份 await 后紧邻同步连接、活动角色、租约 guard，然后才调用原生方法；原生参数和 receiver 保持不变。
+
+执行页变化、切到原理图但 PCB getter 仍有缓存，或最后读取期间租约变化时，均在原生写入前拒绝，零原生调用，收到明确执行前拒绝时不产生未知提交隔离；连接中断仍沿既有诊断恢复。handler/runtime 配合 mock 的定向回归、typecheck、相关 lint 与独立源码审查通过；本轮未在宿主执行 autoRouting 验证该保护，本轮 Bridge 完整 `npm run build`、`npm run lint` 及 Server `npm ci`、`npm test`、`npm run lint`、`node verify-multi-client.mjs` 均已通过；远端 CI/PR 审查按发布流程核对。#37 原 62 网络、0 毫秒全部失败仍开放，#22 原 TPS552892 场景仍缺 fixture，EDA v4 未实测。详见 [2.3.9 发布说明](../docs/releases/v2.3.9.md)。
+
 ## 2.3.8 共享封装源保存
 
 新增 `footprint_save`：在当前独立封装文档调用一次 `sys_FileManager.getDocumentSource()`，核对同库/文档/标签及连接、活动角色、租约后，调用一次 `lib_Footprint.updateDocumentSource(documentUuid, libraryUuid, source)`。读取时的完整源码快照原样留在 EDA 内，保存不额外读取七类图元，也不会自动关闭页面或重建器件。仅支持可选 `timeoutMs`（5–120 秒，默认 30 秒）。该操作更新共享库源，可能影响所有引用实例，不提供仅此实例的封装重绑定。官方接口无 revision/CAS，不保证与同页人工并发编辑之间的原子保存。
@@ -240,16 +246,16 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 1. EDA Bridge
 
-以下文件名对应 2.3.8；是否可下载以发布页实际提供的包为准。
+以下文件名对应 2.3.9；是否可下载以发布页实际提供的包为准。
 
-从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.8.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
+从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.9.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
 
 ### 2. 原生 MCP Server
 
-从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.8.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.9.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.3.8.tgz
+npm install --global .\jlceda-mcp-server-2.3.9.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。

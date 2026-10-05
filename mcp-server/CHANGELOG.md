@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [2.3.9] - 2026-10-05
+
+- 配合 Bridge 的 `eda.pcb_Document.autoRouting` 执行前保护：无参数、全网与选网任务均绑定执行时实际 PCB，内部 `expectedPcbUuid` 不受调用者覆盖；更新 Agent 调用指导。
+- 最后真实编辑器与 PCB 读取后紧邻同步检查连接、活动角色和租约，切页或租约变化在原生调用前拒绝，零原生调用，收到明确执行前拒绝时不产生未知提交隔离；连接中断仍沿既有诊断恢复；正常原生参数、receiver 与既有结果诊断保持不变。
+- handler/runtime 配合 mock 的定向回归、typecheck、相关 lint 和独立源码审查通过；本轮 Bridge 完整 `npm run build`、`npm run lint` 及 Server `npm ci`、`npm test`、`npm run lint`、`node verify-multi-client.mjs` 均已通过；远端 CI/PR 审查按发布流程核对，本轮没有宿主 autoRouting 实测。#37 原 62 网络、0 毫秒全部失败与 #22 原 TPS552892 布局问题仍开放，EDA v4 未实测。详见 [2.3.9 发布说明](../docs/releases/v2.3.9.md)。
+
 ## [2.3.8] - 2026-10-05
 
 - 新增 `footprint_save` 及 `/bridge/jlceda/footprint/save` 路由，默认 30 秒、可选 5–120 秒预算。当前封装完整源码快照（读取时状态）在 EDA 内写回同库同文档，保存不额外读取七类图元，不向 MCP 客户端传输源码。

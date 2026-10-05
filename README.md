@@ -1,6 +1,12 @@
 # JLCEDA MCP 社区版
 
-当前源码版本：Bridge `2.3.8`，MCP Server `2.3.8`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+当前源码版本：Bridge `2.3.9`，MCP Server `2.3.9`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+
+## 2.3.9 自动布线执行前保护
+
+`api_invoke eda.pcb_Document.autoRouting` 的无参数、全网和选网调用均绑定任务执行时的实际 PCB。runtime 内部设置 `expectedPcbUuid`，调用者提供的值不能覆盖该身份；读取选网观察数据后，Bridge 在原生调用前重新读取真实编辑器与当前 PCB，随后紧邻同步检查连接、活动角色和租约。切页、编辑器与缓存 PCB 不一致或租约变化时，原生调用尚未开始即拒绝，零原生调用，收到明确执行前拒绝时不产生未知提交隔离；连接中断仍沿既有诊断恢复；正常调用的原生参数和 receiver 保持不变。
+
+定向 handler、真实 runtime 配合 mock 的回归、typecheck、相关 lint 及独立源码审查已通过；本轮未在宿主执行 autoRouting 验证新 guard。#37 原 62 网络、0 毫秒全部失败仍开放，这一保护不证明宿主布线故障或网络筛选已解决；#22 原 TPS552892 场景仍缺 fixture，EDA v4 未实测。本轮 Bridge 完整 `npm run build`、`npm run lint` 及 Server `npm ci`、`npm test`、`npm run lint`、`node verify-multi-client.mjs` 均已通过；远端 CI/PR 审查按发布流程核对，实际发布状态以 GitHub 为准。详见 [2.3.9 发布说明](docs/releases/v2.3.9.md)。
 
 ## 2.3.8 共享封装源保存
 
@@ -120,10 +126,10 @@ PCB `import_changes` 返回 `pending_confirmation` 后，全局写入暂停，�
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.3.8
+       JLCEDA MCP Server 2.3.9
                   | 本机 WebSocket
                   v
-       MCP Bridge 社区版 2.3.8
+       MCP Bridge 社区版 2.3.9
                   | JLCEDA 扩展 API
                   v
            嘉立创 EDA 专业版
@@ -131,18 +137,18 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.3.8
+## 安装 2.3.9
 
-以下为 2.3.8 的安装文件名；是否可下载以发布页为准，并保持 Bridge 与 Server 版本一致。
+以下为 2.3.9 的安装文件名；是否可下载以发布页为准，并保持 Bridge 与 Server 版本一致。
 
 需要 Node.js 20 或更高版本。
 
-1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.8.eext`。
+1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.9.eext`。
    安装后在“已安装”的扩展详情中确认已允许“外部交互”，否则 Bridge 无法连接本机 MCP Server。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.3.8.tgz
+   npm install --global .\jlceda-mcp-server-2.3.9.tgz
    Get-Command jlceda-mcp
    ```
 
@@ -216,6 +222,7 @@ npm run build
 - [隐私与本地数据流](PRIVACY.md)
 - [发布检查表](docs/publishing.md)
 - [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)
+- [v2.3.9 发布说明与验证范围](docs/releases/v2.3.9.md)
 - [v2.3.8 发布说明与验证范围](docs/releases/v2.3.8.md)
 - [v2.3.7 发布说明与验证范围](docs/releases/v2.3.7.md)
 - [v2.3.6 发布说明与回归清单](docs/releases/v2.3.6.md)
