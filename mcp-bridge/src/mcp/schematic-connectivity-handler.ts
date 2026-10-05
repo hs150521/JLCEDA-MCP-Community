@@ -411,9 +411,11 @@ async function handleWireAction(
 	beforeNativeMutation?: () => void,
 	nativeArgs?: unknown[],
 ): Promise<Record<string, unknown>> {
-	const readbackDeadline = action === 'wire_create'
-		? Date.now() + resolveContractTimeoutMs('/bridge/jlceda/schematic/connectivity', payload) - WIRE_RESULT_RESERVE_MS
+	const timeoutMs = action === 'wire_create'
+		? resolveContractTimeoutMs(nativeArgs !== undefined ? '/bridge/jlceda/api/invoke' : '/bridge/jlceda/schematic/connectivity', payload)
 		: 0;
+	// raw API 允许 1 秒期限，结果余量不能占满整个任务；受控工具的 5 秒下限保持原余量。
+	const readbackDeadline = action === 'wire_create' ? Date.now() + timeoutMs - Math.min(WIRE_RESULT_RESERVE_MS, timeoutMs / 5) : 0;
 	const line = payload.line;
 	const multiPath = nativeArgs !== undefined && Array.isArray(line) && Array.isArray(line[0]);
 	const paths: unknown[] = multiPath ? line : [line];

@@ -373,6 +373,47 @@ async function main() {
 			documentReadHook = undefined;
 			submittedLease++;
 		}
+		transport.afterStarted = undefined;
+		const originalWireApi = globalThis.eda.sch_PrimitiveWire;
+		const shortTimeoutWires = [];
+		const shortTimeoutNativeArgs = [];
+		globalThis.eda.sch_PrimitiveWire = {
+			async getAll() { return shortTimeoutWires; },
+			async create(...args) {
+				assert.equal(this, globalThis.eda.sch_PrimitiveWire);
+				shortTimeoutNativeArgs.push(args);
+				const id = `short-timeout-wire-${shortTimeoutNativeArgs.length}`;
+				const created = {
+					getState_PrimitiveId: () => id,
+					getState_Net: () => args[1],
+					getState_Line: () => args[0],
+				};
+				shortTimeoutWires.push(created);
+				return created;
+			},
+		};
+		const shortTimeoutArgs = [[0, 0, 100, 0], 'NET_A', '#FF0000', 6, 1];
+		submit('raw-wire-one-second', { apiFullName: 'eda.sch_PrimitiveWire.create', args: shortTimeoutArgs, timeoutMs: 1000 });
+		const shortRawWire = await transport.resultFor('raw-wire-one-second');
+		assert.equal(shortRawWire.error, undefined);
+		assert.equal(shortRawWire.result.ok, true, 'raw 1s budget must leave time for complete wire readback');
+		assert.equal(shortRawWire.result.committed, true);
+		assert.equal(shortRawWire.result.commitUnknown, false);
+		assert.equal(shortRawWire.result.nativeCallSettled, true);
+		assert.deepEqual(shortRawWire.result.confirmedPrimitiveIds, ['short-timeout-wire-1']);
+		assert.deepEqual(shortTimeoutNativeArgs, [shortTimeoutArgs], 'the real runtime preserves all five raw arguments');
+		enqueueTask({ requestId: 'controlled-wire-one-second', path: '/bridge/jlceda/schematic/connectivity', payload: { action: 'wire_create', line: [0, 100, 100, 100], net: 'NET_B', timeoutMs: 1000 }, leaseTerm: submittedLease }, transport);
+		const shortControlledWire = await transport.resultFor('controlled-wire-one-second');
+		assert.match(shortControlledWire.error.message, /timeoutMs must be an integer between 5000 and 120000/);
+		assert.equal(shortTimeoutNativeArgs.length, 1, 'controlled 1s budget is rejected before any native write');
+		enqueueTask({ requestId: 'controlled-wire-after-short-budget', path: '/bridge/jlceda/schematic/connectivity', payload: { action: 'wire_create', line: [0, 100, 100, 100], net: 'NET_B', timeoutMs: 5000 }, leaseTerm: submittedLease }, transport);
+		const nextControlledWire = await transport.resultFor('controlled-wire-after-short-budget');
+		assert.equal(nextControlledWire.error, undefined);
+		assert.equal(nextControlledWire.result.ok, true, 'neither the raw write nor the rejected budget may quarantine later normal work');
+		assert.equal(nextControlledWire.result.committed, true);
+		assert.equal(nextControlledWire.result.commitUnknown, false);
+		assert.equal(shortTimeoutNativeArgs.length, 2);
+		globalThis.eda.sch_PrimitiveWire = originalWireApi;
 		readCalls = 0;
 		transport.afterStarted = undefined;
 		submit('uncertain-delete', { apiFullName: 'eda.sch_PrimitiveComponent.delete', args: ['to-delete'] });

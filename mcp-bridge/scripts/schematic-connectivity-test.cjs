@@ -85,6 +85,29 @@ function wireCreateFixture(before, create) {
 }
 
 async function wireCoverageAndRawTests() {
+	for (const timeoutMs of [1000, 4999]) {
+		const args = [[0, 0, 100, 0], 'NET_A', '#FF0000', 6, 1];
+		const calls = wireCreateFixture([], (nativeArgs) => {
+			const created = wire('short-raw-timeout', 'NET_A', nativeArgs[0]);
+			return { after: [created], returned: created };
+		});
+		const created = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args, timeoutMs });
+		assert.equal(created.ok, true, 'raw Wire.create accepts its API timeout policy and retains time for actual readback');
+		assert.equal(created.committed, true);
+		assert.equal(created.commitUnknown, false);
+		assert.equal(created.nativeCallSettled, true);
+		assert.deepEqual(calls, [args]);
+	}
+	const controlledCalls = wireCreateFixture([], (args) => {
+		const created = wire('standard-controlled-timeout', 'NET_A', args[0]);
+		return { after: [created], returned: created };
+	});
+	await assert.rejects(handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', timeoutMs: 1000 }), /timeoutMs must be an integer between 5000 and 120000/);
+	assert.equal(controlledCalls.length, 0, 'controlled connectivity still rejects a 1s timeout before native create');
+	const controlled = await handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', timeoutMs: 5000 });
+	assert.equal(controlled.ok, true);
+	assert.equal(controlledCalls.length, 1);
+
 	wireCreateFixture([wire('existing-a', 'NET_A', [0, 0, 100, 0])], () => {
 		const partial = wire('existing-a', 'NET_A', [0, 0, 120, 0]);
 		return { after: [partial], returned: partial };
