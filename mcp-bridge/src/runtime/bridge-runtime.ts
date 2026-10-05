@@ -525,6 +525,7 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 				&& isPlainObjectRecord(task.payload)
 				&& typeof task.payload.apiFullName === 'string'
 				&& task.payload.apiFullName.trim().toLowerCase() === 'eda.pcb_document.autolayout';
+			const autoRoutingTask = canvasInvokeName(task.path, task.payload) === 'eda.pcb_document.autorouting';
 			const schematicCreateTask = task.path === '/bridge/jlceda/api/invoke'
 				&& isPlainObjectRecord(task.payload)
 				&& typeof task.payload.apiFullName === 'string'
@@ -551,6 +552,11 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 			}
 			if (autoLayoutTask) {
 				handlerPayload = { ...(task.payload as Record<string, unknown>), expectedPcbUuid: executionContext!.pageUuid };
+			}
+			else if (autoRoutingTask) {
+				if (executionContext?.pageKind !== 'pcb' || !executionContext.pageUuid)
+					throw new Error('Cannot verify the current PCB before autoRouting; the operation was not started.');
+				handlerPayload = { ...(handlerPayload as Record<string, unknown>), expectedPcbUuid: executionContext.pageUuid };
 			}
 			else if (schematicCreateTask) {
 				if (!executionContext?.pageUuid || executionContext.pageUuid !== executionContext.documentUuid)

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.3.9] - 2026-10-05
+
+- `eda.pcb_Document.autoRouting` 无参数、全网与选网任务均由 runtime 绑定执行时实际 PCB，内部 `expectedPcbUuid` 覆盖调用者传入的目标，避免任务开始后切页将原生调用落到另一页。
+- handler 在选网观察读取后重新核对真实编辑器文档与当前 PCB，最后身份 await 后紧邻同步检查连接、活动角色与租约，再调用原生方法。早拒时零原生调用，收到明确执行前拒绝时不产生未知提交隔离；连接中断仍沿既有诊断恢复；正常调用保留原生参数和 receiver。
+- 新增 handler 与真实 runtime 配合 mock 的切页、缓存 PCB 与原理图编辑器不一致、最终读取期间租约变化，以及拒绝后正常调用回归；定向测试、typecheck、相关 lint 与独立源码审查通过，本轮 Bridge 完整 `npm run build`、`npm run lint` 及 Server `npm ci`、`npm test`、`npm run lint`、`node verify-multi-client.mjs` 均已通过；远端 CI/PR 审查按发布流程核对。
+- 本轮未在宿主执行 autoRouting 验证新保护，不宣称 #37 原 62 网络、0 毫秒全部失败已修复；#37、缺少原 TPS552892 fixture 的 #22 仍开放，EDA v4 未实测。详见 [2.3.9 发布说明](../docs/releases/v2.3.9.md)。
+
 ## [2.3.8] - 2026-10-05
 
 - 新增 `footprint_save`：当前独立封装完整源码快照（读取时状态）通过一次 `getDocumentSource` 和一次 `lib_Footprint.updateDocumentSource` 原样写回同库同文档；默认 30 秒、可选 5–120 秒预算。保存另核对身份，不额外读取七类图元，不自动关闭页面或重建器件。

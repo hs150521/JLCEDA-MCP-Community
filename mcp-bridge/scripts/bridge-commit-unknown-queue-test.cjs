@@ -414,6 +414,86 @@ async function main() {
 		assert.equal(nextControlledWire.result.commitUnknown, false);
 		assert.equal(shortTimeoutNativeArgs.length, 2);
 		globalThis.eda.sch_PrimitiveWire = originalWireApi;
+		const originalRoutingDocumentApi = globalThis.eda.dmt_SelectControl;
+		const originalRoutingPcbApi = globalThis.eda.dmt_Pcb;
+		const originalRoutingNetApi = globalThis.eda.pcb_Net;
+		const originalRoutingApi = globalThis.eda.pcb_Document;
+		let routingPageUuid = 'routing-pcb-one';
+		const routingNativeArgs = [];
+		currentDocumentType = 3;
+		globalThis.eda.dmt_SelectControl = {
+			...originalRoutingDocumentApi,
+			async getCurrentDocumentInfo() {
+				const document = await originalRoutingDocumentApi.getCurrentDocumentInfo();
+				return document.documentType === 3 ? { ...document, uuid: routingPageUuid } : document;
+			},
+		};
+		globalThis.eda.dmt_Pcb = {
+			async getCurrentPcbInfo() { return { uuid: routingPageUuid }; },
+		};
+		globalThis.eda.pcb_Net = {
+			async getAllPrimitivesByNet() { return []; },
+			async getNetLength() { return 0; },
+		};
+		globalThis.eda.pcb_Document = {
+			async autoRouting(...args) {
+				assert.equal(this, globalThis.eda.pcb_Document);
+				routingNativeArgs.push(args);
+				return { success: true, totalNetsCount: 1, successNetsCount: 1, failedNets: [], duration: 1 };
+			},
+		};
+		const selectedRoutingArgs = [{ RoutingNets: ['NET_A'], layers: [1], existingPrimitiveMode: 'keep' }];
+		for (const [mode, args] of [['all', []], ['selected', selectedRoutingArgs]]) {
+			const requestId = `page-switch-before-${mode}-routing`;
+			transport.afterStarted = (id) => {
+				if (id === requestId)
+					routingPageUuid = 'routing-pcb-two';
+			};
+			submit(requestId, { apiFullName: 'eda.pcb_Document.autoRouting', args, expectedPcbUuid: 'routing-pcb-two' });
+			const switchedRouting = await transport.resultFor(requestId);
+			assert.match(switchedRouting.error.message, /PCB.*changed|changed.*PCB/i);
+			assert.equal(transport.startedContexts.get(requestId).pageUuid, 'routing-pcb-one');
+			assert.equal(routingNativeArgs.length, 0, 'all and selected routing must bind to the execution PCB, overriding a caller target');
+			routingPageUuid = 'routing-pcb-one';
+		}
+		let routingDocumentReads = 0;
+		transport.afterStarted = (requestId) => {
+			if (requestId !== 'lease-change-before-routing')
+				return;
+			documentReadHook = () => {
+				if (++routingDocumentReads === 2)
+					transport.callbacks.onRoleChanged({ type: 'bridge/role', clientId: transport.clientId, activeClientId: transport.clientId, role: 'active', leaseTerm: submittedLease + 1 });
+			};
+		};
+		submit('lease-change-before-routing', { apiFullName: 'eda.pcb_Document.autoRouting', args: selectedRoutingArgs });
+		const changedRoutingLease = await transport.resultFor('lease-change-before-routing');
+		assert.match(changedRoutingLease.error.message, /lease changed before the native mutation/);
+		assert.equal(routingDocumentReads, 2, 'lease changes during the final fresh editor identity read after the selected-net observation');
+		assert.equal(routingNativeArgs.length, 0);
+		documentReadHook = undefined;
+		submittedLease++;
+		transport.afterStarted = (requestId) => {
+			if (requestId === 'schematic-switch-before-routing')
+				currentDocumentType = 1;
+		};
+		submit('schematic-switch-before-routing', { apiFullName: 'eda.pcb_Document.autoRouting', args: [] });
+		const switchedEditorRouting = await transport.resultFor('schematic-switch-before-routing');
+		assert.match(switchedEditorRouting.error.message, /page kind changed|Current editor is schematic/i);
+		assert.equal((await globalThis.eda.dmt_Pcb.getCurrentPcbInfo()).uuid, 'routing-pcb-one', 'the PCB getter deliberately retains its cached page after switching to SCH');
+		assert.equal(routingNativeArgs.length, 0);
+		currentDocumentType = 3;
+		transport.afterStarted = undefined;
+		submit('normal-routing-after-rejected-tasks', { apiFullName: 'eda.pcb_Document.autoRouting', args: selectedRoutingArgs, expectedPcbUuid: 'routing-pcb-two' });
+		const normalRouting = await transport.resultFor('normal-routing-after-rejected-tasks');
+		assert.equal(normalRouting.error, undefined);
+		assert.equal(normalRouting.result.result.success, true);
+		assert.equal(normalRouting.result.commitUnknown, undefined);
+		assert.deepEqual(routingNativeArgs, [selectedRoutingArgs], 'identity and lease rejections must leave the next normal call available with original native arguments');
+		globalThis.eda.dmt_SelectControl = originalRoutingDocumentApi;
+		globalThis.eda.dmt_Pcb = originalRoutingPcbApi;
+		globalThis.eda.pcb_Net = originalRoutingNetApi;
+		globalThis.eda.pcb_Document = originalRoutingApi;
+		currentDocumentType = 1;
 		readCalls = 0;
 		transport.afterStarted = undefined;
 		submit('uncertain-delete', { apiFullName: 'eda.sch_PrimitiveComponent.delete', args: ['to-delete'] });

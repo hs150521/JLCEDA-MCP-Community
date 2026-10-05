@@ -120,6 +120,15 @@ async function currentPcbUuid(): Promise<string | undefined> {
 	return isPlainObjectRecord(pcb) && typeof pcb.uuid === 'string' ? pcb.uuid : undefined;
 }
 
+async function assertPcbAutoRoutingPage(pageUuid: string): Promise<void> {
+	const [document, pcbUuid] = await Promise.all([
+		readCurrentEditorDocument(eda as unknown as Record<string, unknown>),
+		currentPcbUuid(),
+	]);
+	if (editorDocumentPageKind(document) !== 'pcb' || document?.uuid !== pageUuid || pcbUuid !== pageUuid)
+		throw new Error('The active PCB changed before autoRouting invocation; the operation was not started.');
+}
+
 async function currentPcbLayoutContext(): Promise<{ pageKind: 'pcb'; pageUuid?: string; documentUuid?: string; projectUuid?: string }> {
 	const [pcb, document, project] = await Promise.all([
 		safeCall(() => eda.dmt_Pcb.getCurrentPcbInfo()),
@@ -659,9 +668,15 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 		&& new Set(requestedRoutingNets).size === requestedRoutingNets.length
 		? requestedRoutingNets
 		: undefined;
-	const routingPcbUuid = normalizedPath === PCB_AUTO_ROUTING && observedRoutingNets ? await currentPcbUuid() : undefined;
-	if (normalizedPath === PCB_AUTO_ROUTING && observedRoutingNets && !routingPcbUuid)
-		throw new Error('无法确认当前 PCB 身份，未启动自动布线。');
+	const routingPcbUuid = normalizedPath === PCB_AUTO_ROUTING ? await currentPcbUuid() : undefined;
+	if (normalizedPath === PCB_AUTO_ROUTING) {
+		if (!routingPcbUuid)
+			throw new Error('Cannot verify the current PCB before autoRouting; the operation was not started.');
+		if (typeof payload.expectedPcbUuid === 'string' && payload.expectedPcbUuid !== routingPcbUuid)
+			throw new Error('PCB page changed between task start and autoRouting invocation; the operation was not started.');
+		if (editorDocumentPageKind(document) !== 'pcb' || document?.uuid !== routingPcbUuid)
+			throw new Error('The active editor differs from the current PCB before autoRouting; the operation was not started.');
+	}
 	let routingBefore: AutoRoutingSnapshot | undefined;
 	let routingBeforeError: unknown;
 	if (normalizedPath === PCB_AUTO_ROUTING && observedRoutingNets) {
@@ -673,10 +688,12 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 				throw error;
 			routingBeforeError = error;
 		}
-		if (await currentPcbUuid() !== routingPcbUuid)
-			throw new Error('The active PCB changed before autoRouting invocation; the operation was not started.');
 	}
 	let invokeResult: unknown;
+	if (normalizedPath === PCB_AUTO_ROUTING) {
+		await assertPcbAutoRoutingPage(routingPcbUuid!);
+		beforeNativeMutation?.();
+	}
 	try {
 		invokeResult = await Promise.resolve(callable.apply(thisArg, invokeArgs));
 	}

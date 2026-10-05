@@ -38,7 +38,60 @@ const { BridgeTaskQuarantine, requiresHostRestartForResult } = require('../src/r
 const { toSerializableAsync } = require('../src/utils.ts');
 const { debugLog } = require('../src/utils/debug-log.ts');
 
+async function autoRoutingGuardTests() {
+	for (const args of [[], [{ RoutingNets: ['VCC'], cornerStyle: 0, existingPrimitiveMode: 'keep', optimization: 0, layers: [1, 2] }]]) {
+		let documentType = 3;
+		let documentReads = 0;
+		let changeDocumentOnFinalRead = false;
+		const nativeCalls = [];
+		const events = [];
+		const nativeResult = { success: true, totalNetsCount: 1, successNetsCount: 1, failedNets: [], duration: 42 };
+		globalThis.eda = {
+			dmt_SelectControl: { async getCurrentDocumentInfo() {
+				documentReads++;
+				if (changeDocumentOnFinalRead && documentReads === 2)
+					documentType = 1;
+				return { documentType, uuid: documentType === 3 ? 'routing-pcb' : 'routing-schematic' };
+			} },
+			dmt_Pcb: { async getCurrentPcbInfo() { return { uuid: 'routing-pcb' }; } },
+			pcb_Net: {
+				async getAllPrimitivesByNet() { return []; },
+				async getNetLength() { return 0; },
+			},
+			pcb_Document: { async autoRouting(...nativeArgs) {
+				assert.equal(this, globalThis.eda.pcb_Document);
+				nativeCalls.push(nativeArgs);
+				events.push('native');
+				return nativeResult;
+			} },
+		};
+		const payload = { apiFullName: 'eda.pcb_Document.autoRouting', args, expectedPcbUuid: 'routing-pcb' };
+		await assert.rejects(handleApiInvokeTask({ ...payload, expectedPcbUuid: 'other-pcb' }), /autoRouting.*not started/);
+		assert.equal(nativeCalls.length, 0, 'all-net and selected-net routing must respect the execution PCB');
+		documentReads = 0;
+		changeDocumentOnFinalRead = true;
+		await assert.rejects(handleApiInvokeTask(payload), /autoRouting.*not started/);
+		assert.equal(documentReads, 2, 'the second editor read is the final identity check after any selected-net observation');
+		assert.equal(nativeCalls.length, 0, 'a schematic editor with cached PCB info must not receive an autoRouting call');
+		changeDocumentOnFinalRead = false;
+		documentType = 3;
+		let guardCalls = 0;
+		await assert.rejects(handleApiInvokeTask(payload, undefined, () => {
+			guardCalls++;
+			throw new Error('lease expired before native routing');
+		}), /lease expired/);
+		assert.equal(guardCalls, 1);
+		assert.equal(nativeCalls.length, 0, 'a synchronous mutation rejection remains before the native RPC');
+		const routed = await handleApiInvokeTask(payload, undefined, () => events.push('guard'));
+		assert.deepEqual(nativeCalls, [args], 'the normal native call preserves every argument exactly once');
+		assert.deepEqual(events, ['guard', 'native']);
+		assert.deepEqual(routed.result, nativeResult);
+		assert.equal(routed.commitUnknown, undefined);
+	}
+}
+
 async function main() {
+	await autoRoutingGuardTests();
 	const routingCalls = 0;
 	const netClasses = [];
 	const differentialPairs = [{ name: 'USB_P', positiveNet: 'D+', negativeNet: 'D-' }];
@@ -758,6 +811,9 @@ async function main() {
 	assert.equal((await handleApiInvokeTask({ apiFullName: 'eda.pcb_PrimitiveComponent.getAll', args: [] })).result[0].footprint, '0402');
 	assert.equal((await handleApiInvokeTask({ apiFullName: 'eda.pcb_PrimitiveComponent.getAll', args: [], includeCompletePositions: true })).ok, false, 'strict position validation applies only to requested recovery readbacks');
 	globalThis.eda.dmt_Pcb.getCurrentPcbInfo = originalCurrentPcbInfo;
+	const originalRoutingDocumentInfo = globalThis.eda.dmt_SelectControl.getCurrentDocumentInfo;
+	let routingPageUuid = 'pcb-1';
+	globalThis.eda.dmt_SelectControl.getCurrentDocumentInfo = async () => ({ documentType: 3, uuid: routingPageUuid });
 	globalThis.eda.pcb_Document.autoRouting = async () => ({ success: false, successNetsCount: 0, duration: 0, failedNets: ['VCC'] });
 	const failedRouting = await handleApiInvokeTask({ apiFullName: 'eda.pcb_Document.autoRouting', args: [] });
 	assert.equal(failedRouting.ok, false);
@@ -823,7 +879,6 @@ async function main() {
 		{ globalIndex: 'pad-2', pcbItemPrimitiveType: 'Pad' },
 	];
 	let routingLength = 0;
-	let routingPageUuid = 'pcb-1';
 	globalThis.eda.dmt_Pcb.getCurrentPcbInfo = async () => ({ uuid: routingPageUuid });
 	globalThis.eda.pcb_Net.getAllPrimitivesByNet = async (net) => {
 		assert.equal(net, 'VCC');
@@ -909,6 +964,7 @@ async function main() {
 	const disconnectedRouting = await handleApiInvokeTask({ apiFullName: 'eda.pcb_Document.autoRouting', args: [{ RoutingNets: ['VCC'] }] });
 	assert.equal(disconnectedRouting.commitUnknown, true);
 	assert.deepEqual(disconnectedRouting.requestedRoutingNets, ['VCC']);
+	globalThis.eda.dmt_SelectControl.getCurrentDocumentInfo = originalRoutingDocumentInfo;
 	const linePrimitives = Array.from({ length: 125 }, (_, index) => ({ primitiveId: `line-${index}`, net: 'VCC', layer: 1, startX: index, startY: 0, endX: index + 1, endY: 1, lineWidth: 0.2, primitiveLock: false }));
 	globalThis.eda.pcb_PrimitiveLine = {
 		async getAll() { return linePrimitives; },
