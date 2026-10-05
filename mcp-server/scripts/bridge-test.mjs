@@ -1604,7 +1604,10 @@ try {
   unverifiedWriteServer.close();
   unverifiedWriteServer = undefined;
 
-  for (const mode of ['unknown', 'timeout', 'disconnect']) {
+  for (const [operation, mode, nativeCallSettled] of [
+    ['invoke', 'unknown', true], ['invoke', 'timeout', false], ['invoke', 'disconnect', false],
+    ['save', 'unknown', true], ['save', 'unknown', false], ['save', 'timeout', false], ['save', 'disconnect', false],
+  ]) {
     const footprintPort = await reservePort();
     const footprintServer = new EdaBridgeServer(footprintPort);
     const footprintRelay = new EdaBridgeServer(footprintPort);
@@ -1624,15 +1627,17 @@ try {
         oldFootprint.socket.send(JSON.stringify({ type: 'bridge/task-started', clientId: `footprint-${mode}-old`,
           requestId: message.requestId, leaseTerm: message.leaseTerm, startedAt: Date.now(), context: execution }));
         if (mode === 'unknown') oldFootprint.socket.send(JSON.stringify({ type: 'bridge/result', clientId: `footprint-${mode}-old`,
-          requestId: message.requestId, leaseTerm: message.leaseTerm, result: { ok: false, commitUnknown: true, nativeCallSettled: true } }));
+          requestId: message.requestId, leaseTerm: message.leaseTerm, result: { ok: false, commitUnknown: true, nativeCallSettled } }));
         if (mode === 'disconnect') oldFootprint.socket.close();
       });
-      const write = { apiFullName: 'eda.pcb_PrimitiveVia.modify', args: ['via-1', { diameter: 20 }] };
-      if (mode === 'unknown') assert.equal((await footprintRelay.request('/bridge/jlceda/api/invoke', write, 2000)).commitUnknown, true);
-      else await assert.rejects(footprintRelay.request('/bridge/jlceda/api/invoke', write, mode === 'timeout' ? 50 : 2000), mode === 'timeout' ? /execution timeout/ : /disconnected/);
+      const writePath = operation === 'save' ? '/bridge/jlceda/footprint/save' : '/bridge/jlceda/api/invoke';
+      const write = operation === 'save' ? {} : { apiFullName: 'eda.pcb_PrimitiveVia.modify', args: ['via-1', { diameter: 20 }] };
+      if (mode === 'unknown') assert.equal((await footprintRelay.request(writePath, write, 2000)).commitUnknown, true);
+      else await assert.rejects(footprintRelay.request(writePath, write, mode === 'timeout' ? 50 : 2000), mode === 'timeout' ? /execution timeout/ : /disconnected/);
       const diagnostic = (await footprintRelay.request('/bridge/admin/clients', {}, 2000)).clients
         .find(client => client.clientId === `footprint-${mode}-old`).quarantine.diagnostics[0];
       assert.equal(diagnostic.requiredReadback, 'footprint_state');
+      assert.equal(diagnostic.hostRestartRequired, !nativeCallSettled);
       assert.equal(diagnostic.context.libraryUuid, 'fp-library');
       assert.equal(diagnostic.context.projectUuid, undefined, '封装编辑不要求工程 UUID');
       const session = await footprintRelay.request('/bridge/admin/recover-client', { action: 'recover', confirm: true, requestId: diagnostic.requestId }, 2000);
@@ -1662,7 +1667,9 @@ try {
         return { source: 'footprint-fresh', path: message.path };
       });
       const request = { action: 'readback', confirm: true, recoveryId: session.recoveryId, clientId: `footprint-${mode}-fresh`,
-        ...(mode === 'unknown' ? {} : { hostRestartConfirmed: true }), readbackPath: '/bridge/jlceda/footprint/read', readbackPayload: {} };
+        ...(nativeCallSettled ? {} : { hostRestartConfirmed: true }), readbackPath: '/bridge/jlceda/footprint/read', readbackPayload: {} };
+      if (!nativeCallSettled)
+        await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', { ...request, hostRestartConfirmed: undefined }, 2000), /original EDA host was restarted/);
       if (mode === 'unknown') {
         await assert.rejects(footprintRelay.request('/bridge/admin/recover-client', { ...request, readbackPath: '/bridge/jlceda/context' }, 2000), /requires complete footprint_read/);
         identityResult = { ...freshIdentity, libraryUuid: 'different-library' };
@@ -1697,7 +1704,8 @@ try {
       assert.equal(recovered.readback.pads[0].hole, null);
       assert.equal(recovered.readback.pads[0].holeRotation, null, '无孔原生 NaN 旋转归一后的明确 null 允许完整恢复');
       assert.deepEqual(recovered.readback.pads[0].specialPad, [], '空特殊轮廓与实际普通焊盘形状允许三个 Relay 路径完整恢复');
-      assert.deepEqual(await footprintRelay.request('/bridge/jlceda/api/invoke', write, 2000), { source: 'footprint-fresh', path: '/bridge/jlceda/api/invoke' });
+      assert.deepEqual(await footprintRelay.request(writePath, write, 2000), { source: 'footprint-fresh', path: writePath });
+      assert.equal(recovered.saved, undefined, 'full editing-state recovery must not claim a durable library save');
     } finally {
       oldFootprint?.socket.close();
       freshFootprint?.socket.close();

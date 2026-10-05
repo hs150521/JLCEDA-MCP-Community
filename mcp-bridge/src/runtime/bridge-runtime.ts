@@ -286,6 +286,8 @@ async function readBridgeClientContext(expectedPageKind?: BridgeClientContext['p
 }
 
 function writeTaskPageKind(path: string, payload: unknown): BridgeClientContext['pageKind'] {
+	if (path === '/bridge/jlceda/footprint/save')
+		return 'footprint';
 	if (path === '/bridge/jlceda/pcb/documents-manage')
 		return undefined;
 	if (path === '/bridge/jlceda/api/invoke' && isPlainObjectRecord(payload) && typeof payload.apiFullName === 'string') {
@@ -321,7 +323,7 @@ async function readFootprintReadTaskContext(path: string, payload: unknown): Pro
 }
 
 function assertFootprintTaskAllowed(path: string, payload: unknown, context: BridgeClientContext | undefined): void {
-	if (context?.pageKind !== 'footprint')
+	if (context?.pageKind !== 'footprint' || path === '/bridge/jlceda/footprint/save')
 		return;
 	const canvasApi = canvasInvokeName(path, payload);
 	if (canvasApi) {
@@ -543,6 +545,9 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 			let handlerPayload: unknown = task.payload;
 			if (executionContext?.pageKind && canvasInvokeName(task.path, task.payload)) {
 				handlerPayload = { ...(task.payload as Record<string, unknown>), expectedEditorPageKind: executionContext.pageKind, ...(executionContext.pageKind === 'footprint' ? { expectedFootprintIdentity: executionContext } : {}) };
+			}
+			else if (task.path === '/bridge/jlceda/footprint/save') {
+				handlerPayload = { ...(task.payload as Record<string, unknown>), expectedFootprintIdentity: executionContext };
 			}
 			if (autoLayoutTask) {
 				handlerPayload = { ...(task.payload as Record<string, unknown>), expectedPcbUuid: executionContext!.pageUuid };

@@ -1,6 +1,14 @@
 # JLCEDA MCP 社区版
 
-当前源码版本：Bridge `2.3.7`，MCP Server `2.3.7`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+当前源码版本：Bridge `2.3.8`，MCP Server `2.3.8`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+
+## 2.3.8 共享封装源保存
+
+新增 `footprint_save`，在当前独立封装文档内读取完整源码并原样写回同一库和文档，无需把源码传回 MCP 客户端。保存只调用 `getDocumentSource` 和 `lib_Footprint.updateDocumentSource`，另核对真实文档身份，不额外读取七类图元。仅可选 `timeoutMs`（5–120 秒，默认 30 秒）；更新的是共享库源，可能影响所有引用该封装的实例，使用前须明确该共享范围。
+
+`saved:true`、`saveAcknowledged:true` 表示库 API 返回成功 ACK，结果包含 `scope:"library_source"`、`sharedSource:true` 和 `sourceLength`。ACK 后身份检查失败时仍保留这两个 true 值，同时返回 `ok:false`、`identityVerified:false`，不要直接重试已获 ACK 的保存。显式 false/undefined 返回表示未获 ACK，不证明源码未改变；RPC 未确认或超时则要求同库同文档的完整 `footprint_read` 受控恢复，该回读只解除编辑状态隔离，不补充保存或引用 PCB 的持久性结论。
+
+EDA 3.2.181 / 宿主 API 0.3.15、匹配的 Server/活动 Bridge 2.3.8 实测通过：自建共享封装 Via 0→1→0，两次保存获 ACK；封装冷重开完整 DTO 保持创建状态并最终严格恢复基线，引用 PCB 冷重开的 Via 也为 0→1→0，其他读取部分保持基线。本轮按此范围收口 #80：区分页内存删除与保存，并支持共享封装源持久编辑；PCB 子过孔删除本身仍不保证持久，也不提供仅此实例的封装重绑定。Bridge 完整 build/lint、Server 全量 test/lint/多客户端验证均通过。详见 [2.3.8 发布说明](docs/releases/v2.3.8.md)。
 
 ## 2.3.7 原理图导线与网络标签
 
@@ -14,7 +22,7 @@
 
 raw `eda.sch_PrimitiveAttribute.createNetLabel` 复用普通网络标签的版本预检：已知 EDA 3.x 返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不启动原生写入。API 索引明确该方法从 EDA v4 起提供；版本未知或 4.x 保持原生调用，电源/地 NetFlag 不受此预检影响。匹配 2.3.7 的 EDA 3.2.181 实测中，raw 与 semantic 普通标签创建均被版本预检阻止，前后完整连接读取不变；9 个混合版本客户端 ready、心跳正常，切到 2.3.6 待命客户端后的完整读取也不变。本轮修复 #26 已知 3.x 触发路径，不泛称宿主内部全部失联已根治，EDA v4 未实测。验证范围见 [2.3.7 发布说明](docs/releases/v2.3.7.md)。
 
-2.3.6新增独立封装编辑器支持：以官方 `documentType:4` 和当前库文档建立 Bridge 连接，库身份优先取匹配当前文档的实际 `<documentUuid>@<libraryUuid>` 标签；无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`。使用 `footprint_read` 完整读取七类图元，通过 `api_invoke` 操作首批 41 个封装画布 API。无孔 Pad 的空值或原生 NaN 孔旋转表示为 `null`，没有额外特殊轮廓的 `specialPad:[]` 原样保留。正式恢复、5 个控制图元的源码写回后重开，以及 Via/Line/Polyline/String/独立 Arc 新案例的创建、修改、删除已实测通过。Pad 尺寸请求未生效、首次 Arc 未登记原因未确定、Attribute 无非空实机样本，#80 和 EDA v4 仍未解决或未验证。完整证据、范围和限制见 [2.3.6 发布说明](docs/releases/v2.3.6.md)。
+2.3.6新增独立封装编辑器支持：以官方 `documentType:4` 和当前库文档建立 Bridge 连接，库身份优先取匹配当前文档的实际 `<documentUuid>@<libraryUuid>` 标签；无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`。使用 `footprint_read` 完整读取七类图元，通过 `api_invoke` 操作首批 41 个封装画布 API。无孔 Pad 的空值或原生 NaN 孔旋转表示为 `null`，没有额外特殊轮廓的 `specialPad:[]` 原样保留。正式恢复、5 个控制图元的源码写回后重开，以及 Via/Line/Polyline/String/独立 Arc 新案例的创建、修改、删除已实测通过。Pad 尺寸请求未生效、首次 Arc 未登记原因未确定、Attribute 无非空实机样本；2.3.6 当时未收口 #80，EDA v4 仍未验证。完整历史证据、范围和限制见 [2.3.6 发布说明](docs/releases/v2.3.6.md)。
 
 2.3.4 新增 `board_setup`：传当前工程 UUID 和 `confirm:true`，可新建 Board 及关联的原理图、PCB；提供尚未关联 Board 的原理图 UUID 时，会创建 PCB 并将两者关联到新 Board。工具回读三个文档的归属，不会自动打开 PCB 或导入原理图变更。
 
@@ -62,6 +70,7 @@ PCB `autoRouting` 指定网络时使用 `RoutingNets:["网络名"]`；返回值�
 - `pcb_drc_check`：分页读取 PCB 设计规则检查详情；支持 `offset`、`limit`，返回 `nextOffset`，并区分原生详情缺失与 Bridge 序列化截断。
 - `pcb_net_query`：按条件和数量限制查询当前 PCB 网络；精确网络图元过滤接受官方 `EPCB_PrimitiveType` 名称，由 Bridge 对 EDA 返回的图元筛选。
 - `footprint_read`：完整读取当前独立封装文档的 Pad、Via、Line、Arc、Polyline、String 和 Attribute，返回真实库/文档/标签身份及不截断状态；封装写入结果不明时用该快照受控恢复。
+- `footprint_save`：读取当前独立封装完整源码并写回同库同文档的共享库源；返回库保存 ACK，引用 PCB 的持久状态须另行关闭重开后完整回读。
 - `pcb_read`：一次读取当前 PCB 页选定的语义部分；默认包含器件与网络，可选焊盘、布线、覆铜、板框、区域和文本，`sections:["all"]` 读取全部。所选部分返回不截断的图元数组，并在读取前后核对 PCB UUID。
 - `pcb_component_edit`：完整读取当前 PCB 器件，或按库引用放置、按 ID 修改层、坐标、角度、锁定状态、位号和 BOM 属性及删除单件。旋转按模 360 度比较；部分修改失败返回实际 `after`、`failureKind` 和字段差异，按诊断回读后再判断是否重试。
 - `pcb_pour_manage`：读取当前 PCB 的全部覆铜边框、填充关联和几何摘要，使用可序列化的轮廓源数组创建或修改单个覆铜边框，并可删除或明确重建填充。创建和修改后不会自动重建；若 EDA 自动调整优先级等字段，会明确返回请求值、写后状态及副作用。单件重建无目标填充、删除后仍有关联填充时也不会误报成功。结果不明时需在同一 PCB 回读全部边框和填充摘要。
@@ -111,10 +120,10 @@ PCB `import_changes` 返回 `pending_confirmation` 后，全局写入暂停，�
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.3.7
+       JLCEDA MCP Server 2.3.8
                   | 本机 WebSocket
                   v
-       MCP Bridge 社区版 2.3.7
+       MCP Bridge 社区版 2.3.8
                   | JLCEDA 扩展 API
                   v
            嘉立创 EDA 专业版
@@ -122,18 +131,18 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.3.7
+## 安装 2.3.8
 
-以下为 2.3.7 的安装文件名；是否可下载以发布页为准，并保持 Bridge 与 Server 版本一致。
+以下为 2.3.8 的安装文件名；是否可下载以发布页为准，并保持 Bridge 与 Server 版本一致。
 
 需要 Node.js 20 或更高版本。
 
-1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.7.eext`。
+1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.8.eext`。
    安装后在“已安装”的扩展详情中确认已允许“外部交互”，否则 Bridge 无法连接本机 MCP Server。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.3.7.tgz
+   npm install --global .\jlceda-mcp-server-2.3.8.tgz
    Get-Command jlceda-mcp
    ```
 
@@ -187,8 +196,8 @@ codex mcp list
 - `api_invoke` 修改原理图 ComponentPin 的 NC 或引脚号时，使用真实器件引脚实例；引脚位置、旋转和其他符号几何不作为该适配器的可写字段。失败后按 `schematic_connectivity_primitives` 诊断，以 `schematic_read includeConnectivityPrimitives:true` 核对所属器件全部引脚的 `pinId/x/y/rotation/noConnected`，只查询上下文不能解除隔离。2.3.5 实机 NC `true`→`false` 两次均 `verified:true`，目标坐标与同器件其他引脚保持不变。
 - 现有点导线改成多线段路径会在写入前返回 `point_wire_path_conversion_unsupported`；可新建目标导线并核对连接，再显式删除原点导线。
 - `pcb_connectivity_action via_create` 与 `pcb_routing_edit` 的过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 `round_0_2_mil` 结果，返回请求值与实际孔径/外径；真实尺寸差异仍失败。创建与修改已实测通过：15.748/31.496→15.8/31.4、15.7/31.5→15.8/31.6。
-- 过孔删除只确认当前页内存中目标消失，返回 `verificationScope:"current_page_memory"` 和 `durableDeletionVerified:false`。已知封装子过孔拒绝删除；缺少父 ID 时归属未知，必须保存并重新打开 PCB 后核对持久性。
-- 2.3.6 为独立封装编辑器提供单独上下文、七类完整回读和首批画布 API。七类 modify 等待一次 `done()` 并重新读取，实际字段未生效返回 `fieldMismatches` 和真实 `after`；实机 SMD x130 生效，80×60 形状请求仍为 60×60，属于已知部分结果。个人封装的最终 5 个控制图元（含 SMD x130）源码写回后重开已一致；没有新增封装专用保存工具，PCB 封装子过孔持久删除（#80）继续开放。
+- 过孔删除只确认当前页内存中目标消失，返回 `verificationScope:"current_page_memory"` 和 `durableDeletionVerified:false`。已知封装子过孔拒绝删除；缺少父 ID 时归属未知，必须保存并重新打开 PCB 后核对持久性。需要共享源修改时，在实际独立封装中编辑并 `footprint_save`，再冷重开封装和引用 PCB 完整核对，不支持仅此实例封装重绑定。
+- 2.3.6 为独立封装编辑器提供单独上下文、七类完整回读和首批画布 API。七类 modify 等待一次 `done()` 并重新读取，实际字段未生效返回 `fieldMismatches` 和真实 `after`；实机 SMD x130 生效，80×60 形状请求仍为 60×60，属于已知部分结果。个人封装的最终 5 个控制图元（含 SMD x130）源码写回后重开已一致；2.3.6 当时没有封装专用保存工具，2.3.8 新增共享库源保存。PCB 页内删除仍不能证明封装子过孔持久删除。
 
 ## 开发与发布
 
@@ -207,6 +216,7 @@ npm run build
 - [隐私与本地数据流](PRIVACY.md)
 - [发布检查表](docs/publishing.md)
 - [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)
+- [v2.3.8 发布说明与验证范围](docs/releases/v2.3.8.md)
 - [v2.3.7 发布说明与验证范围](docs/releases/v2.3.7.md)
 - [v2.3.6 发布说明与回归清单](docs/releases/v2.3.6.md)
 - [v2.3.5 发布说明](docs/releases/v2.3.5.md)

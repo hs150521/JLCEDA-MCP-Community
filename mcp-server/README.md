@@ -1,5 +1,13 @@
 # JLCEDA MCP Server
 
+## 2.3.8 共享封装源保存
+
+新增 `footprint_save`，路由 `/bridge/jlceda/footprint/save`，仅支持可选 `timeoutMs`（5000–120000 毫秒，默认 30000）。Bridge 在 EDA 内读取完整源码，核对真实库/文档/标签后写回同一共享库封装，源码不会传回 MCP 客户端，保存不额外执行七类 `getAll`。共享源更新可能影响所有引用实例，不提供仅此实例的封装重绑定。
+
+成功库 ACK 返回 `saved:true`、`saveAcknowledged:true`、`scope:"library_source"`、`sharedSource:true`、`sourceLength`。ACK 后身份读取失败仍保留保存 ACK，同时返回 `ok:false`、`identityVerified:false`、`reason:"footprint_changed_after_save"`，不应直接重试。显式 false/undefined 是未获 ACK，并非确认源码没有改变；RPC 未确认或超时归为 `footprint_state`，要求同库同文档七类完整 `footprint_read`。恢复回读只解除编辑状态隔离，不把 `readbackVerified:true` 当成保存或引用 PCB 持久性证明。
+
+匹配 Server/活动 Bridge 2.3.8 的 EDA 3.2.181 / API 0.3.15 实测通过：自建共享封装 Via 0→1→0，保存两次获 ACK，冷重开完整封装 DTO 与创建状态/最终原基线严格相等；引用 PCB 冷重开 Via 也为 0→1→0，其他读取部分不变。本轮按“区分内存删除与保存，并支持共享封装源持久编辑”的范围收口 #80，板级子过孔删除本身仍不保证持久。Server `npm test`、`npm run lint`、`node verify-multi-client.mjs` 和匹配 Bridge 完整 build/lint 均通过；失败与未知保存恢复分支由本地回归验证。详见 [2.3.8 发布说明](../docs/releases/v2.3.8.md)。
+
 ## 2.3.7 原理图导线与网络标签
 
 本轮 Server 全量 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 已通过；匹配 Bridge 的完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 也已通过。匹配 2.3.7 的网标预检和导线新功能已实测通过；原 TPS552892 布局仍缺 fixture，不据此宣称匿名网络合并的宿主根因已解决。
@@ -33,7 +41,7 @@ Bridge 将官方 `getCurrentDocumentInfo()` 返回的 `documentType:4` 识别为
 
 封装写入返回 `commitUnknown:true`、超时或中途失联时，按 `bridge_clients` 的诊断先执行 `bridge_recover_client action:recover`。诊断要求宿主重启时，重启原 EDA 并打开同库同封装文档；使用恢复会话后的全新客户端做 `action:readback`，指定 `readbackPath:"/bridge/jlceda/footprint/read"` 和 `readbackPayload:{}`。Server 核对执行时库/文档身份、七类完整状态及本次回读前后的标签。重开后的新 `tabId` 可以不同于旧任务，但同一次回读不能换标签；仅查询 `/context` 无法解除该隔离。
 
-Via/Line/Polyline/String/独立 Arc 新案例的创建、修改和删除已实测通过。SMD Pad 位置改到 x130 生效，但 80×60 形状请求仍为 60×60，返回已知部分结果；首次 layer3 水平弦 Arc 未登记，具体原因未确定。Attribute 没有实际非空样本，未进行 native 修改/删除验证。个人封装的 5 个控制图元持久回读不能证明 PCB 封装子过孔持久删除（#80），该 Issue 继续开放。封装菜单可见，菜单重启后新客户端 ready、公开选择与 count5 完整回读通过；就绪报告发送失败后的重连分支仅由本地 fixture 验证。发布状态以同版本 GitHub Release 及关联 PR 为准，EDA v4 未验证。详见 [2.3.6 发布说明与回归清单](../docs/releases/v2.3.6.md)。
+Via/Line/Polyline/String/独立 Arc 新案例的创建、修改和删除已实测通过。SMD Pad 位置改到 x130 生效，但 80×60 形状请求仍为 60×60，返回已知部分结果；首次 layer3 水平弦 Arc 未登记，具体原因未确定。Attribute 没有实际非空样本，未进行 native 修改/删除验证。个人封装的 5 个控制图元持久回读不能证明 PCB 封装子过孔持久删除（#80），2.3.6 当时未收口该 Issue。封装菜单可见，菜单重启后新客户端 ready、公开选择与 count5 完整回读通过；就绪报告发送失败后的重连分支仅由本地 fixture 验证。发布状态以同版本 GitHub Release 及关联 PR 为准，EDA v4 未验证。详见 [2.3.6 发布说明与回归清单](../docs/releases/v2.3.6.md)。
 
 ## 原理图 raw 创建位号保护
 
@@ -119,7 +127,7 @@ Bridge 客户端超时会返回带 `BRIDGE_TASK_TIMEOUT` 标记的结果；Serve
 
 `pcb_connectivity_action line_create` 可核对端点反向，以及原生拆分/合并后同网络、同层、同宽的共线图元是否覆盖请求线段；结果返回实际 `primitiveIds`、`returnedPrimitiveId`、`after` 和 `normalization`。2.3.5 实机共线覆盖回读返回 2 个实际 ID 并验证成功。`via_create` 与 `pcb_routing_edit` 过孔尺寸修改只接受精确尺寸或 EDA 3.2.181 实测的 0.2 mil 网格最近值（`round_0_2_mil`），返回请求值、实际孔径/外径与归一化方式，位置和网络仍须匹配；创建与修改已实测通过：15.748/31.496→15.8/31.4、15.7/31.5→15.8/31.6。
 
-`pcb_routing_edit` 删除过孔前检查原生网络图元：已知父器件 ID 时返回 `footprint_owned_via` 且不调用删除；缺少父字段时返回的归属为未知。删除后目标从完整 ID 列表消失，只证明当前页内存已删除，结果带 `verificationScope:"current_page_memory"`、`durableDeletionVerified:false`、`requiredPersistenceVerification:"save_and_reopen_pcb"`。必须保存并重新打开 PCB 核对，封装子过孔的持久删除尚未解决。
+`pcb_routing_edit` 删除过孔前检查原生网络图元：已知父器件 ID 时返回 `footprint_owned_via` 且不调用删除；缺少父字段时返回的归属为未知。删除后目标从完整 ID 列表消失，只证明当前页内存已删除，结果带 `verificationScope:"current_page_memory"`、`durableDeletionVerified:false`、`requiredPersistenceVerification:"save_and_reopen_pcb"`。板级删除本身不保证持久；需要共享源修改时，在实际独立封装中编辑并 `footprint_save`，再冷重开封装和引用 PCB 完整核对，不支持仅此实例封装重绑定。
 
 `pcb_pour_manage rebuild` 优先使用批量 `rebuildCopperRegions()`；缺少批量方法时尝试目标实例的 `rebuildCopperRegion()`。两者均不可用则返回 `reason:"unsupported_capability"`、`errorCode:"EDA_CAPABILITY_UNAVAILABLE"`、缺失 API 和可用的 EDA 版本，明确 `applied:false`。2.3.5 实机全板重建已验证 1 个边框与 1 个填充；批量、实例回退和能力缺失分支另有本地回归。创建或修改允许闭合轮廓等价反向、起点变化及已观察的四位小数回读，返回实际轮廓与 `normalization`；实机创建与修改均确认反向和四位小数轮廓等价；实际优先级副作用另行报告。`pcb_text_manage` 的 Attribute 修改支持 `property.value` 和 `property.valueVisible` 通过 Server 校验，实机两字段修改及实际回读已验证。
 
@@ -207,12 +215,12 @@ Server 提供 PCB DRC、网络查询、库搜索、制造查询和受保护的�
 
 ## 安装
 
-以下文件名对应 2.3.7；是否可下载以发布页实际提供的包为准。
+以下文件名对应 2.3.8；是否可下载以发布页实际提供的包为准。
 
-从 GitHub 发布页下载 `jlceda-mcp-server-2.3.7.tgz`：
+从 GitHub 发布页下载 `jlceda-mcp-server-2.3.8.tgz`：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.3.7.tgz
+npm install --global .\jlceda-mcp-server-2.3.8.tgz
 Get-Command jlceda-mcp
 ```
 

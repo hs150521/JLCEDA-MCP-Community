@@ -798,6 +798,19 @@ const schematicDocumentSchema = z.fromJSONSchema(schematicDocumentDefinition.inp
 assert.equal(schematicDocumentSchema.safeParse({ action: 'primitive_at_point', x: 1, y: 2, ids: ['unexpected'] }).success, false);
 assert.equal(schematicDocumentSchema.safeParse({ action: 'primitives_by_id', ids: ['primitive-1'], limit: 1 }).success, false);
 
+const footprintSaveDefinition = definitions.find((definition) => definition.name === 'footprint_save');
+assert.ok(footprintSaveDefinition);
+const footprintSaveSchema = z.fromJSONSchema(footprintSaveDefinition.inputSchema);
+assert.deepEqual(footprintSaveSchema.parse({ timeoutMs: 60000 }), { timeoutMs: 60000 });
+assert.equal(footprintSaveSchema.safeParse({ timeoutMs: 4999 }).success, false);
+assert.equal(footprintSaveSchema.safeParse({ documentSource: 'external source' }).success, false);
+assert.equal(footprintSaveSchema.safeParse({ libraryUuid: 'another-library' }).success, false);
+await dispatcher.dispatch({ name: 'footprint_save', arguments: footprintSaveSchema.parse({ timeoutMs: 60000 }) });
+assert.equal(calls.at(-1).path, '/bridge/jlceda/footprint/save');
+assert.deepEqual(calls.at(-1).payload, { timeoutMs: 60000 });
+assert.equal(calls.at(-1).timeoutMs, 62000);
+assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/footprint/save', {}), false);
+
 const rawWireDefinition = definitions.find((definition) => definition.name === 'api_invoke');
 assert.ok(rawWireDefinition);
 const rawWireSchema = z.fromJSONSchema(rawWireDefinition.inputSchema);

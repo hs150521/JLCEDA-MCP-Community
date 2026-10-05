@@ -51,7 +51,8 @@ export function requiresHostRestartForResult(path: string, payload: unknown, res
 		return false;
 	}
 	const response = result as Record<string, unknown>;
-	if (path === '/bridge/jlceda/pcb/connectivity'
+	if (path === '/bridge/jlceda/footprint/save'
+		|| path === '/bridge/jlceda/pcb/connectivity'
 		|| path === '/bridge/jlceda/board/setup'
 		|| path === '/bridge/jlceda/editor/navigate'
 		|| path === '/bridge/jlceda/pcb/documents-manage'

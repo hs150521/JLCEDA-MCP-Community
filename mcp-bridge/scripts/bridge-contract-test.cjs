@@ -31,6 +31,11 @@ assert.equal(resolveContractTimeoutMs('/bridge/jlceda/netlabel/place', { timeout
 assert.throws(() => resolveContractTimeoutMs('/bridge/jlceda/component/place-auto', { timeoutMs: 600001 }), /600000/);
 assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/schematic/read', {}), true);
 assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/footprint/read', {}), true);
+assert.equal(isReadOnlyBridgeRequest('/bridge/jlceda/footprint/save', {}), false);
+assert.equal(resolveContractTimeoutMs('/bridge/jlceda/footprint/save', {}), 30000);
+assert.equal(resolveContractTimeoutMs('/bridge/jlceda/footprint/save', { timeoutMs: 60000 }), 60000);
+assert.equal(requiresHostRestartForResult('/bridge/jlceda/footprint/save', {}, { ok: false, commitUnknown: true, nativeCallSettled: false }), true);
+assert.equal(requiresHostRestartForResult('/bridge/jlceda/footprint/save', {}, { ok: false, saved: true, nativeCallSettled: true }), false);
 assert.equal(contract.footprintApi.readOnlyApiFullNames.length, 21);
 assert.equal(contract.footprintApi.mutatingApiFullNames.length, 20);
 for (const name of contract.footprintApi.readOnlyApiFullNames) {

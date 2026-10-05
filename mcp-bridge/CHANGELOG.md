@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [2.3.8] - 2026-10-05
+
+- 新增 `footprint_save`：当前独立封装完整源码通过一次 `getDocumentSource` 和一次 `lib_Footprint.updateDocumentSource` 原样写回同库同文档；默认 30 秒、可选 5–120 秒预算。保存另核对身份，不额外读取七类图元，不自动关闭页面或重建器件。
+- 写入前最后一次身份读取后核对连接、活动角色和租约；返回真实身份、`scope:"library_source"`、`sharedSource:true`、`sourceLength` 和库保存 ACK。共享源更新可能影响所有引用实例，不提供仅此实例的封装重绑定。
+- 显式 false/undefined 只表示未获 ACK，不证明源码未改变；RPC 未确认或超时保留未知提交并要求同库同文档完整 `footprint_read` 恢复。ACK 后身份失败保留 `saved:true`、`saveAcknowledged:true`，同时返回 `ok:false`、`identityVerified:false`，不把已知 ACK 改成未知保存。编辑状态回读不代替保存或引用 PCB 持久性证明。
+- EDA 3.2.181 / API 0.3.15 与匹配 Server/活动 Bridge 2.3.8 实测共享封装 Via 0→1→0，两次保存 ACK 的源码长度为 28511/28241 字符；封装冷重开完整 DTO 保持创建状态并最终严格恢复原基线，引用 PCB Via 也为 0→1→0，其他读取部分保持基线。本轮按共享源持久编辑与诚实状态说明收口 #80，板级子过孔删除本身仍不保证持久。
+- 本轮完整 `npm run build`（含保存回归、typecheck、API 文档/runtime 验证和打包）、`npm run lint` 及匹配 Server 全量 test/lint/多客户端验证通过。ACK 后身份失败、未 ACK、失联及恢复分支由本地回归验证；EDA v4 未实测。详见 [2.3.8 发布说明](../docs/releases/v2.3.8.md)。
+
 ## [2.3.7] - 2026-10-05
 
 - 本轮完整自动门禁通过：Bridge `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）与 `npm run lint`，以及匹配 Server 的全量测试、lint 和多客户端验证；匹配 2.3.7 的网标预检和导线新功能实测通过。

@@ -334,6 +334,22 @@
     }
   },
   {
+    "name": "footprint_save",
+    "description": "保存当前独立封装文档：读取完整源码并原样写回同一 libraryUuid/documentUuid 的共享库封装。saved:true 仅表示库 updateDocumentSource 已返回成功 ACK；共享源更新可能影响引用它的实例，不证明任意 PCB child 图元删除或引用 PCB 已持久保存。不会自动关闭页面或重建器件。提交结果未知时按 footprint_state 完整回读恢复，不直接重试保存。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 120000,
+          "description": "执行超时（毫秒），默认 30000。"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "pcb_read",
     "description": "按需读取当前 PCB 页的语义快照及页 UUID。默认仅返回器件与网络；sections 可选择焊盘、布线、覆铜、板框、区域和文本，或传 [\"all\"] 读取全部。所选部分必须完整且属于同一 PCB，否则失败；焊盘包括独立焊盘与器件焊盘的身份、坐标和网络。",
     "inputSchema": {

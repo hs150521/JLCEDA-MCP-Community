@@ -94,6 +94,10 @@ async function testProtocolVersion(protocolVersion) {
     assert.equal(toolsResponse.id, 2);
     assert.ok(Array.isArray(toolsResponse.result?.tools));
     assert.ok(toolsResponse.result.tools.some((tool) => tool.name === 'eda_context'));
+    const footprintSaveTool = toolsResponse.result.tools.find(tool => tool.name === 'footprint_save');
+    assert.ok(footprintSaveTool?.inputSchema, 'footprint_save must be available through the MCP SDK');
+    assert.deepEqual(Object.keys(footprintSaveTool.inputSchema.properties), ['timeoutMs']);
+    assert.equal(footprintSaveTool.inputSchema.additionalProperties, false);
     assert.ok(toolsResponse.result.tools.some((tool) => tool.name === 'pcb_component_edit'));
     assert.ok(toolsResponse.result.tools.some((tool) => tool.name === 'pcb_pour_manage'));
     const routingTool = toolsResponse.result.tools.find((tool) => tool.name === 'pcb_routing_edit');
@@ -206,6 +210,19 @@ async function testProtocolVersion(protocolVersion) {
       assert.equal(recoveryResponse.id, id);
       assert.match(JSON.stringify(recoveryResponse), id === 43 ? /Invalid arguments/ : /No Bridge recovery is awaiting readback/,
         'known readback paths must pass the real MCP SDK parser and reach dispatch; unknown paths must be rejected');
+    }
+
+    for (const [id, args] of [[44, {}], [45, { documentSource: 'external source' }], [46, { timeoutMs: 4999 }]]) {
+      const saveLinePromise = once(lines, 'line');
+      child.stdin.write(JSON.stringify({
+        jsonrpc: '2.0', id, method: 'tools/call',
+        params: { ...(modern ? params : {}), name: 'footprint_save', arguments: args },
+      }) + '\n');
+      const [saveLine] = await Promise.race([saveLinePromise, lineTimeout]);
+      const saveResponse = JSON.parse(saveLine);
+      assert.equal(saveResponse.id, id);
+      assert.match(JSON.stringify(saveResponse), id === 44 ? /No ready EDA client connected/ : /Invalid arguments/,
+        'footprint_save valid input must reach dispatch; external source and invalid budgets must be rejected by the real SDK');
     }
 
     const invalidCallLinePromise = once(lines, 'line');

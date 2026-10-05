@@ -10,7 +10,9 @@
 
 - 独立封装文档以官方 `documentType:4`、`documentUuid/pageUuid`、`libraryUuid` 和 `tabId` 为身份；不要用 PCB 或工程缓存推断。先用 `footprint_read` 完整读取 Pad/Via/Line/Arc/Polyline/String/Attribute 和实际 ID，仅可选 `timeoutMs`，不能传 sections 或过滤。必要状态缺失或换页会返回 `complete:false`，不能当成完整快照。
 - 封装画布操作使用 `api_invoke` 的首批 `pcb_PrimitivePad/Via/Line/Arc/Polyline/String` 的 get/getAll/getAllPrimitiveId/create/modify/delete，以及 Attribute 的 get/getAll/getAllPrimitiveId/modify/delete。Attribute.create 为官方内部空实现，不可调用；PCB/原理图专用工具不能编辑独立封装。Polyline 可用真实 `polygonSource` 数组，写后检查实际 `after`；`identityVerified:true` 不证明所有请求字段均已生效。
-- 封装写入结果不明时先建立 `bridge_recover_client action:recover` 会话；按诊断重启原宿主后，使用全新客户端在同库同文档执行 `action:readback`、`readbackPath:"/bridge/jlceda/footprint/read"`、`readbackPayload:{}`。新标签可与旧任务不同，但一次回读必须保持库/文档/标签稳定，仅上下文或局部图元查询不能解除隔离。当前编辑内存中的修改/删除不证明保存重开后持久生效，#80 继续开放。
+- 保存当前独立封装修改时优先用 `footprint_save`；工具在 EDA 内读取完整源码并写回同一库和文档，无需把源码传回客户端。它更新共享库源，可能影响所有引用实例，先确认该共享范围符合意图。`saved:true` 与 `saveAcknowledged:true` 只表示库写入成功 ACK；ACK 后换页可能同时返回 `ok:false`、`identityVerified:false`，不要直接重试已保存的写入。
+- 当前 PCB 内删除封装子过孔仅是编辑内存核对，不能据此宣称持久删除。需要共享源修改时，在对应独立封装中编辑并 `footprint_save`，然后关闭重开封装和引用 PCB，分别完整回读实际状态。没有自动重建器件或仅此实例封装重绑定能力；完整编辑状态恢复也不等于保存持久性证明。
+- 封装写入结果不明时先建立 `bridge_recover_client action:recover` 会话；按诊断重启原宿主后，使用全新客户端在同库同文档执行 `action:readback`、`readbackPath:"/bridge/jlceda/footprint/read"`、`readbackPayload:{}`。新标签可与旧任务不同，但一次回读必须保持库/文档/标签稳定，仅上下文或局部图元查询不能解除隔离。当前编辑内存中的修改/删除不证明保存重开后持久生效；保存工具结果未知时也沿用该恢复流程，不直接重试。
 
 - `bridge_clients`：列出所有已连接 EDA 页面及其官方 API 返回的项目、文档、图页身份。在存在多个客户端，或用户指定了项目/页面时，任何 EDA 读取或修改操作前必须先调用并核对目标。
 - `bridge_select_client`：仅使用 `bridge_clients` 返回的精确 `clientId` 显式选择目标。待命客户端先经过双向队列探活；若提示旧扩展不支持探活，升级该页面的 Bridge 后再选择。不得依据连接顺序、名称相似或猜测选择；目标不唯一时必须请用户确认。单客户端且身份符合任务时无需重复选择。

@@ -610,6 +610,82 @@ async function runtimeTests() {
 		assert.equal(activeTransport.started.get('write').documentType, 4);
 		assert.equal(activeTransport.started.get('write').libraryUuid, 'library-one');
 		const originalRead = f.runtime.dmt_SelectControl.getCurrentDocumentInfo;
+		const source = '  {"type":"DOCHEAD","uuid":"fp-document"}||{"primitiveId":"unchanged-pad"}\n';
+		const savedSources = [];
+		let sourceReads = 0;
+		let saveAcknowledged = true;
+		let afterSave;
+		f.runtime.sys_FileManager = { async getDocumentSource() {
+			sourceReads += 1;
+			return source;
+		} };
+		f.runtime.lib_Footprint.updateDocumentSource = async (...args) => {
+			savedSources.push(args);
+			afterSave?.();
+			return saveAcknowledged;
+		};
+		const savePath = '/bridge/jlceda/footprint/save';
+		const saved = await submit('save-source', savePath, {});
+		assert.equal(saved.error, undefined);
+		assert.equal(saved.result.saved, true);
+		assert.equal(saved.result.saveAcknowledged, true);
+		assert.equal(saved.result.scope, 'library_source');
+		assert.equal(saved.result.libraryUuid, 'library-one');
+		assert.equal(saved.result.sourceLength, source.length);
+		assert.equal(sourceReads, 1);
+		assert.deepEqual(savedSources, [['fp-document', 'library-one', source]], 'save must retain the entire native source and primitive IDs');
+		assert.equal(activeTransport.started.get('save-source').pageKind, 'footprint');
+		assert.equal(activeTransport.started.get('save-source').libraryUuid, 'library-one');
+		activeTransport.afterStarted = (id) => {
+			if (id === 'save-switched-board')
+				f.document.documentType = 3;
+			if (id === 'save-switched-library')
+				f.document.tabId = 'fp-document@library-two';
+		};
+		const beforeSaveSwitch = savedSources.length;
+		for (const id of ['save-switched-board', 'save-switched-library']) {
+			const switchedSave = await submit(id, savePath, {});
+			assert.match(switchedSave.error.message, /not a footprint|changed/);
+			assert.equal(savedSources.length, beforeSaveSwitch, 'execution identity must prevent retargeting a source save');
+			assert.equal(sourceReads, 1, 'a changed execution identity must be rejected before obtaining another document source');
+			f.document.documentType = 4;
+			f.document.tabId = 'fp-document@library-one';
+		}
+		let saveIdentityReads = 0;
+		activeTransport.afterStarted = (id) => {
+			if (id === 'save-lease-changed')
+				saveIdentityReads = 1;
+		};
+		f.runtime.dmt_SelectControl.getCurrentDocumentInfo = async () => {
+			const document = await originalRead();
+			if (saveIdentityReads && ++saveIdentityReads === 4)
+				activeTransport.callbacks.onRoleChanged({ type: 'bridge/role', clientId: activeTransport.clientId, activeClientId: 'another-client', role: 'standby', leaseTerm: 2 });
+			return document;
+		};
+		const saveLease = await submit('save-lease-changed', savePath, {});
+		assert.match(saveLease.error.message, /role or lease changed/);
+		assert.equal(saveIdentityReads, 4, 'save lease changes during the last identity await, after source retrieval');
+		assert.equal(savedSources.length, beforeSaveSwitch, 'the last synchronous lease guard must prevent library update');
+		f.runtime.dmt_SelectControl.getCurrentDocumentInfo = originalRead;
+		activeTransport.callbacks.onRoleChanged({ type: 'bridge/role', clientId: activeTransport.clientId, activeClientId: activeTransport.clientId, role: 'active', leaseTerm: 1 });
+		activeTransport.afterStarted = undefined;
+		saveAcknowledged = false;
+		const rejectedSave = await submit('save-rejected', savePath, {});
+		assert.equal(rejectedSave.result.saved, false);
+		assert.equal(rejectedSave.result.commitUnknown, undefined);
+		saveAcknowledged = true;
+		afterSave = () => {
+			f.document.tabId = 'fp-document@library-two';
+		};
+		const switchedAfterAck = await submit('save-ack-switch', savePath, {});
+		assert.equal(switchedAfterAck.result.ok, false);
+		assert.equal(switchedAfterAck.result.saved, true);
+		assert.equal(switchedAfterAck.result.saveAcknowledged, true);
+		assert.equal(switchedAfterAck.result.identityVerified, false);
+		assert.equal(switchedAfterAck.result.commitUnknown, undefined, 'a known library ACK must survive a later page switch');
+		afterSave = undefined;
+		f.document.tabId = 'fp-document@library-one';
+		assert.equal((await submit('save-after-known-failure', savePath, {})).result.saved, true, 'known rejection and acknowledged page switch must not quarantine the next save');
 		let libraryReads = 0;
 		activeTransport.afterStarted = (id) => {
 			if (id === 'library-changed')
