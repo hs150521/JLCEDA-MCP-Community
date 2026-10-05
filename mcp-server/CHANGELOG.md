@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- 本轮完整自动门禁通过：Server `npm test`、`npm run lint`、`node verify-multi-client.mjs`，以及匹配 Bridge 的完整 build/lint；237 实机验证仍待核对。
+- `api_invoke` 的 raw 原理图导线创建接入受控预检与逐段覆盖回读；工具描述同步官方五参数、多路径和仅此 API 可选的 `allowedWireIds`。
+- raw `eda.sch_PrimitiveWire.create` 的未知提交要求同一执行图页的完整连接图元与语义网表恢复，不能用 `/context` 解除隔离；原生调用未确认结束时仍须按诊断重启原宿主。
+- raw 普通网络标签创建在已知 EDA 3.x 时于原生调用前返回 `EDA_VERSION_UNSUPPORTED`；API 索引补充 EDA v4 起提供的说明。#22 原匿名网络合并场景、#26 宿主全部客户端失联及 EDA v4 仍需实机验证。
+
 ## [2.3.6] - 2026-10-05
 
 - 新增独立封装支持：公开 `footprint_read`，同步独立封装文档及 `libraryUuid` 上下文；库身份优先取匹配当前文档的实际库标签，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`，避免跨库滞留字段覆盖真实标签。默认提供 60 秒 Bridge 读取预算，可按需要延长至 120 秒。

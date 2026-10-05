@@ -108,6 +108,7 @@ async function main() {
 	let secondWriteCalls = 0;
 	let readCalls = 0;
 	let pcbWriteCalls = 0;
+	let wireWriteCalls = 0;
 	let currentDocumentType = 3;
 	let currentSchematicPage = 'schematic-one';
 	let schematicDocumentOverride;
@@ -154,6 +155,14 @@ async function main() {
 			},
 		},
 		dmt_Pcb: { async getCurrentPcbInfo() { return { uuid: 'cached-pcb' }; } },
+		sch_PrimitiveWire: {
+			async getAll() { return []; },
+			async create() {
+				wireWriteCalls += 1;
+				return undefined;
+			},
+		},
+		sch_PrimitiveAttribute: { async getAll() { return []; } },
 		pcb_PrimitiveComponent: {
 			async create() {
 				pcbWriteCalls += 1;
@@ -330,6 +339,40 @@ async function main() {
 		assert.equal(secondWriteCalls, 0, 'the final native guard must prevent the raw create');
 		documentReadHook = undefined;
 		submittedLease = 5;
+		for (const raw of [true, false]) {
+			const wirePath = raw ? path : '/bridge/jlceda/schematic/connectivity';
+			const wirePayload = raw ? { apiFullName: 'eda.sch_PrimitiveWire.create', args: [[0, 0, 10, 0]] } : { action: 'wire_create', line: [0, 0, 10, 0] };
+			const switchId = `page-switch-before-${raw ? 'raw' : 'controlled'}-wire`;
+			transport.afterStarted = (requestId) => {
+				if (requestId === switchId)
+					currentSchematicPage = 'schematic-two';
+			};
+			enqueueTask({ requestId: switchId, path: wirePath, payload: { ...wirePayload, expectedSchematicWirePageUuid: 'schematic-two' }, leaseTerm: submittedLease }, transport);
+			const switchedWire = await transport.resultFor(switchId);
+			assert.match(switchedWire.error.message, /page changed before wire creation/);
+			assert.equal(transport.startedContexts.get(switchId).pageUuid, 'schematic-one');
+			assert.equal(wireWriteCalls, 0, 'both routes bind wire creation to the runtime execution page');
+			currentSchematicPage = 'schematic-one';
+			const leaseId = `lease-change-before-${raw ? 'raw' : 'controlled'}-wire`;
+			let wireDocumentReads = 0;
+			const finalRead = raw ? 3 : 2;
+			transport.afterStarted = (requestId) => {
+				if (requestId !== leaseId)
+					return;
+				documentReadHook = () => {
+					if (++wireDocumentReads === finalRead) {
+						transport.callbacks.onRoleChanged({ type: 'bridge/role', clientId: transport.clientId, activeClientId: transport.clientId, role: 'active', leaseTerm: submittedLease + 1 });
+					}
+				};
+			};
+			enqueueTask({ requestId: leaseId, path: wirePath, payload: wirePayload, leaseTerm: submittedLease }, transport);
+			const changedWireLease = await transport.resultFor(leaseId);
+			assert.match(changedWireLease.error.message, /lease changed before the native mutation/);
+			assert.equal(wireDocumentReads, finalRead, 'lease changed during the final page read immediately before native create');
+			assert.equal(wireWriteCalls, 0);
+			documentReadHook = undefined;
+			submittedLease++;
+		}
 		readCalls = 0;
 		transport.afterStarted = undefined;
 		submit('uncertain-delete', { apiFullName: 'eda.sch_PrimitiveComponent.delete', args: ['to-delete'] });

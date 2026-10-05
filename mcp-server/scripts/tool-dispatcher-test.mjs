@@ -798,6 +798,17 @@ const schematicDocumentSchema = z.fromJSONSchema(schematicDocumentDefinition.inp
 assert.equal(schematicDocumentSchema.safeParse({ action: 'primitive_at_point', x: 1, y: 2, ids: ['unexpected'] }).success, false);
 assert.equal(schematicDocumentSchema.safeParse({ action: 'primitives_by_id', ids: ['primitive-1'], limit: 1 }).success, false);
 
+const rawWireDefinition = definitions.find((definition) => definition.name === 'api_invoke');
+assert.ok(rawWireDefinition);
+const rawWireSchema = z.fromJSONSchema(rawWireDefinition.inputSchema);
+const rawWireInput = { apiFullName: 'eda.sch_PrimitiveWire.create', args: [[[0, 0, 10, 0], [10, 0, 10, 20]], 'sig', '#FF0000', 6, 1], allowedWireIds: ['existing-wire'] };
+const parsedRawWire = rawWireSchema.parse(rawWireInput);
+assert.deepEqual(parsedRawWire.allowedWireIds, rawWireInput.allowedWireIds, 'the MCP input schema must preserve explicit wire-contact approval');
+await dispatcher.dispatch({ name: 'api_invoke', arguments: parsedRawWire });
+assert.equal(calls.at(-1).path, '/bridge/jlceda/api/invoke');
+assert.deepEqual(calls.at(-1).payload.args, rawWireInput.args);
+assert.deepEqual(calls.at(-1).payload.allowedWireIds, rawWireInput.allowedWireIds);
+
 const connectivityDefinition = definitions.find((definition) => definition.name === 'schematic_connectivity_action');
 assert.ok(connectivityDefinition);
 const connectivitySchema = z.fromJSONSchema(connectivityDefinition.inputSchema);

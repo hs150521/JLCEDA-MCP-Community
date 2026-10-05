@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- 本轮完整自动门禁通过：Bridge `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）与 `npm run lint`，以及匹配 Server 的全量测试、lint 和多客户端验证；237 实机验证仍待核对。
+- raw `eda.sch_PrimitiveWire.create` 复用受控导线的同页接触预检，保留官方 `line/net/color/lineWidth/lineType` 五参数和 `number[]`/`number[][]` 路径；仅该 API 支持可选 `allowedWireIds`，未许可接触及不同已命名网络混接在写入前拒绝。
+- 导线写后逐段验证全部请求路径完整覆盖且存在本次有效变化，兼容旧 ID 延伸和拆分/合并，返回 `confirmedPrimitiveIds` 并保留 `confirmedPrimitiveId`；路径未完整覆盖、未许可的旧线变化或回读失败仍保留未知提交，要求完整同页连接恢复。
+- 网络接触预检与覆盖比较遵循 SDK 原生大写规则，避免小写请求名误报冲突或未知提交；raw 原生参数保持原样，返回 `net` 仍只表示归一后的请求名。
+- raw `eda.sch_PrimitiveAttribute.createNetLabel` 复用既有版本预检，已知 EDA 3.x 返回未开始及 `nativeCallAttempted:false`；电源/地 NetFlag、4.x 和未知版本保持既有调用。API 索引标明 EDA v4 起提供；#22/#26 原宿主问题未据此宣称完成。
+
 ## [2.3.6] - 2026-10-05
 
 - 新增独立封装支持：识别官方 DocumentType 4 独立封装，按库 UUID、文档 UUID 和标签建立 Bridge 上下文与连接；库身份优先取匹配当前文档的实际库标签，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`，避免跨库滞留字段覆盖真实标签，不复用工程/PCB 缓存。

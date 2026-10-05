@@ -234,7 +234,7 @@ export function detectNetLabelKind(netName: string): NetLabelKind {
 	return 'NetLabel';
 }
 
-function getEditorVersionBeforeNetLabelSupport(): string | undefined {
+export function getEditorVersionBeforeNetLabelSupport(): string | undefined {
 	try {
 		const version = eda.sys_Environment.getEditorCurrentVersion();
 		const match = /^v?(\d+)(?:\.|$)/i.exec(version.trim());

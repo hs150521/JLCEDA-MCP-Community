@@ -527,6 +527,9 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 				&& isPlainObjectRecord(task.payload)
 				&& typeof task.payload.apiFullName === 'string'
 				&& task.payload.apiFullName.trim().toLowerCase() === 'eda.sch_primitivecomponent.create';
+			const schematicWireCreateTask = (task.path === '/bridge/jlceda/schematic/connectivity'
+				&& isPlainObjectRecord(task.payload) && task.payload.action === 'wire_create')
+			|| canvasInvokeName(task.path, task.payload) === 'eda.sch_primitivewire.create';
 			const schematicDeleteTask = task.path === '/bridge/jlceda/api/invoke'
 				&& isPlainObjectRecord(task.payload)
 				&& typeof task.payload.apiFullName === 'string'
@@ -548,6 +551,11 @@ export function enqueueTask(task: { requestId: string; path: string; payload: un
 				if (!executionContext?.pageUuid || executionContext.pageUuid !== executionContext.documentUuid)
 					throw new Error('Current schematic page and editor document are not synchronized; creation was not started.');
 				handlerPayload = { ...(handlerPayload as Record<string, unknown>), expectedSchematicCreatePageUuid: executionContext.pageUuid };
+			}
+			else if (schematicWireCreateTask) {
+				if (!executionContext?.pageUuid || executionContext.pageUuid !== executionContext.documentUuid)
+					throw new Error('Current schematic page and editor document are not synchronized; wire creation was not started.');
+				handlerPayload = { ...(handlerPayload as Record<string, unknown>), expectedSchematicWirePageUuid: executionContext.pageUuid };
 			}
 			else if (schematicDeleteTask) {
 				if (!executionContext?.pageUuid || executionContext.pageUuid !== executionContext.documentUuid)

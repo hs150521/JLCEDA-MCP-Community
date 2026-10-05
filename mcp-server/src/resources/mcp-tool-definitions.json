@@ -32,7 +32,7 @@
   },
   {
     "name": "bridge_recover_client",
-    "description": "处理 EDA 写操作超时、执行中失联、提交未确认状态及 PCB 导入待确认状态。先从 bridge_clients 取得 requestId，以 action=recover、confirm=true 建立恢复会话；诊断含 hostRestartRequired:true 时须重启原宿主。等待原 Bridge 断开及恢复会话后的全新 clientId，就原文档和图页只读回读并以 action=readback 完成。原客户端和先前已连接客户端的普通重连不能用于回读；交互或坐标放置，以及 api_invoke 的原理图器件 create 须完整读回当前页器件 ID、位号与 BOM 扩展属性，PCB 自动布局须完整读回器件位置，自动布线及 PCB 直线/过孔创建须完整读回导线、过孔及网络。import_changes 返回 pending_confirmation 后全局阻止写入；用户在原生对话框应用或取消后，以 action=resolve_import、confirm=true、resolution=applied/cancelled 显式确认，Server 核对同一 PCB 并完整读回器件和网络后解除。无法确认弹框已关闭时，先 action=recover，再重启原 EDA 宿主，以全新连接 action=readback，另需 hostRestartConfirmed=true。隔离期间只读查询可用。",
+    "description": "处理 EDA 写操作超时、执行中失联、提交未确认状态及 PCB 导入待确认状态。先从 bridge_clients 取得 requestId，以 action=recover、confirm=true 建立恢复会话；诊断含 hostRestartRequired:true 时须重启原宿主。等待原 Bridge 断开及恢复会话后的全新 clientId，就原文档和图页只读回读并以 action=readback 完成。原客户端和先前已连接客户端的普通重连不能用于回读；交互或坐标放置，以及 api_invoke 的原理图器件 create 须完整读回当前页器件 ID、位号与 BOM 扩展属性，PCB 自动布局须完整读回器件位置，自动布线及 PCB 直线/过孔创建须完整读回导线、过孔及网络。import_changes 返回 pending_confirmation 后全局阻止写入；用户在原生对话框应用或取消后，以 action=resolve_import、confirm=true、resolution=applied/cancelled 显式确认，Server 核对同一 PCB 并完整读回器件和网络后解除。无法确认弹框已关闭时，先 action=recover，再重启原 EDA 宿主，以全新连接 action=readback，另需 hostRestartConfirmed=true。隔离期间只读查询可用。 api_invoke 的原理图 Wire.create 提交未确认时，须用 schematic_connectivity_primitives 完整回读同一图页；仅上下文回读不能解除写入隔离。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -236,7 +236,7 @@
   },
   {
     "name": "api_invoke",
-    "description": "调用指定的 EDA API 接口。原理图器件 create 会先将裸器件引用解析为完整库对象，并自动使用唯一子部件；找不到器件时返回 DEVICE_NOT_FOUND，未调用原生创建。组件引脚的 Pin.modify 使用真实 ComponentPin 实例修改 noConnected/pinNumber，并核对同器件全部引脚；组件引脚几何需在符号库中修改。器件 delete 按当前图页逐项删除、回读。原生错误保留 code/reason/field/status。PCB autoRouting 指定最多 3 个 RoutingNets 且原生 RPC 超时时，返回暂时回读 routingObservation，仍须受控恢复。原理图器件 create 还会读回当前页既有位号、恢复原生自动重排并保留 BOM 属性，返回 designatorChanges/restoredDesignators；无法恢复时明确 needsReview，未确认写入按完整当前页 ID、位号和 BOM 回读恢复。独立封装使用允许的 pcb_Primitive API；七类 modify 等待一次 done 后重新读取实际 after。已完成且可完整回读的字段差异返回 ok:false、native_footprint_modify_incomplete 和 fieldMismatches（field/requested/actual），不因该已知部分结果触发未知提交隔离；Polyline 等价闭合轮廓规范化保留实际 source。提交未确认时用 footprint_read 完整回读恢复。",
+    "description": "调用指定的 EDA API 接口。原理图器件 create 会先将裸器件引用解析为完整库对象，并自动使用唯一子部件；找不到器件时返回 DEVICE_NOT_FOUND，未调用原生创建。组件引脚的 Pin.modify 使用真实 ComponentPin 实例修改 noConnected/pinNumber，并核对同器件全部引脚；组件引脚几何需在符号库中修改。器件 delete 按当前图页逐项删除、回读。原生错误保留 code/reason/field/status。PCB autoRouting 指定最多 3 个 RoutingNets 且原生 RPC 超时时，返回暂时回读 routingObservation，仍须受控恢复。原理图器件 create 还会读回当前页既有位号、恢复原生自动重排并保留 BOM 属性，返回 designatorChanges/restoredDesignators；无法恢复时明确 needsReview，未确认写入按完整当前页 ID、位号和 BOM 回读恢复。独立封装使用允许的 pcb_Primitive API；七类 modify 等待一次 done 后重新读取实际 after。已完成且可完整回读的字段差异返回 ok:false、native_footprint_modify_incomplete 和 fieldMismatches（field/requested/actual），不因该已知部分结果触发未知提交隔离；Polyline 等价闭合轮廓规范化保留实际 source。提交未确认时用 footprint_read 完整回读恢复。 原理图 Wire.create 共用受控接触预检，原生五参数和多路径按原样调用；allowedWireIds 仅用于此 API，确认结果须覆盖请求的每一段且包含本次有效新增或变化，比较网络名按原生大写规则。未知提交要求同页完整 schematic_connectivity_primitives 回读。普通 sch_PrimitiveAttribute.createNetLabel 从 EDA v4 起提供；已知 EDA 3.x 返回 EDA_VERSION_UNSUPPORTED、not_started，不调用原生接口。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -248,6 +248,12 @@
           "type": "array",
           "items": {},
           "description": "API 调用参数列表，严格按 signatureText 中的参数顺序填写。无入参时传空数组 []。"
+        },
+        "allowedWireIds": {
+          "type": "array",
+          "items": {"type":"string","minLength":1},
+          "uniqueItems": true,
+          "description": "仅用于 eda.sch_PrimitiveWire.create：明确允许请求路径接触、合并或拆分的现有导线 ID；默认禁止接触未批准的旧线。原生五参数仍通过 args 传递。"
         },
         "includeCompletePositions": {
           "type": "boolean",

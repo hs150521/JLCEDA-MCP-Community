@@ -1,5 +1,15 @@
 # JLCEDA MCP Server
 
+## 2.3.7 原理图导线与网络标签
+
+本轮 Server 全量 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 已通过；匹配 Bridge 的完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 也已通过。237 实机验证仍待核对，不能据此宣称 #22/#26 的原宿主问题完全解决。
+
+`api_invoke eda.sch_PrimitiveWire.create` 接入 `schematic_connectivity_action wire_create` 的接触预检和逐段覆盖回读，保留官方 `line/net/color/lineWidth/lineType` 五参数及 `number[]`/`number[][]` 路径。仅该 API 可在 payload 顶层选填 `allowedWireIds`，用于明确允许接触的旧导线；其他 API 带此字段会拒绝。返回 `confirmedPrimitiveIds` 和兼容的 `confirmedPrimitiveId`，不会仅凭原生返回旧 ID 就确认整个请求路径已创建。
+
+raw 导线创建的未知提交归为 `requiredReadback:"schematic_connectivity_primitives"`，与受控创建共用恢复流程：指定 `/bridge/jlceda/schematic/read` 和 `readbackPayload:{"includeConnectivityPrimitives":true}`，核对同一执行图页的完整连接图元及语义网表；仅查 `/context` 不能解除隔离。诊断要求宿主重启时，先重启原 EDA，再使用恢复会话后的新客户端回读。图元覆盖核验不能证明所有匿名网络都没有被宿主合并，#22 原场景仍待实机核对。
+
+raw `eda.sch_PrimitiveAttribute.createNetLabel` 在已知 EDA 3.x 时返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不调用原生方法，也不因该拒绝进入未知提交隔离。API 索引标明从 EDA v4 起提供；4.x 或未知版本仍沿用原生调用，电源/地 NetFlag 不受影响。#26 的宿主全部客户端失联及 EDA v4 尚需实机验证。详见 [2.3.7 发布说明](../docs/releases/v2.3.7.md)。
+
 ## 2.3.6 独立封装编辑
 
 Bridge 将官方 `getCurrentDocumentInfo()` 返回的 `documentType:4` 识别为 `pageKind:"footprint"`，身份包含 `documentUuid`、`pageUuid`、`libraryUuid` 和 `tabId`；其中 `pageUuid` 为该封装文档 UUID。库身份优先取匹配当前文档的实际 `<documentUuid>@<libraryUuid>` 标签；含 `@` 但文档前缀不符或库 UUID 缺失时拒绝，无 `@` 的旧式标签兼容当前文档的 `parentLibraryUuid`。EDA 3.2.181 跨库切换时该字段可能滞留旧值，不能覆盖匹配当前文档的实际库标签。独立封装可建立连接，无需工程 UUID；已有 PCB 或工程缓存不作为封装身份。`eda_context` 返回 `footprintContext`，`bridge_clients` 显示同一组身份。
@@ -83,7 +93,7 @@ Bridge 客户端超时会返回带 `BRIDGE_TASK_TIMEOUT` 标记的结果；Serve
 
 `schematic_read` 在普通读取和完整连接回读前后核对当前图页 UUID 与编辑器文档 UUID，并比对当前页器件对象与图元 ID 列表；设置 `includeConnectivityPrimitives:true` 时还比对导线对象与 ID 列表。若读取期间身份或列表未同步，则返回 `PAGE_NOT_READY`，等待加载后重试。复制页可以合法复用源页图元 ID。不要把未同步的快照用于放置或解除写入隔离；成功结果包含 `pageUuid`。
 
-`wire_create` 成功后须用 `schematic_read includeConnectivityPrimitives:true` 核对同页新导线及实际语义连接；写入结果中的 `net` 只是请求值，`confirmedPrimitiveId` 是读回确认的导线 ID。原生未返回 ID 且无法唯一匹配请求路径时，会保留 `commitUnknown` 并要求按诊断回读。该读取也可用于其他当前页连线核查；受控恢复仍要求按对应诊断执行完整回读。
+`wire_create` 与 raw `eda.sch_PrimitiveWire.create` 均要求实际导线完整覆盖请求路径，且覆盖路径上存在本次有效变化；拆分/合并可由多个实际 ID 共同覆盖，返回 `confirmedPrimitiveIds` 并保留 `confirmedPrimitiveId`。成功后仍须用 `schematic_read includeConnectivityPrimitives:true` 核对同页实际语义连接；返回的 `net` 是按原生大写规则归一后的请求名，未指定时为 `null`，不能代替网表。路径不完整或无法确认时保留 `commitUnknown`，按诊断完整回读；该读取也可用于其他当前页连线核查。
 
 ## 2.3.5 回读与操作说明
 
@@ -195,12 +205,12 @@ Server 提供 PCB DRC、网络查询、库搜索、制造查询和受保护的�
 
 ## 安装
 
-以下文件名对应 2.3.6；发布验证完成前，以发布页实际提供的包为准。
+以下文件名对应 2.3.7；是否可下载以发布页实际提供的包为准。
 
-从 GitHub 发布页下载 `jlceda-mcp-server-2.3.6.tgz`：
+从 GitHub 发布页下载 `jlceda-mcp-server-2.3.7.tgz`：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.3.6.tgz
+npm install --global .\jlceda-mcp-server-2.3.7.tgz
 Get-Command jlceda-mcp
 ```
 

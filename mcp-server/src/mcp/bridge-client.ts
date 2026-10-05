@@ -254,6 +254,8 @@ function isSchematicPinModify(path: string, payload: unknown): boolean {
 function isSchematicConnectivityMutation(path: string, payload: unknown): boolean {
   return isSchematicComponentDelete(path, payload)
     || isSchematicPinModify(path, payload)
+    || (path === '/bridge/jlceda/api/invoke' && isRecord(payload)
+      && optionalString(payload.apiFullName)?.toLowerCase() === 'eda.sch_primitivewire.create')
     || path === '/bridge/jlceda/netlabel/place'
 	|| (path === '/bridge/jlceda/schematic/wire-manage'
 		&& isRecord(payload) && (payload.action === 'modify' || payload.action === 'delete'))
