@@ -112,7 +112,7 @@ async function main() {
 	assert.equal((await saving).saved, true);
 	assertNoExtraOperations(deferred);
 
-	for (const acknowledgement of [false, undefined]) {
+	for (const acknowledgement of [false]) {
 		const f = fixture();
 		f.state.acknowledgement = acknowledgement;
 		const result = await handleFootprintSaveTask({});
@@ -127,6 +127,26 @@ async function main() {
 		assert.equal(result.readbackRequired, undefined);
 		assertNoExtraOperations(f);
 	}
+
+	const unacknowledged = fixture();
+	let persistedSource;
+	unacknowledged.state.onUpdate = (_document, _library, source) => {
+		persistedSource = source;
+		return undefined;
+	};
+	const unknownAcknowledgement = await handleFootprintSaveTask({});
+	assert.equal(persistedSource, SOURCE, 'an undefined result can arrive after the library source was already written');
+	assert.equal(unacknowledged.calls.update.length, 1);
+	assert.equal(unknownAcknowledgement.ok, false);
+	assert.equal(unknownAcknowledgement.reason, 'native_footprint_save_unknown');
+	assert.equal(unknownAcknowledgement.commitUnknown, true);
+	assert.equal(unknownAcknowledgement.readbackRequired, true);
+	assert.equal(unknownAcknowledgement.nativeCallAttempted, true);
+	assert.equal(unknownAcknowledgement.nativeCallSettled, true);
+	assert.equal(unknownAcknowledgement.saved, undefined, 'a settled but unconfirmed result cannot claim the source was not saved');
+	assert.equal(unknownAcknowledgement.saveAcknowledged, undefined);
+	assert.equal(requiresHostRestartForResult('/bridge/jlceda/footprint/save', {}, unknownAcknowledgement), false);
+	assertNoExtraOperations(unacknowledged);
 
 	for (const error of [new Error('RPC ETIMEDOUT'), new Error('WebSocket is not open'), new Error('transport closed'), Object.assign(new Error('RPC aborted'), { code: 'ECONNABORTED' })]) {
 		const f = fixture();
@@ -234,6 +254,7 @@ async function main() {
 	}
 
 	await checkRuntimeUnknownSave();
+	await checkRuntimeUnknownSave(true);
 	console.log('footprint save handler/runtime: source/identity/ACK/unknown-result checks passed');
 }
 
@@ -279,10 +300,14 @@ async function waitUntil(predicate) {
 	throw new Error('Footprint save runtime task did not complete');
 }
 
-async function checkRuntimeUnknownSave() {
+async function checkRuntimeUnknownSave(nativeCallSettled = false) {
 	// 只替换socket：实际runtime/registry/handler完成执行分类、隔离和只读回读。
 	require('../src/runtime/bridge-transport.ts').BridgeTransport = MockBridgeTransport;
-	const { enqueueTask, startBridgeRuntime, stopBridgeRuntime } = require('../src/runtime/bridge-runtime.ts');
+	// 各场景重新加载实际 runtime，旧场景 stop 后不复用其写入隔离状态。
+	const runtimePath = require.resolve('../src/runtime/bridge-runtime.ts');
+	delete require.cache[runtimePath];
+	activeTransport = undefined;
+	const { enqueueTask, startBridgeRuntime, stopBridgeRuntime } = require(runtimePath);
 	const f = fixture('project-library', 'stale-personal-library');
 	Object.assign(f.runtime, {
 		EDMT_EditorDocumentType: { SCHEMATIC_PAGE: 1, PCB: 3, FOOTPRINT: 4 },
@@ -318,13 +343,21 @@ async function checkRuntimeUnknownSave() {
 		assert.equal(saved.result.saveAcknowledged, true);
 		assert.equal(saved.result.identityVerified, true);
 		assert.deepEqual(f.calls.update, [[DOCUMENT_UUID, 'project-library', SOURCE]]);
-		f.state.onUpdate = () => {
+		f.state.onUpdate = (_document, _library, source) => {
+			if (nativeCallSettled) {
+				f.state.persistedSource = source;
+				return undefined;
+			}
 			throw new Error('RPC ETIMEDOUT');
 		};
 		const first = await submit('unknown-save', '/bridge/jlceda/footprint/save', {});
 		assert.equal(first.error, undefined);
 		assert.equal(first.result.commitUnknown, true);
-		assert.equal(first.result.nativeCallSettled, false);
+		assert.equal(first.result.nativeCallSettled, nativeCallSettled);
+		assert.equal(requiresHostRestartForResult('/bridge/jlceda/footprint/save', {}, first.result), !nativeCallSettled);
+		if (nativeCallSettled)
+			assert.equal(f.state.persistedSource, SOURCE, 'the settled unknown save fixture applies its source before returning undefined');
+		assert.equal(first.result.saveAcknowledged, undefined);
 		assert.equal(first.result.saved, undefined);
 		assert.equal(activeTransport.started.get('unknown-save').pageKind, 'footprint');
 		assert.equal(activeTransport.started.get('unknown-save').libraryUuid, 'project-library');
@@ -343,7 +376,7 @@ async function checkRuntimeUnknownSave() {
 		assert.deepEqual(readKinds, ['Pad', 'Via', 'Line', 'Arc', 'Polyline', 'String', 'Attribute']);
 		const stillBlocked = await submit('still-blocked-save', '/bridge/jlceda/footprint/save', {});
 		assert.match(stillBlocked.error.message, /unknown commit|restart|recovery/i);
-		assert.equal(f.calls.update.length, 2, 'a read by itself must not clear the unsettled native write barrier');
+		assert.equal(f.calls.update.length, 2, 'a read by itself must not clear the unknown native write barrier');
 		assertNoExtraOperations(f);
 	}
 	finally {

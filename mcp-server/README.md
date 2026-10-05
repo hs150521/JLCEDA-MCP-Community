@@ -2,9 +2,9 @@
 
 ## 2.3.8 共享封装源保存
 
-新增 `footprint_save`，路由 `/bridge/jlceda/footprint/save`，仅支持可选 `timeoutMs`（5000–120000 毫秒，默认 30000）。Bridge 在 EDA 内读取完整源码，核对真实库/文档/标签后写回同一共享库封装，源码不会传回 MCP 客户端，保存不额外执行七类 `getAll`。共享源更新可能影响所有引用实例，不提供仅此实例的封装重绑定。
+新增 `footprint_save`，路由 `/bridge/jlceda/footprint/save`，仅支持可选 `timeoutMs`（5000–120000 毫秒，默认 30000）。Bridge 在 EDA 内读取完整源码快照（读取时状态），核对真实库/文档/标签后写回同一共享库封装，源码不会传回 MCP 客户端，保存不额外执行七类 `getAll`。共享源更新可能影响所有引用实例，不提供仅此实例的封装重绑定。官方接口无 revision/CAS，不保证与同页人工并发编辑之间的原子保存。
 
-成功库 ACK 返回 `saved:true`、`saveAcknowledged:true`、`scope:"library_source"`、`sharedSource:true`、`sourceLength`。ACK 后身份读取失败仍保留保存 ACK，同时返回 `ok:false`、`identityVerified:false`、`reason:"footprint_changed_after_save"`，不应直接重试。显式 false/undefined 是未获 ACK，并非确认源码没有改变；RPC 未确认或超时归为 `footprint_state`，要求同库同文档七类完整 `footprint_read`。恢复回读只解除编辑状态隔离，不把 `readbackVerified:true` 当成保存或引用 PCB 持久性证明。
+成功库 ACK 返回 `saved:true`、`saveAcknowledged:true`、`scope:"library_source"`、`sharedSource:true`、`sourceLength`。ACK 后身份读取失败仍保留保存 ACK，同时返回 `ok:false`、`identityVerified:false`、`reason:"footprint_changed_after_save"`，不应直接重试。显式 false 为明确未获 ACK，返回 `saved:false`、`nativeCallSettled:true`，不证明源码未改变；undefined 是已结束但效果未知，返回 `commitUnknown:true`、`readbackRequired:true`、`nativeCallSettled:true`，不带 `saved` 或 `saveAcknowledged`，不强制宿主重启，须同库同文档完整回读恢复；RPC 未确认或超时归为 `footprint_state`，要求同库同文档七类完整 `footprint_read`。恢复回读只解除编辑状态隔离，不把 `readbackVerified:true` 当成保存或引用 PCB 持久性证明。
 
 匹配 Server/活动 Bridge 2.3.8 的 EDA 3.2.181 / API 0.3.15 实测通过：自建共享封装 Via 0→1→0，保存两次获 ACK，冷重开完整封装 DTO 与创建状态/最终原基线严格相等；引用 PCB 冷重开 Via 也为 0→1→0，其他读取部分不变。本轮按“区分内存删除与保存，并支持共享封装源持久编辑”的范围收口 #80，板级子过孔删除本身仍不保证持久。Server `npm test`、`npm run lint`、`node verify-multi-client.mjs` 和匹配 Bridge 完整 build/lint 均通过；失败与未知保存恢复分支由本地回归验证。详见 [2.3.8 发布说明](../docs/releases/v2.3.8.md)。
 

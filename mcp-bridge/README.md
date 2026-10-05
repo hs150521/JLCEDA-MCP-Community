@@ -2,9 +2,9 @@
 
 ## 2.3.8 共享封装源保存
 
-新增 `footprint_save`：在当前独立封装文档调用一次 `sys_FileManager.getDocumentSource()`，核对同库/文档/标签及连接、活动角色、租约后，调用一次 `lib_Footprint.updateDocumentSource(documentUuid, libraryUuid, source)`。源码原样留在 EDA 内，保存不额外读取七类图元，也不会自动关闭页面或重建器件。仅支持可选 `timeoutMs`（5–120 秒，默认 30 秒）。该操作更新共享库源，可能影响所有引用实例，不提供仅此实例的封装重绑定。
+新增 `footprint_save`：在当前独立封装文档调用一次 `sys_FileManager.getDocumentSource()`，核对同库/文档/标签及连接、活动角色、租约后，调用一次 `lib_Footprint.updateDocumentSource(documentUuid, libraryUuid, source)`。读取时的完整源码快照原样留在 EDA 内，保存不额外读取七类图元，也不会自动关闭页面或重建器件。仅支持可选 `timeoutMs`（5–120 秒，默认 30 秒）。该操作更新共享库源，可能影响所有引用实例，不提供仅此实例的封装重绑定。官方接口无 revision/CAS，不保证与同页人工并发编辑之间的原子保存。
 
-`saved:true`、`saveAcknowledged:true` 仅表示库写入成功 ACK；返回 `scope:"library_source"`、`sharedSource:true`、真实身份和 `sourceLength`。ACK 后换页或身份读取失败时仍保留两个 true 值，同时返回 `ok:false`、`identityVerified:false`、`reason:"footprint_changed_after_save"`。显式 false/undefined 只表示未获 ACK，不能当作源码未改变；RPC 未确认或超时保留未知提交，按同库同文档的完整 `footprint_read` 恢复。恢复快照证明编辑状态，不补充保存及引用 PCB 持久性结论。
+`saved:true`、`saveAcknowledged:true` 仅表示库写入成功 ACK；返回 `scope:"library_source"`、`sharedSource:true`、真实身份和 `sourceLength`。ACK 后换页或身份读取失败时仍保留两个 true 值，同时返回 `ok:false`、`identityVerified:false`、`reason:"footprint_changed_after_save"`。显式 false 为明确未获 ACK，返回 `saved:false`、`nativeCallSettled:true`，不证明源码未改变；undefined 是已结束但效果未知，返回 `commitUnknown:true`、`readbackRequired:true`、`nativeCallSettled:true`，不带 `saved` 或 `saveAcknowledged`，不强制宿主重启，须同库同文档完整回读恢复；RPC 未确认或超时保留未知提交，按同库同文档的完整 `footprint_read` 恢复。恢复快照证明编辑状态，不补充保存及引用 PCB 持久性结论。
 
 EDA 3.2.181 / API 0.3.15 与匹配 Server/活动 Bridge 2.3.8 的自建共享封装实测通过：Via 0→1→0，两次保存获 ACK；封装冷重开完整 DTO 保持创建状态并最终严格恢复基线，引用 PCB 冷重开也为 Via 0→1→0，其他读取部分保持基线。本轮按此范围收口 #80；板级子过孔删除本身仍不保证持久。Bridge 完整 `npm run build`、`npm run lint` 及匹配 Server 全量 test/lint/多客户端验证通过，ACK 后身份失败和未知保存恢复分支仅由本地回归验证。详见 [2.3.8 发布说明](../docs/releases/v2.3.8.md)。
 

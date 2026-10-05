@@ -37,6 +37,8 @@ export async function handleFootprintSaveTask(payload: unknown, _reportPinAdapte
 			? { ...result, ok: false, commitUnknown: true, readbackRequired: true, nativeCallSettled: false, reason: 'native_footprint_save_unknown', error: message }
 			: { ...result, ok: false, saved: false, saveAcknowledged: false, reason: 'native_footprint_save_rejected', error: message };
 	}
+	if (acknowledged === undefined)
+		return { ...result, ok: false, commitUnknown: true, readbackRequired: true, reason: 'native_footprint_save_unknown' };
 	if (acknowledged !== true)
 		return { ...result, ok: false, saved: false, saveAcknowledged: false, reason: 'native_footprint_save_not_acknowledged' };
 	try {

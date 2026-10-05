@@ -10,7 +10,7 @@
 
 - 独立封装文档以官方 `documentType:4`、`documentUuid/pageUuid`、`libraryUuid` 和 `tabId` 为身份；不要用 PCB 或工程缓存推断。先用 `footprint_read` 完整读取 Pad/Via/Line/Arc/Polyline/String/Attribute 和实际 ID，仅可选 `timeoutMs`，不能传 sections 或过滤。必要状态缺失或换页会返回 `complete:false`，不能当成完整快照。
 - 封装画布操作使用 `api_invoke` 的首批 `pcb_PrimitivePad/Via/Line/Arc/Polyline/String` 的 get/getAll/getAllPrimitiveId/create/modify/delete，以及 Attribute 的 get/getAll/getAllPrimitiveId/modify/delete。Attribute.create 为官方内部空实现，不可调用；PCB/原理图专用工具不能编辑独立封装。Polyline 可用真实 `polygonSource` 数组，写后检查实际 `after`；`identityVerified:true` 不证明所有请求字段均已生效。
-- 保存当前独立封装修改时优先用 `footprint_save`；工具在 EDA 内读取完整源码并写回同一库和文档，无需把源码传回客户端。它更新共享库源，可能影响所有引用实例，先确认该共享范围符合意图。`saved:true` 与 `saveAcknowledged:true` 只表示库写入成功 ACK；ACK 后换页可能同时返回 `ok:false`、`identityVerified:false`，不要直接重试已保存的写入。
+- 保存当前独立封装修改时优先用 `footprint_save`；工具在 EDA 内读取当时的完整源码快照并写回同一库和文档，无需把源码传回客户端。它更新共享库源，可能影响所有引用实例，先确认该共享范围符合意图。`saved:true` 与 `saveAcknowledged:true` 只表示库写入成功 ACK；ACK 后换页可能同时返回 `ok:false`、`identityVerified:false`，不要直接重试已保存的写入。显式 false 为未获 ACK（`saved:false`、`nativeCallSettled:true`），不证明源码未改变；undefined 为已结束但效果未知（`commitUnknown:true`、`readbackRequired:true`、`nativeCallSettled:true`，无 `saved` 或 `saveAcknowledged`），不强制宿主重启，须同库同文档完整回读恢复。官方接口无 revision/CAS，不保证与同页人工并发编辑之间的原子保存。
 - 当前 PCB 内删除封装子过孔仅是编辑内存核对，不能据此宣称持久删除。需要共享源修改时，在对应独立封装中编辑并 `footprint_save`，然后关闭重开封装和引用 PCB，分别完整回读实际状态。没有自动重建器件或仅此实例封装重绑定能力；完整编辑状态恢复也不等于保存持久性证明。
 - 封装写入结果不明时先建立 `bridge_recover_client action:recover` 会话；按诊断重启原宿主后，使用全新客户端在同库同文档执行 `action:readback`、`readbackPath:"/bridge/jlceda/footprint/read"`、`readbackPayload:{}`。新标签可与旧任务不同，但一次回读必须保持库/文档/标签稳定，仅上下文或局部图元查询不能解除隔离。当前编辑内存中的修改/删除不证明保存重开后持久生效；保存工具结果未知时也沿用该恢复流程，不直接重试。
 
