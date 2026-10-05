@@ -1,5 +1,6 @@
 import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
 import { handleSchematicConnectivityTask } from './schematic-connectivity-handler.ts';
+import { readNativeWireSegments } from './schematic-native-wire-segments.ts';
 import { handleSchematicReadTask } from './schematic-read-handler.ts';
 
 type Action = 'read' | 'modify' | 'delete';
@@ -56,7 +57,7 @@ function readWire(primitive: unknown): WireState {
 	const color = state<unknown>(primitive, 'Color');
 	const lineWidth = state<unknown>(primitive, 'LineWidth');
 	const lineType = state<unknown>(primitive, 'LineType');
-	if (typeof primitiveId !== 'string' || !primitiveId.trim() || finiteLinePaths(line) === null || typeof net !== 'string'
+	if (typeof primitiveId !== 'string' || !primitiveId.trim() || readNativeWireSegments(line) === null || typeof net !== 'string'
 		|| (color !== null && typeof color !== 'string')
 		|| (lineWidth !== null && (typeof lineWidth !== 'number' || !Number.isFinite(lineWidth)))
 		|| (lineType !== null && (typeof lineType !== 'number' || !Number.isInteger(lineType)))) {
@@ -136,29 +137,6 @@ function normalizedLine(value: unknown): number[] {
 	return preserveBoundedArray(line);
 }
 
-function flatPaths(value: unknown): number[][] {
-	if (!Array.isArray(value))
-		return [];
-	if (!Array.isArray(value[0]))
-		return [value as number[]];
-	if (value.every(part => Array.isArray(part) && part.length === 2))
-		return [value.flat() as number[]];
-	return value.filter(part => Array.isArray(part) && part.length >= 4) as number[][];
-}
-
-function finiteLinePaths(value: unknown): number[][] | null {
-	if (!Array.isArray(value) || value.length === 0)
-		return null;
-	const paths: unknown[] = !Array.isArray(value[0])
-		? [value]
-		: value.every(part => Array.isArray(part) && part.length === 2) ? [value.flat()] : value;
-	if (paths.some(path => !Array.isArray(path) || path.length < 4 || path.length % 2 !== 0
-		|| path.some(coordinate => typeof coordinate !== 'number' || !Number.isFinite(coordinate)))) {
-		return null;
-	}
-	return paths as number[][];
-}
-
 function requiredProperty(value: unknown): Record<string, unknown> {
 	if (!isPlainObjectRecord(value) || Object.keys(value).length === 0)
 		throw new TypeError('property must be a non-empty object.');
@@ -189,18 +167,16 @@ function requiredProperty(value: unknown): Record<string, unknown> {
 	return value;
 }
 
-function segments(value: unknown): string[] {
+function segments(value: unknown, source: 'native' | 'request'): string[] {
 	if (!Array.isArray(value))
 		return [];
-	const paths = Array.isArray(value[0])
-		? value.every(part => Array.isArray(part) && part.length === 2) ? [value.flat()] : value
-		: [value];
+	const paths = source === 'native' ? readNativeWireSegments(value) ?? [] : [value];
 	const intervals = new Map<string, Array<[number, number]>>();
 	const otherSegments: string[] = [];
 	for (const path of paths) {
 		if (!Array.isArray(path))
 			continue;
-		for (let index = 0; index + 3 < path.length; index += 2) {
+		for (let index = 0; index + 3 < path.length; index += source === 'native' ? 4 : 2) {
 			const coordinates = [path[index], path[index + 1], path[index + 2], path[index + 3]];
 			if (coordinates.some(coordinate => typeof coordinate !== 'number' || !Number.isFinite(coordinate)))
 				continue;
@@ -239,17 +215,17 @@ function segments(value: unknown): string[] {
 }
 
 function lineGeometryKey(value: unknown): string {
-	const normalizedSegments = segments(value);
+	const normalizedSegments = segments(value, 'native');
 	if (normalizedSegments.length > 0)
 		return JSON.stringify(normalizedSegments);
 	// Native schematics can contain point wires. Keep their coordinates when comparing readbacks.
-	return JSON.stringify(finiteLinePaths(value));
+	return JSON.stringify(readNativeWireSegments(value));
 }
 
 function requestedValuesMatch(after: WireState, property: Record<string, unknown>): boolean {
 	return Object.entries(property).every(([key, expected]) => {
 		if (key === 'line')
-			return JSON.stringify(segments(after.line)) === JSON.stringify(segments(expected));
+			return JSON.stringify(segments(after.line, 'native')) === JSON.stringify(segments(expected, 'request'));
 		return after[key as keyof WireState] === expected;
 	});
 }
@@ -297,8 +273,8 @@ export async function handleSchematicWireManageTask(payload: unknown): Promise<u
 	const before = wires.find(wire => wire.primitiveId === primitiveId);
 	if (!before)
 		return { ok: false, action, scope: SCOPE, pageUuid: snapshot.pageUuid, primitiveId, reason: 'wire_not_found' };
-	if (action === 'modify' && property!.line !== undefined && segments(before.line).length === 0
-		&& segments(normalizedLine(property!.line)).length > 1) {
+	if (action === 'modify' && property!.line !== undefined && segments(before.line, 'native').length === 0
+		&& segments(normalizedLine(property!.line), 'request').length > 1) {
 		return {
 			ok: false,
 			action,
@@ -316,7 +292,7 @@ export async function handleSchematicWireManageTask(payload: unknown): Promise<u
 	}
 	const approvedOtherWireIds = new Set<string>();
 	if (action === 'modify' && (property!.line !== undefined || property!.net !== undefined)) {
-		const lines = property!.line === undefined ? flatPaths(before.line) : [normalizedLine(property!.line)];
+		const lines = property!.line === undefined ? readNativeWireSegments(before.line)! : [normalizedLine(property!.line)];
 		if (lines.length === 0)
 			return { ok: false, action, scope: SCOPE, primitiveId, reason: 'wire_geometry_unavailable' };
 		const allowedWireIds = Array.isArray(payload.allowedWireIds) ? payload.allowedWireIds : [];

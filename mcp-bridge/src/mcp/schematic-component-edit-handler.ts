@@ -1,4 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord, preserveBoundedArray, toSafeErrorMessage } from '../utils.ts';
+import { readNativeWireSegments } from './schematic-native-wire-segments.ts';
 import { handleSchematicReadTask } from './schematic-read-handler.ts';
 
 type Action = 'read' | 'modify' | 'delete';
@@ -219,31 +220,12 @@ function requestedValuesMatch(after: ComponentState, requested: Record<string, u
 }
 
 function wireSegments(line: unknown): Segment[] {
-	if (!Array.isArray(line))
-		throw new TypeError('EDA wire geometry is unavailable.');
-	let paths: unknown[][];
-	if (Array.isArray(line[0])) {
-		paths = (line as unknown[][]).every(part => Array.isArray(part) && part.length === 2)
-			? [line.flat()]
-			: line as unknown[][];
-	}
-	else {
-		paths = [line];
-	}
-	const segments: Segment[] = [];
-	for (const path of paths) {
-		if (!Array.isArray(path) || path.length < 4 || path.length % 2 !== 0
-			|| path.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
-			throw new TypeError('EDA wire geometry is incomplete.');
-		}
-		for (let index = 0; index + 3 < path.length; index += 2) {
-			const start = { x: path[index] as number, y: path[index + 1] as number };
-			const end = { x: path[index + 2] as number, y: path[index + 3] as number };
-			if (start.x !== end.x || start.y !== end.y)
-				segments.push({ start, end });
-		}
-	}
-	return segments;
+	const nativeSegments = readNativeWireSegments(line);
+	if (nativeSegments === null)
+		throw new TypeError('EDA wire geometry is incomplete.');
+	return nativeSegments.flatMap(([x1, y1, x2, y2]) => x1 === x2 && y1 === y2
+		? []
+		: [{ start: { x: x1, y: y1 }, end: { x: x2, y: y2 } }]);
 }
 
 function pointOnSegment(point: Point, segment: Segment): boolean {

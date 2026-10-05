@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [2.3.10] - 2026-10-05
+
+- 配合 Bridge 修正原生 Wire.line 读取格式：每 4 个坐标为独立端点对，连续创建/修改请求和原始 DTO 保持不变；更新导线使用指导。
+- 四个消费者共用解析器：连通预检、原理图语义读取、导线管理和器件匿名导线组检查。修复虚构斜线引发的异网误拒及读取时错误网络推导，net-only 修改保留几何，连续 L 请求可与原生拆分/反向/重排线段正确核对。
+- EDA 3.2.181 / API 0.3.15 的 3 个完整 DTO 与 15 条 WIRE/LINE 捕获记录核对通过；旧运行 Bridge 2.3.9 的公开 MCP 只读复现确认相同 DTO、50690 字符源码及虚构斜线误拒，前后完整读取严格相等，零写入。
+- 新 Bridge/Server 2.3.10 的公开 MCP 只读实测通过：虚构斜线附近 preview 可创建且 touches 为空，真实 A 线上的异网请求即使许可 ID 仍拒绝；3 个 DTO 与捕获数据相等，完整连接快照与旧基线相等，同轮完整 schematic_read 不变。源码全部实体记录逐字相等，仅 DOCHEAD client/updateTime/version 动态字段排除，固定 uuid/docType/editVersion 核对，不宣称全源码字符串相等；返回自建 PCB 的完整回读及心跳后 context/ready 复核通过，无写入、保存、关闭或重启。
+- 捕获 fixture、相关定向回归、typecheck、目标 lint 与两轮独立审查通过；Bridge 完整 build/lint 和 Server npm ci/test/lint/多客户端验证通过。#22 原 TPS552892 夹具及 #37 原 62 网络/0 毫秒全失败仍开放，EDA v4 未实测。详见 [2.3.10 发布说明](../docs/releases/v2.3.10.md)。
+
 ## [2.3.9] - 2026-10-05
 
 - 配合 Bridge 的 `eda.pcb_Document.autoRouting` 执行前保护：无参数、全网与选网任务均绑定执行时实际 PCB，内部 `expectedPcbUuid` 不受调用者覆盖；更新 Agent 调用指导。

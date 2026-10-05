@@ -11,6 +11,7 @@
  */
 
 import { getSyncState, isPlainObjectRecord, safeCall } from '../utils';
+import { readNativeWireSegments } from './schematic-native-wire-segments.ts';
 
 class PageNotReadyError extends Error {}
 
@@ -74,20 +75,6 @@ function requiredState<T>(primitive: unknown, getter: string): T {
 	return value;
 }
 
-function validWireLine(value: unknown): boolean {
-	const flat = (part: unknown): boolean => Array.isArray(part) && part.length >= 4 && part.length % 2 === 0
-		&& part.every(coordinate => typeof coordinate === 'number' && Number.isFinite(coordinate));
-	if (flat(value))
-		return true;
-	if (!Array.isArray(value) || value.length === 0)
-		return false;
-	if (value.every(part => Array.isArray(part) && part.length === 2
-		&& part.every(coordinate => typeof coordinate === 'number' && Number.isFinite(coordinate)))) {
-		return value.length >= 2;
-	}
-	return value.every(flat);
-}
-
 interface ConnectivityPrimitiveSnapshot {
 	scope: 'current_schematic_page';
 	complete: true;
@@ -113,7 +100,7 @@ async function readConnectivityPrimitives(pageUuid: string): Promise<Connectivit
 	const wires = rawWires.map((wire) => {
 		const primitiveId = requiredState<string>(wire, 'getState_PrimitiveId');
 		const line = requiredState<unknown>(wire, 'getState_Line');
-		if (typeof primitiveId !== 'string' || !primitiveId.trim() || !validWireLine(line))
+		if (typeof primitiveId !== 'string' || !primitiveId.trim() || readNativeWireSegments(line) === null)
 			throw new Error('原理图连接图元回读不完整：导线 ID 或几何缺失。');
 		return {
 			primitiveId,
@@ -186,17 +173,16 @@ function buildPinCoordinateKey(x: number, y: number): string {
 	return `${Math.round(x)}_${Math.round(y)}`;
 }
 
-// 从多段线坐标中提取相邻端点对，并接入位于线段中部的端口和引脚。
-// getState_Line 可以返回平铺坐标、连续点数组，或多段平铺坐标数组。
+// 从原生独立线段中提取端点，并接入位于真实线段中部的端口和引脚。
 function addWireEdgesToAdjacencyGraph(
 	lineData: unknown,
 	graph: Map<string, Set<string>>,
 	connectionPoints: Array<{ x: number; y: number }>,
 	wireVertices?: Array<{ x: number; y: number }>,
 ): void {
-	if (!Array.isArray(lineData) || lineData.length === 0) {
+	const segments = readNativeWireSegments(lineData);
+	if (segments === null)
 		return;
-	}
 
 	function addEdge(keyA: string, keyB: string): void {
 		if (keyA === keyB) {
@@ -216,43 +202,23 @@ function addWireEdgesToAdjacencyGraph(
 		setB.add(keyA);
 	}
 
-	function addFlatEdges(flatLine: unknown[]): void {
-		for (let i = 0; i + 3 < flatLine.length; i += 2) {
-			const x1 = Math.round(flatLine[i] as number);
-			const y1 = Math.round(flatLine[i + 1] as number);
-			const x2 = Math.round(flatLine[i + 2] as number);
-			const y2 = Math.round(flatLine[i + 3] as number);
-			const startKey = buildPinCoordinateKey(x1, y1);
-			wireVertices?.push({ x: x1, y: y1 }, { x: x2, y: y2 });
-			addEdge(startKey, buildPinCoordinateKey(x2, y2));
-			for (const point of connectionPoints) {
-				const { x, y } = point;
-				if ((x - x1) * (y2 - y1) !== (y - y1) * (x2 - x1)
-					|| x < Math.min(x1, x2) || x > Math.max(x1, x2)
-					|| y < Math.min(y1, y2) || y > Math.max(y1, y2)) {
-					continue;
-				}
-				addEdge(startKey, buildPinCoordinateKey(x, y));
+	for (const [startX, startY, endX, endY] of segments) {
+		const x1 = Math.round(startX);
+		const y1 = Math.round(startY);
+		const x2 = Math.round(endX);
+		const y2 = Math.round(endY);
+		const startKey = buildPinCoordinateKey(x1, y1);
+		wireVertices?.push({ x: x1, y: y1 }, { x: x2, y: y2 });
+		addEdge(startKey, buildPinCoordinateKey(x2, y2));
+		for (const point of connectionPoints) {
+			const { x, y } = point;
+			if ((x - x1) * (y2 - y1) !== (y - y1) * (x2 - x1)
+				|| x < Math.min(x1, x2) || x > Math.max(x1, x2)
+				|| y < Math.min(y1, y2) || y > Math.max(y1, y2)) {
+				continue;
 			}
+			addEdge(startKey, buildPinCoordinateKey(x, y));
 		}
-	}
-
-	if (Array.isArray(lineData[0])) {
-		const parts = lineData as unknown[][];
-		if (parts.every(part => Array.isArray(part) && part.length === 2)) {
-			// [[x1,y1], [x2,y2], ...] 是一条连续多段线。
-			addFlatEdges(parts.flat());
-		}
-		else {
-			// [[x1,y1,x2,y2], ...] 中每个子数组是一条独立线段或多段线。
-			for (const part of parts) {
-				if (Array.isArray(part))
-					addFlatEdges(part);
-			}
-		}
-	}
-	else {
-		addFlatEdges(lineData);
 	}
 }
 

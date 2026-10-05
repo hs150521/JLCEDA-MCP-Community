@@ -10,6 +10,11 @@ const { handleSchematicReadTask } = require('../src/mcp/schematic-read-handler.t
 const { getBridgeTaskHandler } = require('../src/runtime/bridge-handler-registry.ts');
 const { requiresHostRestartForResult, startTimedTask } = require('../src/runtime/task-timeout.ts');
 
+function nativeLineFromPaths(line) {
+	const paths = Array.isArray(line[0]) ? line : [line];
+	return paths.flatMap(path => Array.from({ length: Math.max(0, path.length / 2 - 1) }, (_, index) => path.slice(index * 2, index * 2 + 4))).flat();
+}
+
 function wire(id, net, line) {
 	return {
 		getState_PrimitiveId: () => id,
@@ -179,9 +184,9 @@ async function wireCoverageAndRawTests() {
 	assert.equal(lowercaseMerge.ok, true, 'lowercase request must pass contact checks against an existing uppercase SDK net');
 	assert.deepEqual(lowercaseMergeCalls, [lowercaseMergeArgs]);
 
-	const paths = [[999, 999], [0, 10, 20, 10], [20, 10, 20, 30]];
+	const paths = [[999, 999], [0, 10, 20, 10], [20, 10, 20, 30, 50, 30]];
 	const multiArgs = [paths, undefined, null, null, null];
-	const multiCalls = wireCreateFixture([], args => ({ after: [wire('multi-path', '', args[0].filter(path => path.length >= 4))], returned: wire('multi-path', '', args[0].filter(path => path.length >= 4)) }));
+	const multiCalls = wireCreateFixture([], args => ({ after: [wire('multi-path', '', nativeLineFromPaths(args[0]))], returned: wire('multi-path', '', nativeLineFromPaths(args[0])) }));
 	const multi = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args: multiArgs });
 	assert.equal(multi.ok, true);
 	assert.deepEqual(multiCalls, [multiArgs], 'official connected paths, ignored single-point path, undefined net and null styles survive');
@@ -228,7 +233,7 @@ async function main() {
 			async getAllPrimitiveId() { return wires.map(item => item.getState_PrimitiveId()); },
 			async create(line, net) {
 				wireCreates += 1;
-				const created = wire(`wire-${wireCreates}`, net ?? '', line);
+				const created = wire(`wire-${wireCreates}`, net ?? '', nativeLineFromPaths(line));
 				wires.push(created);
 				return created;
 			},
@@ -288,7 +293,7 @@ async function main() {
 	ports.pop();
 
 	// The input limit must not reject longer wires already present on the EDA page.
-	wires.push(wire('long-existing', '', Array.from({ length: 257 }, (_, index) => [10000 + index, 0]).flat()));
+	wires.push(wire('long-existing', '', Array.from({ length: 256 }, (_, index) => [10000 + index, 0, 10001 + index, 0]).flat()));
 	const previewBesideLongWire = await handleSchematicConnectivityTask({ action: 'wire_preview', line: [0, 100, 10, 100] });
 	assert.equal(previewBesideLongWire.canCreate, true);
 	wires.pop();
@@ -520,10 +525,10 @@ async function main() {
 	assert.deepEqual(portConflict.conflictingNetPortIds, ['isolated-b']);
 	assert.equal(wireCreates, 1);
 
-	wires.push(wire('wire-nested', 'NET_C', [[300, 0], [400, 0]]));
+	wires.push(wire('wire-nested', 'NET_C', [300, 0, 400, 0]));
 	const nestedConflict = await handleSchematicConnectivityTask({ action: 'wire_preview', line: [350, -20, 350, 0], net: 'NET_D' });
 	assert.deepEqual(nestedConflict.conflictingNetWireIds, ['wire-nested']);
-	wires.push(wire('wire-multipart', 'NET_E', [[500, 0, 600, 0], [600, 0, 600, 50]]));
+	wires.push(wire('wire-multipart', 'NET_E', [500, 0, 600, 0, 600, 0, 600, 50]));
 	const multipartConflict = await handleSchematicConnectivityTask({ action: 'wire_preview', line: [550, -20, 550, 0], net: 'NET_D' });
 	assert.deepEqual(multipartConflict.conflictingNetWireIds, ['wire-multipart']);
 	const inPlaceLine = [700, 0, 800, 0];

@@ -223,7 +223,7 @@ async function main() {
 		return [pin, { ...pin, getState_PrimitiveId: () => 'device-pin-2', getState_PinNumber: () => '2', getState_X: () => 2000, getState_Y: () => 2000, getState_NoConnected: () => undefined }];
 	};
 	globalThis.eda.sch_PrimitiveWire.getAll = async () => [{
-		getState_Line: () => [[0, 0, 100, 0], [100, 0, 100, 100]],
+		getState_Line: () => [0, 0, 100, 0, 100, 0, 100, 100],
 		getState_Net: () => '',
 	}];
 	const result = await handleSchematicReadTask({});

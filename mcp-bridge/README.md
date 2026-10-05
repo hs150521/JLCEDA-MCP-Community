@@ -1,5 +1,19 @@
 # MCP Bridge 社区版
 
+## 2.3.10 原生导线段读取
+
+EDA 3.2.181 / API 0.3.15 捕获的 3 个完整 Wire DTO 与 15 条源码记录（3 WIRE、12 LINE）证明：原生 `Wire.line` 每 4 个坐标是一条独立线段 `[x1,y1,x2,y2]`。读取时不能把相邻端点对之间连接成额外路径；连续创建/修改请求的格式、原始参数和返回 DTO 保持不变。
+
+连通预检、原理图语义读取、导线管理和器件匿名导线组检查共用该解析器，修复虚构斜线导致的异网误拒和读取时错误网络传播。net-only 修改不重写几何；连续 L 形请求与原生拆分、反向、重排后的线段按实际几何比较。
+
+旧运行 Bridge 2.3.9 的公开 MCP 只读复现已确认：3 个完整 DTO 与捕获数据逐字一致，源码 50690 字符；`[140,425,140,445]`、请求网络 `MCP237_B` 被错误判为接触 A 网。前后完整 `schematic_read` 严格相等，零写入。
+
+新 Bridge/Server 2.3.10 在同一 EDA 3.2.181 / API 0.3.15 上通过公开 MCP 只读验证：上述虚构斜线附近请求返回 `canCreate:true`、`touches:[]`；真实 A 线上的 `[100,425,120,425]` 请求 B 网，即使许可 A 线 ID，仍拒绝并报告 A 网冲突。3 个完整 DTO 与捕获数据逐字一致，完整连接快照与 2.3.9 基线相等，同轮前后完整 `schematic_read` 严格相等。
+
+50690 字符源码的全部实体记录与旧基线及本轮前后逐字相等；DOCHEAD 仅排除 `client`、`updateTime`、`version` 动态字段，固定 `uuid`、`docType`、`editVersion` 严格核对，不声称完整源码字符串相等。返回自建 PCB 后完整读取与恢复基线相等，心跳后客户端 context/ready 复核通过；本轮没有图元或源码写入、保存、关闭或重启。
+
+捕获 fixture、相关定向回归、typecheck、目标 lint 及两轮独立审查已通过；Bridge 完整 `npm run build`、`npm run lint` 和 Server `npm ci`、`npm test`、`npm run lint`、`node verify-multi-client.mjs` 均通过。#22 原 TPS552892 夹具缺失，#37 原 62 网络/0 毫秒全失败仍开放，EDA v4 未实测，本轮不据此关闭这些 Issue。实际发布状态以 GitHub Release/关联 PR 为准。详见 [2.3.10 发布说明](../docs/releases/v2.3.10.md)。
+
 ## 2.3.9 自动布线执行前保护
 
 `eda.pcb_Document.autoRouting` 无参数、全网与选网调用均绑定 runtime 实际执行 PCB。内部 `expectedPcbUuid` 覆盖调用者提供的目标；handler 核对当前编辑器文档和 PCB，并在选网观察读取后再次读取两者。最后身份 await 后紧邻同步连接、活动角色、租约 guard，然后才调用原生方法；原生参数和 receiver 保持不变。
@@ -246,16 +260,16 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 1. EDA Bridge
 
-以下文件名对应 2.3.9；是否可下载以发布页实际提供的包为准。
+以下文件名对应 2.3.10；是否可下载以发布页实际提供的包为准。
 
-从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.9.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
+从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.10.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
 
 ### 2. 原生 MCP Server
 
-从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.9.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.10.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.3.9.tgz
+npm install --global .\jlceda-mcp-server-2.3.10.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。

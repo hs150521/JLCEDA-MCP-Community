@@ -35,6 +35,8 @@ function fixture(point = false) {
 			async modify(id, property) {
 				nativeCalls += 1;
 				Object.assign(wires.get(id), property);
+				if (property.line)
+					wires.get(id).line = Array.from({ length: property.line.length / 2 - 1 }, (_, index) => property.line.slice(index * 2, index * 2 + 4)).flat();
 			},
 		},
 	};
@@ -42,7 +44,7 @@ function fixture(point = false) {
 }
 
 const requested = [60, 10, 40, 10, 40, 90];
-const triangle = [40, 10, 60, 10, 40, 90, 40, 10];
+const triangle = [40, 10, 60, 10, 60, 10, 40, 90, 40, 90, 40, 10];
 
 async function pointConversion() {
 	const test = fixture(true);
@@ -100,7 +102,7 @@ async function validModifications() {
 	const test = fixture();
 	const ordinaryL = await handleSchematicWireManageTask({ action: 'modify', primitiveId: 'target', property: { line: requested } });
 	assert.equal(ordinaryL.verified, true, 'ordinary nonzero wires may still be modified into L paths');
-	assert.deepEqual(ordinaryL.after.line, requested);
+	assert.deepEqual(ordinaryL.after.line, [60, 10, 40, 10, 40, 10, 40, 90], 'native readback preserves independent segments, while the requested L path stays continuous');
 	assert.equal(test.calls(), 1);
 	const pointTest = fixture(true);
 	const pointStyle = await handleSchematicWireManageTask({ action: 'modify', primitiveId: 'target', property: { color: '#123456' } });
