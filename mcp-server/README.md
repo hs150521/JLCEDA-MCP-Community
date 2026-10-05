@@ -2,13 +2,15 @@
 
 ## 2.3.7 原理图导线与网络标签
 
-本轮 Server 全量 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 已通过；匹配 Bridge 的完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 也已通过。237 实机验证仍待核对，不能据此宣称 #22/#26 的原宿主问题完全解决。
+本轮 Server 全量 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 已通过；匹配 Bridge 的完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 也已通过。匹配 2.3.7 的网标预检和导线新功能已实测通过；原 TPS552892 布局仍缺 fixture，不据此宣称匿名网络合并的宿主根因已解决。
 
 `api_invoke eda.sch_PrimitiveWire.create` 接入 `schematic_connectivity_action wire_create` 的接触预检和逐段覆盖回读，保留官方 `line/net/color/lineWidth/lineType` 五参数及 `number[]`/`number[][]` 路径。仅该 API 可在 payload 顶层选填 `allowedWireIds`，用于明确允许接触的旧导线；其他 API 带此字段会拒绝。返回 `confirmedPrimitiveIds` 和兼容的 `confirmedPrimitiveId`，不会仅凭原生返回旧 ID 就确认整个请求路径已创建。
 
 raw 导线创建的未知提交归为 `requiredReadback:"schematic_connectivity_primitives"`，与受控创建共用恢复流程：指定 `/bridge/jlceda/schematic/read` 和 `readbackPayload:{"includeConnectivityPrimitives":true}`，核对同一执行图页的完整连接图元及语义网表；仅查 `/context` 不能解除隔离。诊断要求宿主重启时，先重启原 EDA，再使用恢复会话后的新客户端回读。图元覆盖核验不能证明所有匿名网络都没有被宿主合并，#22 原场景仍待实机核对。
 
-raw `eda.sch_PrimitiveAttribute.createNetLabel` 在已知 EDA 3.x 时返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不调用原生方法，也不因该拒绝进入未知提交隔离。API 索引标明从 EDA v4 起提供；4.x 或未知版本仍沿用原生调用，电源/地 NetFlag 不受影响。#26 的宿主全部客户端失联及 EDA v4 尚需实机验证。详见 [2.3.7 发布说明](../docs/releases/v2.3.7.md)。
+自建原理图实测拒绝未许可旧线接触和跨命名网络；授权后的五参数、多路径、小写网络名创建合并旧 ID，实际路径完整覆盖，匿名线附近短延伸也通过。完整原生 JLCEDA 网表、3 个普通器件 DTO、无关命名/匿名导线及端口/标识/标签均保持基线。该烟测不能代替缺失的原 TPS552892 布局，#22 不据此自动关闭；未知提交恢复仍由本地中继回归验证。
+
+raw `eda.sch_PrimitiveAttribute.createNetLabel` 在已知 EDA 3.x 时返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不调用原生方法，也不因该拒绝进入未知提交隔离。API 索引标明从 EDA v4 起提供；4.x 或未知版本仍沿用原生调用，电源/地 NetFlag 不受影响。EDA 3.2.181 与匹配 2.3.7 实测中，raw/semantic 预检后完整连接读取不变，9 个混合版本客户端 ready、心跳正常，2.3.6 待命客户端完整读取也不变。本轮修复 #26 已知 3.x 触发路径，不宣称宿主内部全部失联已根治，EDA v4 未实测。详见 [2.3.7 发布说明](../docs/releases/v2.3.7.md)。
 
 ## 2.3.6 独立封装编辑
 

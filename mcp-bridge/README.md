@@ -2,13 +2,15 @@
 
 ## 2.3.7 原理图导线与网络标签
 
-本轮 Bridge 完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 已通过；匹配 Server 的 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 也已通过。237 实机验证仍待核对，不能据此宣称 #22/#26 的原宿主问题完全解决。
+本轮 Bridge 完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 已通过；匹配 Server 的 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 也已通过。匹配 2.3.7 的网标预检和导线新功能已实测通过；原 TPS552892 布局仍缺 fixture，不据此宣称匿名网络合并的宿主根因已解决。
 
 raw `api_invoke eda.sch_PrimitiveWire.create` 与受控 `wire_create` 共用当前图页接触预检和写后逐段覆盖核对。保留官方 `line/net/color/lineWidth/lineType` 五参数，以及单路径 `number[]`、多路径 `number[][]`。仅该 raw API 可在 payload 顶层选填 `allowedWireIds`；默认不允许接触旧导线，不同已命名网络混接也会在原生调用前拒绝。
 
 创建回读要求实际导线完整覆盖全部请求线段，且覆盖路径上存在本次新增或改变的有效导线，兼容旧 ID 延伸及正常拆分/合并，返回 `confirmedPrimitiveIds` 和兼容的 `confirmedPrimitiveId`。未完整覆盖、未许可的旧导线变化或回读失败保留 `commitUnknown:true`，须以 `schematic_read includeConnectivityPrimitives:true` 完整回读同页连接图元和语义网表。诊断要求宿主重启时，先重启原 EDA；仅查上下文不能解除隔离。此核验不证明宿主已避免所有匿名网络合并，#22 原场景仍待实机核对。
 
-raw `eda.sch_PrimitiveAttribute.createNetLabel` 复用普通网络标签的版本预检：已知 EDA 3.x 返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不启动原生写入或未知提交隔离；API 索引明确从 EDA v4 起提供。4.x 与版本未知时保持原生调用，电源/地 NetFlag 不受影响。该预检不能证明 #26 的宿主全部客户端失联已解决，EDA v4 也未实测。详见 [2.3.7 发布说明](../docs/releases/v2.3.7.md)。
+自建原理图实测中，未许可旧线接触和跨命名网络均被拒绝；授权后五参数、多路径、小写请求名创建合并旧 ID 并完整覆盖两段路径，匿名线附近短延伸也完整覆盖。完整原生 JLCEDA 网表、3 个普通器件 DTO、无关命名/匿名导线及端口/标识/标签均保持基线。#22 原 TPS552892 布局与宿主根因仍缺 fixture，不据此自动关闭。
+
+raw `eda.sch_PrimitiveAttribute.createNetLabel` 复用普通网络标签的版本预检：已知 EDA 3.x 返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不启动原生写入或未知提交隔离；API 索引明确从 EDA v4 起提供。4.x 与版本未知时保持原生调用，电源/地 NetFlag 不受影响。EDA 3.2.181 与匹配 2.3.7 实测中，raw/semantic 普通标签创建均被版本预检阻止，前后完整连接读取不变；9 个混合版本客户端 ready、心跳正常，2.3.6 待命客户端完整读取也不变。本轮修复 #26 已知 3.x 触发路径，不泛称宿主内部全部失联已根治，EDA v4 未实测。详见 [2.3.7 发布说明](../docs/releases/v2.3.7.md)。
 
 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
 
