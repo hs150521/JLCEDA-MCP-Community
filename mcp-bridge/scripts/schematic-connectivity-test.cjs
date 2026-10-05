@@ -4,6 +4,7 @@ const process = require('node:process');
 process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ module: 'CommonJS', moduleResolution: 'node' });
 require('ts-node/register/transpile-only');
 
+const { handleApiInvokeTask } = require('../src/mcp/invoke-handler.ts');
 const { handleSchematicConnectivityTask } = require('../src/mcp/schematic-connectivity-handler.ts');
 const { handleSchematicReadTask } = require('../src/mcp/schematic-read-handler.ts');
 const { getBridgeTaskHandler } = require('../src/runtime/bridge-handler-registry.ts');
@@ -59,7 +60,153 @@ function attribute(id, parentId, key, value, x, y) {
 	};
 }
 
+function wireCreateFixture(before, create) {
+	let wires = before;
+	const calls = [];
+	globalThis.eda = {
+		dmt_Schematic: { async getCurrentSchematicPageInfo() { return { uuid: 'wire-page' }; } },
+		dmt_SelectControl: { async getCurrentDocumentInfo() { return { documentType: 1, uuid: 'wire-page' }; } },
+		sch_PrimitiveComponent: { async getAll() { return []; } },
+		sch_PrimitiveAttribute: { async getAll() { return []; } },
+		sch_PrimitiveWire: {
+			async getAll() { return wires; },
+			async create(...args) {
+				assert.equal(this, globalThis.eda.sch_PrimitiveWire);
+				calls.push(args);
+				const result = create(args);
+				wires = result.after;
+				if (result.error)
+					throw new Error(result.error);
+				return result.returned;
+			},
+		},
+	};
+	return calls;
+}
+
+async function wireCoverageAndRawTests() {
+	for (const timeoutMs of [1000, 4999]) {
+		const args = [[0, 0, 100, 0], 'NET_A', '#FF0000', 6, 1];
+		const calls = wireCreateFixture([], (nativeArgs) => {
+			const created = wire('short-raw-timeout', 'NET_A', nativeArgs[0]);
+			return { after: [created], returned: created };
+		});
+		const created = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args, timeoutMs });
+		assert.equal(created.ok, true, 'raw Wire.create accepts its API timeout policy and retains time for actual readback');
+		assert.equal(created.committed, true);
+		assert.equal(created.commitUnknown, false);
+		assert.equal(created.nativeCallSettled, true);
+		assert.deepEqual(calls, [args]);
+	}
+	const controlledCalls = wireCreateFixture([], (args) => {
+		const created = wire('standard-controlled-timeout', 'NET_A', args[0]);
+		return { after: [created], returned: created };
+	});
+	await assert.rejects(handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', timeoutMs: 1000 }), /timeoutMs must be an integer between 5000 and 120000/);
+	assert.equal(controlledCalls.length, 0, 'controlled connectivity still rejects a 1s timeout before native create');
+	const controlled = await handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', timeoutMs: 5000 });
+	assert.equal(controlled.ok, true);
+	assert.equal(controlledCalls.length, 1);
+
+	wireCreateFixture([wire('existing-a', 'NET_A', [0, 0, 100, 0])], () => {
+		const partial = wire('existing-a', 'NET_A', [0, 0, 120, 0]);
+		return { after: [partial], returned: partial };
+	});
+	const partial = await handleSchematicConnectivityTask({ action: 'wire_create', line: [100, 0, 150, 0], net: 'NET_A', allowedWireIds: ['existing-a'], timeoutMs: 5000 });
+	assert.equal(partial.ok, false, 'changing the returned old ID does not prove the entire requested extension');
+	assert.equal(partial.committed, false);
+	assert.equal(partial.commitUnknown, true);
+	assert.equal(partial.nativeCallSettled, true);
+	assert.deepEqual(partial.changedWireIds, ['existing-a']);
+
+	wireCreateFixture([], () => ({ after: [wire('split-1', 'NET_A', [0, 0, 40, 0]), wire('split-2', 'NET_A', [100, 0, 40, 0])], returned: wire('removed-native-id', 'NET_A', [0, 0, 100, 0]) }));
+	const split = await handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A' });
+	assert.equal(split.ok, true, 'native split IDs collectively cover the requested segment');
+	assert.deepEqual(split.confirmedPrimitiveIds, ['split-1', 'split-2']);
+	assert.equal(split.confirmedPrimitiveId, 'split-1');
+
+	wireCreateFixture([wire('covered', 'NET_A', [0, 0, 100, 0])], () => ({ after: [wire('covered', 'NET_A', [0, 0, 100, 0]), wire('wrong', 'NET_A', [300, 0, 400, 0])], returned: wire('wrong', 'NET_A', [300, 0, 400, 0]) }));
+	const unchangedCoverage = await handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', allowedWireIds: ['covered'], timeoutMs: 5000 });
+	assert.equal(unchangedCoverage.committed, false, 'old unchanged coverage cannot verify an unrelated native return');
+	assert.equal(unchangedCoverage.commitUnknown, true);
+
+	wireCreateFixture([wire('old-half', 'NET_A', [0, 0, 50, 0])], () => ({ after: [wire('old-half', 'NET_A', [0, 0, 50, 0]), wire('new-half', 'NET_A', [50, 0, 100, 0])], returned: wire('new-half', 'NET_A', [50, 0, 100, 0]) }));
+	const combined = await handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', allowedWireIds: ['old-half'] });
+	assert.equal(combined.ok, true, 'unchanged approved old geometry can contribute to complete coverage with a real new segment');
+	assert.deepEqual(combined.confirmedPrimitiveIds, ['old-half', 'new-half']);
+	assert.deepEqual(combined.changedWireIds, ['new-half']);
+
+	wireCreateFixture([], () => ({ after: [wire('wrong-net', 'NET_B', [0, 0, 100, 0])], returned: wire('wrong-net', 'NET_B', [0, 0, 100, 0]) }));
+	const wrongNet = await handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 100, 0], net: 'NET_A', timeoutMs: 5000 });
+	assert.equal(wrongNet.committed, false, 'complete geometry on a different actual named net cannot confirm the request');
+	assert.equal(wrongNet.commitUnknown, true);
+
+	wireCreateFixture([], () => ({ after: [wire('partial-path', 'NET_A', [0, 10, 20, 10])], returned: wire('partial-path', 'NET_A', [0, 10, 20, 10]) }));
+	const missingSecondPath = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args: [[[0, 10, 20, 10], [20, 10, 20, 30]], 'NET_A'], timeoutMs: 5000 });
+	assert.equal(missingSecondPath.committed, false, 'every native path must be covered, including the second branch');
+	assert.equal(missingSecondPath.commitUnknown, true);
+
+	const raw = { apiFullName: 'eda.sch_PrimitiveWire.create', args: [[100, 0, 150, 0], 'NET_A', '#FF0000', 6, 1] };
+	const rawCalls = wireCreateFixture([wire('existing-a', 'NET_A', [0, 0, 100, 0])], () => {
+		const merged = wire('existing-a', 'NET_A', [0, 0, 150, 0]);
+		return { after: [merged], returned: merged };
+	});
+	const blocked = await handleApiInvokeTask(raw);
+	assert.equal(blocked.canCreate, false);
+	assert.deepEqual(blocked.unapprovedWireIds, ['existing-a']);
+	assert.equal(rawCalls.length, 0, 'raw create must use the controlled contact preflight');
+	const merged = await handleApiInvokeTask({ ...raw, allowedWireIds: ['existing-a'] });
+	assert.equal(merged.ok, true);
+	assert.equal(merged.returnedExistingWire, true);
+	assert.deepEqual(rawCalls, [raw.args], 'all five native arguments and the API receiver are preserved');
+	assert.equal(Object.hasOwn(merged, 'result'), true, 'raw API retains its result field');
+
+	const lowercaseArgs = [[0, 100, 100, 100], 'sig', '#AA0000', 2, 0];
+	const lowercaseCalls = wireCreateFixture([], (args) => {
+		const created = wire('uppercase-sdk', args[1].toUpperCase(), args[0]);
+		return { after: [created], returned: created };
+	});
+	const lowercase = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args: lowercaseArgs });
+	assert.equal(lowercase.ok, true, 'native uppercase network normalization must not become unknown');
+	assert.equal(lowercase.net, 'SIG');
+	assert.deepEqual(lowercaseCalls, [lowercaseArgs], 'lowercase network and every native style parameter remain unchanged');
+	const lowercaseMergeArgs = [[100, 100, 150, 100], 'sig'];
+	const lowercaseMergeCalls = wireCreateFixture([wire('existing-sig', 'SIG', [0, 100, 100, 100])], (args) => {
+		const extended = wire('existing-sig', args[1].toUpperCase(), [0, 100, 150, 100]);
+		return { after: [extended], returned: extended };
+	});
+	const lowercaseMerge = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args: lowercaseMergeArgs, allowedWireIds: ['existing-sig'] });
+	assert.equal(lowercaseMerge.ok, true, 'lowercase request must pass contact checks against an existing uppercase SDK net');
+	assert.deepEqual(lowercaseMergeCalls, [lowercaseMergeArgs]);
+
+	const paths = [[999, 999], [0, 10, 20, 10], [20, 10, 20, 30]];
+	const multiArgs = [paths, undefined, null, null, null];
+	const multiCalls = wireCreateFixture([], args => ({ after: [wire('multi-path', '', args[0].filter(path => path.length >= 4))], returned: wire('multi-path', '', args[0].filter(path => path.length >= 4)) }));
+	const multi = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args: multiArgs });
+	assert.equal(multi.ok, true);
+	assert.deepEqual(multiCalls, [multiArgs], 'official connected paths, ignored single-point path, undefined net and null styles survive');
+	assert.deepEqual(paths, multiArgs[0], 'input arguments are not mutated');
+	await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.getAll', args: [], allowedWireIds: [] }), /allowedWireIds.*Wire.create/);
+
+	let guardCalls = 0;
+	const noWriteCalls = wireCreateFixture([], args => ({ after: [wire('guarded', '', args[0])], returned: wire('guarded', '', args[0]) }));
+	await assert.rejects(handleSchematicConnectivityTask({ action: 'wire_create', line: [0, 0, 10, 0] }, undefined, () => {
+		guardCalls++;
+		throw new Error('lease expired before native create');
+	}), /lease expired/);
+	assert.equal(guardCalls, 1);
+	assert.equal(noWriteCalls.length, 0);
+
+	const timeoutCalls = wireCreateFixture([], args => ({ after: [wire('late', '', args[0])], error: 'WebSocket is not open' }));
+	const timeout = await handleApiInvokeTask({ apiFullName: 'eda.sch_PrimitiveWire.create', args: [[0, 0, 10, 0]] });
+	assert.equal(timeoutCalls.length, 1);
+	assert.equal(timeout.commitUnknown, true);
+	assert.equal(timeout.nativeCallSettled, false);
+	assert.equal(requiresHostRestartForResult('/bridge/jlceda/api/invoke', { apiFullName: 'eda.sch_PrimitiveWire.create' }, timeout), true);
+}
+
 async function main() {
+	await wireCoverageAndRawTests();
 	let pageUuid = 'page-1';
 	let editorPageOverride = null;
 	const wires = [wire('wire-a', 'NET_A', [0, 0, 100, 0])];

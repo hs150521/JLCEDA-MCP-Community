@@ -1706,13 +1706,14 @@ try {
     }
   }
 
-  for (const [action, nativeCallSettled] of [['wire_create', true], ['netport_create', true], ['netport_move', true], ['wire_create', false], ['netlabel_place', false], ['modify', true], ['delete', false], ['pin_modify', true], ['pin_modify', false], ['ordinary_pin_modify', true], ['ordinary_pin_modify', false], ['pin_modify_timeout', false], ['ordinary_pin_modify_timeout', false], ['unclassified_pin_modify_timeout', false], ['late_pin_modify_timeout', false]]) {
+  for (const [action, nativeCallSettled] of [['wire_create', true], ['raw_wire_create', true], ['raw_wire_create', false], ['netport_create', true], ['netport_move', true], ['wire_create', false], ['netlabel_place', false], ['modify', true], ['delete', false], ['pin_modify', true], ['pin_modify', false], ['ordinary_pin_modify', true], ['ordinary_pin_modify', false], ['pin_modify_timeout', false], ['ordinary_pin_modify_timeout', false], ['unclassified_pin_modify_timeout', false], ['late_pin_modify_timeout', false]]) {
     const pinModify = action.includes('pin_modify');
+    const rawWireCreate = action === 'raw_wire_create';
     const componentPin = pinModify && !action.startsWith('ordinary_') && !action.startsWith('unclassified_');
     const nativeTimeout = action.endsWith('_timeout');
     const connectivityRecoveryPort = await reservePort();
     const connectivityRecoveryServer = new EdaBridgeServer(connectivityRecoveryPort);
-    const recoveryCaller = pinModify ? new EdaBridgeServer(connectivityRecoveryPort) : connectivityRecoveryServer;
+    const recoveryCaller = pinModify || rawWireCreate ? new EdaBridgeServer(connectivityRecoveryPort) : connectivityRecoveryServer;
     let oldClient;
     let freshClient;
     try {
@@ -1742,13 +1743,15 @@ try {
         if (!nativeTimeout) oldClient.socket.send(JSON.stringify({
           type: 'bridge/result', clientId: `connectivity-${action}-old`,
           requestId: message.requestId, leaseTerm: message.leaseTerm,
-          result: { ok: false, action, commitUnknown: true, nativeCallSettled },
+          result: { ok: false, action: rawWireCreate ? 'wire_create' : action, commitUnknown: true, nativeCallSettled },
         }));
       });
-      const writePath = pinModify ? '/bridge/jlceda/api/invoke' : action === 'netlabel_place' ? '/bridge/jlceda/netlabel/place'
+      const writePath = pinModify || rawWireCreate ? '/bridge/jlceda/api/invoke' : action === 'netlabel_place' ? '/bridge/jlceda/netlabel/place'
         : action === 'modify' || action === 'delete' ? '/bridge/jlceda/schematic/wire-manage'
         : '/bridge/jlceda/schematic/connectivity';
-      const writePayload = pinModify ? { apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] } : action === 'netlabel_place'
+      const writePayload = pinModify ? { apiFullName: 'eda.sch_PrimitivePin.modify', args: ['pin-16', { noConnected: false }] }
+        : rawWireCreate ? { apiFullName: 'eda.sch_PrimitiveWire.create', args: [[0, 0, 10, 0], 'SIG', '#00AA00', 2, 0] }
+        : action === 'netlabel_place'
         ? { placements: [{ componentId: 'component-1', pinIdentifier: '1', netName: 'SIG' }] }
         : action === 'modify' ? { action, primitiveId: 'wire-1', property: { color: '#00AA00' } }
         : action === 'delete' ? { action, primitiveId: 'wire-1' }

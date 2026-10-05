@@ -1,5 +1,6 @@
+import type { SchematicPinAdapter } from '../bridge/protocol.ts';
 import { resolveContractTimeoutMs } from '../bridge/bridge-contract.ts';
-import { getEdaRuntime, getSyncState, isPlainObjectRecord } from '../utils.ts';
+import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
 import { handleSchematicReadTask } from './schematic-read-handler.ts';
 
 interface Point { x: number; y: number }
@@ -92,9 +93,9 @@ async function currentSchematicPageUuid(eda: Record<string, unknown>): Promise<s
 	return page.uuid.trim();
 }
 
-async function assertSameSchematicPage(eda: Record<string, unknown>, expected: string): Promise<void> {
+async function assertSameSchematicPage(eda: Record<string, unknown>, expected: string, operation = 'NetPort move'): Promise<void> {
 	if (await currentSchematicPageUuid(eda) !== expected)
-		throw new Error('The active schematic page changed during the NetPort move.');
+		throw new Error(`The active schematic page changed during the ${operation}.`);
 }
 
 function sameCoordinate(first: number, second: number): boolean {
@@ -103,16 +104,6 @@ function sameCoordinate(first: number, second: number): boolean {
 
 function samePoint(first: Point, second: Point): boolean {
 	return sameCoordinate(first.x, second.x) && sameCoordinate(first.y, second.y);
-}
-
-function sameWirePath(first: Segment[], second: Segment[]): boolean {
-	if (first.length !== second.length)
-		return false;
-	return first.every((segment, index) => samePoint(segment.start, second[index].start) && samePoint(segment.end, second[index].end))
-		|| first.every((segment, index) => {
-			const reversed = second[second.length - index - 1];
-			return samePoint(segment.start, reversed.end) && samePoint(segment.end, reversed.start);
-		});
 }
 
 function segmentsFromFlatLine(line: unknown): Segment[] {
@@ -368,35 +359,108 @@ function effectiveWireNets(wires: WireState[], components: ComponentState[], lab
 	return new Map(wires.map((wire, index) => [wire.id, namesByRoot.get(root(index)) ?? new Set<string>()]));
 }
 
-async function handleWireAction(action: 'wire_preview' | 'wire_create', payload: Record<string, unknown>, eda: Record<string, unknown>): Promise<unknown> {
-	const readbackDeadline = action === 'wire_create'
-		? Date.now() + resolveContractTimeoutMs('/bridge/jlceda/schematic/connectivity', payload) - WIRE_RESULT_RESERVE_MS
-		: 0;
-	const line = payload.line;
-	if (Array.isArray(line) && line.length > MAX_WIRE_LINE_COORDINATES)
-		throw new RangeError(`line must contain at most ${MAX_WIRE_LINE_COORDINATES} coordinates.`);
-	const inputSegments = segmentsFromFlatLine(line);
-	if (inputSegments.length === 0 || !Array.isArray(line) || inputSegments.length !== line.length / 2 - 1)
-		throw new TypeError('line must contain at least two distinct [x,y] points as a flat numeric array.');
-	const net = payload.net === undefined ? undefined : requiredString(payload.net, 'net');
-	const allowed = allowedWireIds(payload.allowedWireIds);
-	const normalizedLine = [...line] as number[];
-	for (let index = 0; index < inputSegments.length; index++) {
-		const start = { x: normalizedLine[index * 2], y: normalizedLine[index * 2 + 1] };
-		const endIndex = (index + 1) * 2;
-		const end = { x: normalizedLine[endIndex], y: normalizedLine[endIndex + 1] };
-		const sameX = sameCoordinate(start.x, end.x);
-		const sameY = sameCoordinate(start.y, end.y);
-		if (sameX && sameY)
-			throw new TypeError(`line segment ${index} is too short to create a wire.`);
-		if (!sameX && !sameY)
-			return { ok: false, action, canCreate: false, reason: 'non_orthogonal_wire', requiresBend: true, segmentIndex: index, message: 'Add a bend point: SCH_PrimitiveWire.create only accepts horizontal and vertical wire segments.' };
-		if (sameX)
-			normalizedLine[endIndex] = start.x;
-		else
-			normalizedLine[endIndex + 1] = start.y;
+/** 返回实际共线段在请求段上的有效覆盖区间。 */
+function requestedSegmentInterval(actual: Segment, requested: Segment): { start: number; end: number } | undefined {
+	const horizontal = sameCoordinate(requested.start.y, requested.end.y);
+	const axis = horizontal ? 'x' : 'y';
+	const other = horizontal ? 'y' : 'x';
+	if (!sameCoordinate(actual.start[other], requested.start[other]) || !sameCoordinate(actual.end[other], requested.start[other]))
+		return undefined;
+	const low = Math.min(requested.start[axis], requested.end[axis]);
+	const high = Math.max(requested.start[axis], requested.end[axis]);
+	const start = Math.max(low, Math.min(actual.start[axis], actual.end[axis]));
+	const end = Math.min(high, Math.max(actual.start[axis], actual.end[axis]));
+	return end - start > COORDINATE_EPSILON ? { start, end } : undefined;
+}
+
+function overlapsRequestedPath(wire: WireState, requested: Segment[]): boolean {
+	return wire.segments.some(actual => requested.some(segment => requestedSegmentInterval(actual, segment) !== undefined));
+}
+
+function coveringWireIds(wires: WireState[], requested: Segment[]): string[] | undefined {
+	const result = new Set<string>();
+	for (const segment of requested) {
+		const horizontal = sameCoordinate(segment.start.y, segment.end.y);
+		const low = Math.min(horizontal ? segment.start.x : segment.start.y, horizontal ? segment.end.x : segment.end.y);
+		const high = Math.max(horizontal ? segment.start.x : segment.start.y, horizontal ? segment.end.x : segment.end.y);
+		const intervals = wires.flatMap(wire => wire.segments.flatMap((actual) => {
+			const interval = requestedSegmentInterval(actual, segment);
+			return interval ? [{ ...interval, id: wire.id }] : [];
+		})).sort((a, b) => a.start - b.start);
+		let covered = low;
+		for (const interval of intervals) {
+			if (interval.start > covered + COORDINATE_EPSILON)
+				break;
+			if (interval.end > covered) {
+				covered = interval.end;
+				result.add(interval.id);
+			}
+			if (covered >= high - COORDINATE_EPSILON)
+				break;
+		}
+		if (covered < high - COORDINATE_EPSILON)
+			return undefined;
 	}
-	const segments = segmentsFromFlatLine(normalizedLine);
+	return [...result];
+}
+
+async function handleWireAction(
+	action: 'wire_preview' | 'wire_create',
+	payload: Record<string, unknown>,
+	eda: Record<string, unknown>,
+	beforeNativeMutation?: () => void,
+	nativeArgs?: unknown[],
+): Promise<Record<string, unknown>> {
+	const timeoutMs = action === 'wire_create'
+		? resolveContractTimeoutMs(nativeArgs !== undefined ? '/bridge/jlceda/api/invoke' : '/bridge/jlceda/schematic/connectivity', payload)
+		: 0;
+	// raw API 允许 1 秒期限，结果余量不能占满整个任务；受控工具的 5 秒下限保持原余量。
+	const readbackDeadline = action === 'wire_create' ? Date.now() + timeoutMs - Math.min(WIRE_RESULT_RESERVE_MS, timeoutMs / 5) : 0;
+	const line = payload.line;
+	const multiPath = nativeArgs !== undefined && Array.isArray(line) && Array.isArray(line[0]);
+	const paths: unknown[] = multiPath ? line : [line];
+	if (paths.reduce<number>((count, part) => count + (Array.isArray(part) ? part.length : 0), 0) > MAX_WIRE_LINE_COORDINATES)
+		throw new RangeError(`line must contain at most ${MAX_WIRE_LINE_COORDINATES} coordinates.`);
+	const normalizedPaths: number[][] = [];
+	let segmentIndex = 0;
+	for (const path of paths) {
+		if (!Array.isArray(path) || path.length < (multiPath ? 2 : 4) || path.length % 2 !== 0
+			|| path.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+			throw new TypeError('line must contain at least two distinct [x,y] points as a flat numeric array or connected native paths.');
+		}
+		const normalized = [...path] as number[];
+		for (let index = 0; index + 3 < normalized.length; index += 2) {
+			const start = { x: normalized[index], y: normalized[index + 1] };
+			const end = { x: normalized[index + 2], y: normalized[index + 3] };
+			const sameX = sameCoordinate(start.x, end.x);
+			const sameY = sameCoordinate(start.y, end.y);
+			if (sameX && sameY) {
+				if (nativeArgs)
+					continue;
+				throw new TypeError(`line segment ${segmentIndex} is too short to create a wire.`);
+			}
+			if (!sameX && !sameY)
+				return { ok: false, action, canCreate: false, reason: 'non_orthogonal_wire', requiresBend: true, segmentIndex, message: 'Add a bend point: SCH_PrimitiveWire.create only accepts horizontal and vertical wire segments.' };
+			if (sameX)
+				normalized[index + 2] = start.x;
+			else
+				normalized[index + 3] = start.y;
+			segmentIndex++;
+		}
+		normalizedPaths.push(normalized);
+	}
+	const segments = normalizedPaths.flatMap(segmentsFromFlatLine);
+	if (segments.length === 0)
+		throw new TypeError('line must contain at least two distinct [x,y] points.');
+	const normalizedLine = multiPath ? normalizedPaths : normalizedPaths[0];
+	// 官方 Wire DTO 的 setState_Net 会大写网络名；raw 原生参数仍原样透传。
+	const net = (nativeArgs
+		? (payload.net === undefined || payload.net === null || payload.net === '' ? undefined : requiredString(payload.net, 'net'))
+		: (payload.net === undefined ? undefined : requiredString(payload.net, 'net')))?.toUpperCase();
+	const allowed = allowedWireIds(payload.allowedWireIds);
+	const pageUuid = action === 'wire_create' ? await currentSchematicPageUuid(eda) : undefined;
+	if (pageUuid && typeof payload.expectedSchematicWirePageUuid === 'string' && pageUuid !== payload.expectedSchematicWirePageUuid)
+		throw new Error('The active schematic page changed before wire creation; no native write was started.');
 	const api = wireApi(eda);
 	const before = await readWires(api);
 	const components = await readComponents(componentApi(eda));
@@ -419,21 +483,25 @@ async function handleWireAction(action: 'wire_preview' | 'wire_create', payload:
 		return { ok: canCreate, action, canCreate, touches, portTouches, labelTouches, conflictingNetWireIds: conflictingNets.map(wire => wire.id), conflictingNetPortIds: conflictingPorts.map(component => component.id), conflictingNetLabelIds: conflictingLabels.map(label => label.id), mixedNamedNets: touchedNetNames.size > 1, unapprovedWireIds: unapproved.map(wire => wire.id) };
 	if (typeof api.create !== 'function')
 		throw new TypeError('EDA sch_PrimitiveWire.create API is unavailable.');
+	const createArgs = nativeArgs ? [...nativeArgs] : [normalizedLine, net];
+	createArgs[0] = normalizedLine;
+	await assertSameSchematicPage(eda, pageUuid!, 'wire creation');
+	beforeNativeMutation?.();
 	let result: unknown;
 	try {
-		result = await (api.create as (line: number[], net?: string) => Promise<unknown>).call(api, normalizedLine, net);
+		result = await (api.create as (...args: unknown[]) => Promise<unknown>).apply(api, createArgs);
 	}
 	catch (error: unknown) {
-		return unknownNativeWrite('wire_create', error, { net: net ?? null });
+		return unknownNativeWrite('wire_create', error, { net: net ?? null, pageUuid });
 	}
 	try {
 		const returnedPrimitiveId = String(getSyncState(result, 'getState_PrimitiveId', ''));
 		let changedWireIds: string[] = [];
 		let removedWireIds: string[] = [];
-		let matchingWireIds: string[] = [];
-		// EDA can resolve create before getAll exposes the returned wire. A different
-		// new wire is not evidence that this native create has committed. If create
-		// returns no ID, only a unique changed wire with the requested path can confirm it.
+		let confirmedPrimitiveIds: string[] = [];
+		const expectedNet = net ?? [...touchedNetNames][0];
+		// 创建 ACK 可以早于图元可见。确认必须完整覆盖请求路径，且含本次有效变化；
+		// 返回旧 ID 变化、或已有旧线覆盖，都不能单独证明创建完成。
 		for (let attempt = 0; attempt < WIRE_READBACK_ATTEMPTS; attempt++) {
 			if (attempt > 0) {
 				if (readbackDeadline - Date.now() <= WIRE_READBACK_INTERVAL_MS)
@@ -441,34 +509,40 @@ async function handleWireAction(action: 'wire_preview' | 'wire_create', payload:
 				await new Promise<void>(resolve => globalThis.setTimeout(resolve, WIRE_READBACK_INTERVAL_MS));
 			}
 			const after = await readWiresBeforeDeadline(api, readbackDeadline);
+			await assertSameSchematicPage(eda, pageUuid!, 'wire creation');
 			if (!after)
 				break;
 			const afterIds = new Set(after.map(wire => wire.id));
 			changedWireIds = after.filter(wire => beforeById.get(wire.id) !== wireSnapshot(wire)).map(wire => wire.id);
 			removedWireIds = before.filter(wire => !afterIds.has(wire.id)).map(wire => wire.id);
-			if (!returnedPrimitiveId) {
-				matchingWireIds = after.filter(wire => changedWireIds.includes(wire.id)
-					&& sameWirePath(segments, wire.segments)
-					&& (net === undefined || wire.net === net)).map(wire => wire.id);
+			if (!coveringWireIds(after, segments) || !after.some(wire => changedWireIds.includes(wire.id) && overlapsRequestedPath(wire, segments)))
+				continue;
+			const [afterComponents, afterLabels] = await Promise.all([readComponents(componentApi(eda)), readWireNetLabels(eda)]);
+			await assertSameSchematicPage(eda, pageUuid!, 'wire creation');
+			const afterNets = effectiveWireNets(after, afterComponents, afterLabels);
+			const candidates = after.filter(wire => expectedNet === undefined || (afterNets.get(wire.id)?.size === 1 && afterNets.get(wire.id)?.has(expectedNet)));
+			const coveringIds = coveringWireIds(candidates, segments);
+			const changedCoveringIds = candidates.filter(wire => changedWireIds.includes(wire.id) && overlapsRequestedPath(wire, segments)).map(wire => wire.id);
+			const returnedWire = after.find(wire => wire.id === returnedPrimitiveId);
+			if (!coveringIds || changedCoveringIds.length === 0
+				|| (returnedWire && (!candidates.includes(returnedWire) || !overlapsRequestedPath(returnedWire, segments)))) {
+				continue;
 			}
-			if (returnedPrimitiveId
-				? changedWireIds.includes(returnedPrimitiveId)
-				: matchingWireIds.length > 0) {
-				break;
-			}
+			confirmedPrimitiveIds = [...new Set([...coveringIds, ...changedCoveringIds])];
+			break;
 		}
 		const unexpectedChangedWireIds = changedWireIds.filter(id => beforeById.has(id) && !allowed.has(id));
 		const unexpectedRemovedWireIds = removedWireIds.filter(id => !allowed.has(id));
-		const committed = returnedPrimitiveId
-			? changedWireIds.includes(returnedPrimitiveId)
-			: matchingWireIds.length === 1;
+		const committed = confirmedPrimitiveIds.length > 0;
 		return {
 			ok: committed && unexpectedChangedWireIds.length === 0 && unexpectedRemovedWireIds.length === 0,
 			action,
+			pageUuid,
 			committed,
 			commitUnknown: !committed || unexpectedChangedWireIds.length > 0 || unexpectedRemovedWireIds.length > 0,
 			returnedPrimitiveId,
-			confirmedPrimitiveId: committed ? (returnedPrimitiveId || matchingWireIds[0]) : null,
+			confirmedPrimitiveId: committed ? (confirmedPrimitiveIds.includes(returnedPrimitiveId) ? returnedPrimitiveId : confirmedPrimitiveIds[0]) : null,
+			confirmedPrimitiveIds: preserveBoundedArray(confirmedPrimitiveIds),
 			returnedExistingWire: beforeById.has(returnedPrimitiveId),
 			net: net ?? null,
 			changedWireIds,
@@ -480,11 +554,20 @@ async function handleWireAction(action: 'wire_preview' | 'wire_create', payload:
 			labelTouches,
 			readbackRequired: true,
 			nativeCallSettled: true,
+			...(nativeArgs ? { result: await toSerializableAsync(result) } : {}),
 		};
 	}
 	catch (error: unknown) {
-		return unknownCommitAfterReadback('wire_create', error, { returnedPrimitiveId: String(getSyncState(result, 'getState_PrimitiveId', '')), net: net ?? null });
+		return unknownCommitAfterReadback('wire_create', error, { returnedPrimitiveId: String(getSyncState(result, 'getState_PrimitiveId', '')), net: net ?? null, pageUuid });
 	}
+}
+
+/** raw API 与受控工具共用接触预检和完整路径回读，保留五个原生参数。 */
+export async function handleSchematicWireCreate(payload: Record<string, unknown>, nativeArgs: unknown[], beforeNativeMutation?: () => void): Promise<Record<string, unknown>> {
+	const eda = getEdaRuntime();
+	if (!eda)
+		throw new TypeError('EDA runtime is unavailable.');
+	return handleWireAction('wire_create', { ...payload, line: nativeArgs[0], net: nativeArgs[1] }, eda, beforeNativeMutation, nativeArgs);
 }
 
 async function handleNetPortMove(payload: Record<string, unknown>, eda: Record<string, unknown>): Promise<unknown> {
@@ -650,7 +733,7 @@ async function handleNetPortCreate(payload: Record<string, unknown>, eda: Record
 	}
 }
 
-export async function handleSchematicConnectivityTask(payload: unknown): Promise<unknown> {
+export async function handleSchematicConnectivityTask(payload: unknown, _reportPinAdapter?: (adapter: SchematicPinAdapter) => void, beforeNativeMutation?: () => void): Promise<unknown> {
 	if (!isPlainObjectRecord(payload))
 		throw new TypeError('schematic_connectivity_action payload must be an object.');
 	const action = payload.action as ConnectivityAction;
@@ -663,5 +746,5 @@ export async function handleSchematicConnectivityTask(payload: unknown): Promise
 		return handleNetPortMove(payload, eda);
 	if (action === 'netport_create')
 		return handleNetPortCreate(payload, eda);
-	return handleWireAction(action, payload, eda);
+	return handleWireAction(action, payload, eda, beforeNativeMutation);
 }

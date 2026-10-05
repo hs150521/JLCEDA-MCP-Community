@@ -97,7 +97,7 @@ const SCHEMATIC_API_INDEX: ApiIndexEntry[] = [
 
 	// ── sch_PrimitiveAttribute：属性/网络标签 ─────────────────────────────
 	{ fullName: 'eda.sch_PrimitiveAttribute.create', summary: '创建属性' },
-	{ fullName: 'eda.sch_PrimitiveAttribute.createNetLabel', summary: '创建网络标签' },
+	{ fullName: 'eda.sch_PrimitiveAttribute.createNetLabel', summary: '创建网络标签（EDA v4 起提供；EDA 3.x 不支持）' },
 	{ fullName: 'eda.sch_PrimitiveAttribute.delete', summary: '删除属性' },
 	{ fullName: 'eda.sch_PrimitiveAttribute.modify', summary: '修改属性' },
 	{ fullName: 'eda.sch_PrimitiveAttribute.get', summary: '获取属性' },

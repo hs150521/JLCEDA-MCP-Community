@@ -20,8 +20,10 @@ import { getSyncState, isPlainObjectRecord, isUnknownNativeRpcResult, preserveBo
 import { readSchematicComponentBaseline, restoreChangedSchematicDesignators } from './component-designator-restore';
 import { compareFootprintModification, prepareFootprintModification } from './footprint-modify-helper.ts';
 import { readFootprintPrimitiveState } from './footprint-primitive-state.ts';
+import { getEditorVersionBeforeNetLabelSupport } from './netlabel-place-handler';
 import { AutoRoutingPageChangedError, compareAutoRoutingSnapshots, readAutoRoutingSnapshot, unavailableAutoRoutingObservation } from './pcb-auto-routing-observation';
 import { tryModifySchematicComponentPin } from './schematic-component-pin-edit.ts';
+import { handleSchematicWireCreate } from './schematic-connectivity-handler.ts';
 import { resolveSchematicLibraryComponent } from './schematic-library-component.ts';
 
 const PCB_AUTO_LAYOUT = 'eda.pcb_document.autolayout';
@@ -412,6 +414,8 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 
 	const apiFullName = String(payload.apiFullName ?? '').trim();
 	const requestedName = apiFullName.toLowerCase();
+	if (payload.allowedWireIds !== undefined && requestedName !== 'eda.sch_primitivewire.create')
+		throw new TypeError('allowedWireIds is only supported for eda.sch_PrimitiveWire.create.');
 	const canvasApi = requestedName.startsWith('eda.pcb_') || requestedName.startsWith('eda.sch_');
 	const document = canvasApi ? await readCurrentEditorDocument(eda as unknown as Record<string, unknown>) : undefined;
 	if (canvasApi && payload.expectedEditorPageKind !== undefined
@@ -423,6 +427,10 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 	const footprint = editorDocumentPageKind(document) === 'footprint';
 	if (footprint && !footprintApiAccess(requestedName)) {
 		return { apiFullName, ok: false, reason: 'unsupported_footprint_api', code: 'UNSUPPORTED_FOOTPRINT_API', error: `Unsupported footprint canvas API: ${apiFullName}.`, applied: false, nativeCallAttempted: false };
+	}
+	const unsupportedEditorVersion = requestedName === 'eda.sch_primitiveattribute.createnetlabel' ? getEditorVersionBeforeNetLabelSupport() : undefined;
+	if (unsupportedEditorVersion) {
+		return { apiFullName, ok: false, errorCode: 'EDA_VERSION_UNSUPPORTED', commitStatus: 'not_started', nativeCallAttempted: false, error: `当前 EDA ${unsupportedEditorVersion} 不支持普通网络标签创建；createNetLabel 从 EDA v4 起提供。` };
 	}
 	const { callable, thisArg, resolvedPath } = resolveApiCallable(apiFullName);
 	if (footprint)
@@ -447,6 +455,9 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 			|| invokeArgs.length !== 2 || invokeArgs[0] !== null || invokeArgs[1] !== false)) {
 		throw new TypeError('includeCompleteSchematicComponentIds requires eda.sch_PrimitiveComponent.getAllPrimitiveId with args [null, false].');
 	}
+
+	if (normalizedPath === 'eda.sch_primitivewire.create')
+		return { apiFullName: resolvedPath, ...await handleSchematicWireCreate(payload, invokeArgs, beforeNativeMutation) };
 
 	if (normalizedPath === 'eda.sch_primitivepin.modify') {
 		const adapted = await tryModifySchematicComponentPin(invokeArgs, reportPinAdapter);

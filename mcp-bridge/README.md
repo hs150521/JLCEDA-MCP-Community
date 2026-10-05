@@ -1,5 +1,17 @@
 # MCP Bridge 社区版
 
+## 2.3.7 原理图导线与网络标签
+
+本轮 Bridge 完整 `npm run build`（含新网络标签回归、typecheck、API 文档/runtime 验证和打包）及 `npm run lint` 已通过；匹配 Server 的 `npm test`、`npm run lint` 和 `node verify-multi-client.mjs` 也已通过。匹配 2.3.7 的网标预检和导线新功能已实测通过；原 TPS552892 布局仍缺 fixture，不据此宣称匿名网络合并的宿主根因已解决。
+
+raw `api_invoke eda.sch_PrimitiveWire.create` 与受控 `wire_create` 共用当前图页接触预检和写后逐段覆盖核对。保留官方 `line/net/color/lineWidth/lineType` 五参数，以及单路径 `number[]`、多路径 `number[][]`。仅该 raw API 可在 payload 顶层选填 `allowedWireIds`；默认不允许接触旧导线，不同已命名网络混接也会在原生调用前拒绝。
+
+创建回读要求实际导线完整覆盖全部请求线段，且覆盖路径上存在本次新增或改变的有效导线，兼容旧 ID 延伸及正常拆分/合并，返回 `confirmedPrimitiveIds` 和兼容的 `confirmedPrimitiveId`。未完整覆盖、未许可的旧导线变化或回读失败保留 `commitUnknown:true`，须以 `schematic_read includeConnectivityPrimitives:true` 完整回读同页连接图元和语义网表。诊断要求宿主重启时，先重启原 EDA；仅查上下文不能解除隔离。此核验不证明宿主已避免所有匿名网络合并，#22 原场景仍待实机核对。
+
+自建原理图实测中，未许可旧线接触和跨命名网络均被拒绝；授权后五参数、多路径、小写请求名创建合并旧 ID 并完整覆盖两段路径，匿名线附近短延伸也完整覆盖。完整原生 JLCEDA 网表、3 个普通器件 DTO、无关命名/匿名导线及端口/标识/标签均保持基线。#22 原 TPS552892 布局与宿主根因仍缺 fixture，不据此自动关闭。
+
+raw `eda.sch_PrimitiveAttribute.createNetLabel` 复用普通网络标签的版本预检：已知 EDA 3.x 返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，不启动原生写入或未知提交隔离；API 索引明确从 EDA v4 起提供。4.x 与版本未知时保持原生调用，电源/地 NetFlag 不受影响。EDA 3.2.181 与匹配 2.3.7 实测中，raw/semantic 普通标签创建均被版本预检阻止，前后完整连接读取不变；9 个混合版本客户端 ready、心跳正常，2.3.6 待命客户端完整读取也不变。本轮修复 #26 已知 3.x 触发路径，不泛称宿主内部全部失联已根治，EDA v4 未实测。详见 [2.3.7 发布说明](../docs/releases/v2.3.7.md)。
+
 名称属性查询的所有页固定使用关键词搜索，并在本地核对全部请求属性，返回 `searchImplementation:"keyword_name_filter"`；`mayHaveMore` 仍依据原生候选页，避免每页切换搜索后端。裸器件引用明确指定库时，同时核对返回记录的器件 UUID 与库 UUID，不一致则在创建前返回 `DEVICE_LOOKUP_MISMATCH`。
 
 ## 2.3.6 独立封装编辑
@@ -39,7 +51,7 @@ Via/Line/Polyline/String/独立 Arc 新案例的创建、修改和删除已实�
 
 2.3.5 改进器件库引用解析、真实 ComponentPin 的 NC 修改、覆铜逐实例重建、PCB 等价几何回读、器件部分修改诊断、PCB 属性文字输入校验、制造导出分支格式校验、DRC 详情分页和非字符串错误传输。原生未解决项及待验证场景见下文。
 
-`wire_create` 成功结果只确认导线图元变化，返回的 `net` 是请求值；`confirmedPrimitiveId` 给出读回确认的图元 ID。原生创建未返回 ID 时，只有唯一变化导线与请求路径及网络匹配才报告成功，否则保留 `commitUnknown`。随后须以 `schematic_read includeConnectivityPrimitives:true` 核对同页实际语义连接。该读取也可用于其他常规连线核查和受控恢复。
+`wire_create` 与 raw 导线创建均逐段核对实际覆盖，不能只凭返回 ID 或局部旧线变化报告成功。`confirmedPrimitiveIds` 给出参与覆盖的实际导线，`confirmedPrimitiveId` 保留单 ID 字段；返回的 `net` 是按原生大写规则归一后的请求名，未指定时为 `null`。随后须以 `schematic_read includeConnectivityPrimitives:true` 核对同页实际语义连接；无法确认完整路径时保留 `commitUnknown`。该读取也可用于其他常规连线核查和受控恢复。
 
 `schematic_component_edit` 的几何修改会检查匿名导线连通组，同组内移动保持成功；引脚脱离或转移到另一组时报告 `pin_network_changed` 和前后组 ID。`schematic_read` 可用 `timeoutMs` 延长大图页读取预算至 120 秒。
 
@@ -212,7 +224,7 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 - `api_index`：列出所有可用的 EDA API 模块名称。
 - `api_search`：按关键词搜索具体 API 方法及参数说明。
 - `eda_context`：读取当前 EDA 页面的上下文信息。
-- `api_invoke`：直接调用任意 EDA API 并返回结果。
+- `api_invoke`：调用受支持的 EDA API；raw 导线创建和普通网络标签创建遵守上述预检。
 
 ## 安装
 
@@ -220,16 +232,16 @@ Server，通过本机 WebSocket 与嘉立创 EDA 专业版连接，不再依赖 
 
 ### 1. EDA Bridge
 
-以下文件名对应 2.3.6；发布验证完成前，以发布页实际提供的包为准。
+以下文件名对应 2.3.7；是否可下载以发布页实际提供的包为准。
 
-从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.6.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
+从同一 Release 下载并在嘉立创 EDA 专业版扩展管理器中安装 `mcp-bridge-community-2.3.7.eext`，重启 EDA，然后打开原理图、PCB 或独立封装文档。
 
 ### 2. 原生 MCP Server
 
-从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.6.tgz`，执行：
+从同一 Release 下载匹配的 `jlceda-mcp-server-2.3.7.tgz`，执行：
 
 ```powershell
-npm install --global .\jlceda-mcp-server-2.3.6.tgz
+npm install --global .\jlceda-mcp-server-2.3.7.tgz
 ```
 
 安装后的命令为 `jlceda-mcp`。源码构建及其他客户端配置见[原生 MCP 安装说明](https://github.com/hs150521/JLCEDA-MCP-Community/blob/main/docs/native-mcp-setup.md)。
