@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [2.3.8] - 2026-10-05
+
+- 新增 `footprint_save` 及 `/bridge/jlceda/footprint/save` 路由，默认 30 秒、可选 5–120 秒预算。当前封装完整源码快照（读取时状态）在 EDA 内写回同库同文档，保存不额外读取七类图元，不向 MCP 客户端传输源码。
+- 保存结果明确 `scope:"library_source"`、`sharedSource:true` 和库 ACK；共享源更新可能影响所有引用实例，不提供仅此实例封装重绑定。ACK 后身份检查失败仍保留 `saved:true`、`saveAcknowledged:true`，同时返回 `ok:false`、`identityVerified:false`，不能直接重试已获 ACK 的保存。
+- 显式 false 为明确未获 ACK，返回 `saved:false`、`nativeCallSettled:true`，不证明源码未改变；undefined 是已结束但效果未知，返回 `commitUnknown:true`、`readbackRequired:true`、`nativeCallSettled:true`，不带 `saved` 或 `saveAcknowledged`，不强制宿主重启，须同库同文档完整回读恢复；保存超时或 RPC 未确认按 `footprint_state`，要求同库同文档七类完整快照恢复。恢复只解除编辑状态隔离，不将回读验证当作保存或引用 PCB 持久性证明；失败/失联/中继恢复由本地回归覆盖。
+- 匹配 Server/活动 Bridge 2.3.8 的 EDA 3.2.181 / API 0.3.15 实测共享封装 Via 0→1→0，两次保存获 ACK；冷重开封装完整 DTO 保持创建状态并最终严格恢复原基线，引用 PCB Via 也为 0→1→0，其他读取部分保持基线。本轮按“区分内存删除与保存，并支持共享封装源持久编辑”收口 #80；PCB 子过孔删除本身仍不保证持久。
+- 本轮 Server 全量 `npm test`、`npm run lint`、`node verify-multi-client.mjs`，以及匹配 Bridge 完整 `npm run build`/lint 均通过。完整范围见 [2.3.8 发布说明](../docs/releases/v2.3.8.md)；EDA v4 未实测。
+
 ## [2.3.7] - 2026-10-05
 
 - 本轮完整自动门禁通过：Server `npm test`、`npm run lint`、`node verify-multi-client.mjs`，以及匹配 Bridge 的完整 build/lint；匹配 2.3.7 的网标预检和导线新功能实测通过。

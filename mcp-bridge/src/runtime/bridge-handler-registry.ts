@@ -20,6 +20,7 @@ import { handleDesignCompareTask } from '../mcp/design-compare-handler.ts';
 import { handleDesignSourceExportTask } from '../mcp/design-source-export-handler.ts';
 import { handleEditorNavigateTask } from '../mcp/editor-navigate-handler.ts';
 import { handleFootprintReadTask } from '../mcp/footprint-read-handler.ts';
+import { handleFootprintSaveTask } from '../mcp/footprint-save-handler.ts';
 import { handleApiInvokeTask } from '../mcp/invoke-handler.ts';
 import { handleLibraryClassificationTask } from '../mcp/library-classification-handler.ts';
 import { handleLibraryPreviewTask } from '../mcp/library-preview-handler.ts';
@@ -94,6 +95,7 @@ const handlers: Readonly<Record<string, BridgeTaskHandler>> = {
 	'/bridge/jlceda/pcb/pour-manage': handlePcbPourManageTask,
 	'/bridge/jlceda/pcb/read': handlePcbReadTask,
 	'/bridge/jlceda/footprint/read': handleFootprintReadTask,
+	'/bridge/jlceda/footprint/save': handleFootprintSaveTask,
 	'/bridge/jlceda/pcb/routing-edit': handlePcbRoutingEditTask,
 	'/bridge/jlceda/pcb/board-outline-manage': handlePcbBoardOutlineManageTask,
 	'/bridge/jlceda/pcb/region-manage': handlePcbRegionManageTask,

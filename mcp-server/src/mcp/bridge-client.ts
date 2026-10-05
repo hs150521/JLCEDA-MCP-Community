@@ -181,7 +181,8 @@ function isPageBoundWrite(path: string, payload: unknown): boolean {
     const apiFullName = payload.apiFullName.trim().toLowerCase();
     return apiFullName.startsWith('eda.sch_') || apiFullName.startsWith('eda.pcb_');
   }
-  return path.startsWith('/bridge/jlceda/pcb/')
+  return path === '/bridge/jlceda/footprint/save'
+    || path.startsWith('/bridge/jlceda/pcb/')
     || path.startsWith('/bridge/jlceda/schematic/')
     || path.startsWith('/bridge/jlceda/component/')
     || path.startsWith('/bridge/jlceda/netlabel/')
@@ -1449,8 +1450,10 @@ export class EdaBridgeServer {
 		? { targetSchematicPinPrimitiveId: optionalString(pending.payload.args[0]), schematicPinAdapter: pending.schematicPinAdapter } : {}),
       ...(mutating && isTargetedSchematicPageMutation(pending.path ?? '', pending.payload)
         ? { requiredReadback: 'schematic_page_inventory' as const, ...schematicPageMutationTarget(pending.path ?? '', pending.payload) } : {}),
-      ...(mutating && pending.path === '/bridge/jlceda/api/invoke' && isRecord(pending.payload)
-        && footprintApiAccess(pending.payload.apiFullName) === 'write' && pending.context?.pageKind === 'footprint'
+      ...(mutating && pending.context?.pageKind === 'footprint'
+        && (pending.path === '/bridge/jlceda/footprint/save'
+          || (pending.path === '/bridge/jlceda/api/invoke' && isRecord(pending.payload)
+            && footprintApiAccess(pending.payload.apiFullName) === 'write'))
         ? { requiredReadback: 'footprint_state' as const, hostRestartRequired: !nativeCallSettled } : {}),
       uncertaintyReason,
       context: pending.context,

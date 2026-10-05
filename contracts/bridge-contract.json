@@ -376,6 +376,12 @@
 			"readOnly": true
 		},
 		{
+			"toolName": "footprint_save",
+			"path": "/bridge/jlceda/footprint/save",
+			"owner": "bridge",
+			"timeoutPolicy": "standard-read"
+		},
+		{
 			"toolName": "pcb_read",
 			"path": "/bridge/jlceda/pcb/read",
 			"owner": "bridge",
