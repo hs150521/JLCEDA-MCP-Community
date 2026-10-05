@@ -19,7 +19,7 @@
 		"verify:runtime": "node scripts/verify-runtime-entry.mjs",
 		"test:contract": "node scripts/bridge-contract-test.cjs",
 		"test:netlabel": "node scripts/netlabel-kind-test.cjs && node scripts/netlabel-version-precheck-test.cjs",
-		"test:connectivity": "node scripts/schematic-connectivity-test.cjs",
+		"test:connectivity": "node scripts/schematic-connectivity-test.cjs && node scripts/schematic-native-wire-segments-test.cjs",
 		"test:schematic-wires": "node scripts/schematic-wire-manage-test.cjs && node scripts/schematic-wire-modify-issues-test.cjs",
 		"test:schematic-text": "node scripts/schematic-text-manage-test.cjs",
 		"test:pcb-connectivity": "node scripts/pcb-connectivity-test.cjs && node scripts/pcb-mutation-normalization-transport-test.cjs",

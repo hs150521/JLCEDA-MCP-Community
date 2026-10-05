@@ -183,6 +183,23 @@ async function main() {
 	const detachedUnnamedWire = await handleSchematicComponentEditTask({ action: 'modify', primitiveId: 'c1', property: { x: 550 } });
 	assert.equal(detachedUnnamedWire.reason, 'pin_network_changed');
 	assert.deepEqual(detachedUnnamedWire.pinNetworkChanges, [{ pinNumber: '1', before: '', after: '', beforeWireGroups: ['unnamed-b'], afterWireGroups: [] }]);
+	// 实机 Wire A 的 LINE 端点对，匿名网络同样不能虚构相邻记录间的对角线。
+	wires.push({
+		getState_PrimitiveId: () => 'native-a',
+		getState_Line: () => [100, 200, 180, 200, 100, 200, 100, 350, 100, 500, 100, 350, 180, 500, 100, 500, 100, 540, 100, 500, 200, 540, 100, 540, 50, 350, 100, 350, 50, 450, 50, 350],
+		getState_Net: () => '',
+	});
+	Object.assign(parts.get('c1'), { x: 140, y: 425 });
+	const besideNativeWire = await handleSchematicComponentEditTask({ action: 'modify', primitiveId: 'c1', property: { y: 445 } });
+	assert.equal(besideNativeWire.ok, true, 'moving off a phantom diagonal does not change an actual unnamed wire group');
+	assert.equal(besideNativeWire.pinNetworkChanges, undefined);
+	const ontoNativeWire = await handleSchematicComponentEditTask({ action: 'modify', primitiveId: 'c1', property: { x: 100, y: 425 } });
+	assert.equal(ontoNativeWire.reason, 'pin_network_changed');
+	assert.deepEqual(ontoNativeWire.pinNetworkChanges, [{ pinNumber: '1', before: '', after: '', beforeWireGroups: [], afterWireGroups: ['native-a'] }], 'a real contact with the native segment is still reported');
+	const alongNativeWire = await handleSchematicComponentEditTask({ action: 'modify', primitiveId: 'c1', property: { y: 435 } });
+	assert.equal(alongNativeWire.ok, true, 'moving on the same native unnamed wire group remains available');
+	wires.pop();
+	Object.assign(parts.get('c1'), { x: 550, y: 400 });
 	const deleted = await handleSchematicComponentEditTask({ action: 'delete', primitiveId: 'r1' });
 	assert.equal(deleted.ok, true);
 	assert.equal(deleted.deleted, true);

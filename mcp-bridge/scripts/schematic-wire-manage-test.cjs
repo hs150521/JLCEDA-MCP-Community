@@ -75,7 +75,7 @@ async function main() {
 	assert.equal(JSON.parse(largeRead.wiresSnapshot).length, 127, 'the full-page JSON snapshot is not truncated at 120 wires');
 	for (let index = 0; index < 125; index += 1)
 		wires.delete(`extra-${index}`);
-	const longLine = Array.from({ length: 121 }, (_, index) => [index + 1000, 0]).flat();
+	const longLine = Array.from({ length: 120 }, (_, index) => [index + 1000, 0, index + 1001, 0]).flat();
 	wires.set('long-wire', { primitiveId: 'long-wire', line: longLine, net: '', color: null, lineWidth: null, lineType: null });
 	const targetedLongRead = await toSerializableAsync(await handleSchematicWireManageTask({ action: 'read', primitiveId: 'long-wire' }));
 	assert.equal(targetedLongRead.wire.line.length, longLine.length, 'targeted line must survive Bridge serialization');
@@ -95,7 +95,7 @@ async function main() {
 	globalThis.eda.sch_PrimitiveWire.modify = async (id, property) => {
 		await unnormalizedModify(id, property);
 		if (property.line)
-			wires.get(id).line = [[0, 0, 25, 0], [25, 0, 50, 0]];
+			wires.get(id).line = [0, 0, 25, 0, 25, 0, 50, 0];
 	};
 	const normalizedReadback = await handleSchematicWireManageTask({ action: 'modify', primitiveId: 'w1', property: { line: [0, 0, 50, 0] } });
 	assert.equal(normalizedReadback.ok, true, 'native line segment splitting preserves requested geometry');
@@ -105,7 +105,7 @@ async function main() {
 	assert.equal(foreign.reason, 'wire_contact_conflict');
 	const serializedForeign = await toSerializableAsync(foreign);
 	assert.ok(JSON.parse(serializedForeign.previewSnapshot).touches.some(touch => touch.primitiveId === 'w2'), 'preview diagnostics survive Bridge serialization');
-	assert.deepEqual(wires.get('w1').line, [[0, 0, 25, 0], [25, 0, 50, 0]]);
+	assert.deepEqual(wires.get('w1').line, [0, 0, 25, 0, 25, 0, 50, 0]);
 	const renamed = await handleSchematicWireManageTask({ action: 'modify', primitiveId: 'w1', property: { net: 'C' } });
 	assert.equal(renamed.ok, true);
 	assert.equal(renamed.after.net, 'C');
@@ -117,9 +117,9 @@ async function main() {
 	assert.ok(JSON.parse(serializedRename.previewsSnapshot).some(preview => preview.touches.some(touch => touch.primitiveId === 'w2')));
 	assert.equal(wires.get('w1').net, 'C');
 	wires.get('w2').line = [200, 0, 300, 0];
-	wires.get('w1').line = [[0, 0, 25, 0], [25, 0, 50, 0]];
-	const nestedRename = await handleSchematicWireManageTask({ action: 'modify', primitiveId: 'w1', property: { net: 'D' } });
-	assert.equal(nestedRename.ok, true, 'native multi-path geometry can be renamed without a geometry rewrite');
+	wires.get('w1').line = [0, 0, 25, 0, 25, 0, 50, 0];
+	const splitRename = await handleSchematicWireManageTask({ action: 'modify', primitiveId: 'w1', property: { net: 'D' } });
+	assert.equal(splitRename.ok, true, 'native split segments can be renamed without a geometry rewrite');
 	const originalModify = globalThis.eda.sch_PrimitiveWire.modify;
 	globalThis.eda.sch_PrimitiveWire.modify = async (id, property) => {
 		await originalModify(id, property);

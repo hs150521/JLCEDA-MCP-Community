@@ -1,6 +1,7 @@
 import type { SchematicPinAdapter } from '../bridge/protocol.ts';
 import { resolveContractTimeoutMs } from '../bridge/bridge-contract.ts';
 import { getEdaRuntime, getSyncState, isPlainObjectRecord, preserveBoundedArray, toSerializableAsync } from '../utils.ts';
+import { readNativeWireSegments } from './schematic-native-wire-segments.ts';
 import { handleSchematicReadTask } from './schematic-read-handler.ts';
 
 interface Point { x: number; y: number }
@@ -119,31 +120,6 @@ function segmentsFromFlatLine(line: unknown): Segment[] {
 	return segments;
 }
 
-function segmentsFromWireLine(line: unknown): Segment[] {
-	if (!Array.isArray(line))
-		return [];
-	if (Array.isArray(line[0])) {
-		if (line.some(part => !Array.isArray(part) || part.length % 2 !== 0 || part.some(value => typeof value !== 'number' || !Number.isFinite(value))))
-			return [];
-		if (line.every(part => Array.isArray(part) && part.length === 2))
-			return segmentsFromFlatLine(line.flat());
-		return line.flatMap(part => segmentsFromFlatLine(part));
-	}
-	return segmentsFromFlatLine(line);
-}
-
-function readableWireLine(line: unknown): boolean {
-	const flat = (path: unknown): boolean => Array.isArray(path) && path.length >= 4 && path.length % 2 === 0
-		&& path.every(value => typeof value === 'number' && Number.isFinite(value));
-	if (!Array.isArray(line) || line.length === 0)
-		return false;
-	if (!Array.isArray(line[0]))
-		return flat(line);
-	if (line.every(part => Array.isArray(part) && part.length === 2))
-		return line.length >= 2 && line.every(part => part.every((value: unknown) => typeof value === 'number' && Number.isFinite(value)));
-	return line.every(flat);
-}
-
 function orientation(a: Point, b: Point, c: Point): number {
 	return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
@@ -182,10 +158,13 @@ async function readWires(api: Record<string, unknown>): Promise<WireState[]> {
 		const id = String(getSyncState(primitive, 'getState_PrimitiveId', ''));
 		if (!id)
 			throw new TypeError('EDA wire has no primitive ID, so safe intersection checks are unavailable.');
-		if (!readableWireLine(line))
+		const nativeSegments = readNativeWireSegments(line);
+		if (nativeSegments === null)
 			throw new TypeError(`EDA wire ${id} has no readable line geometry, so safe intersection checks are unavailable.`);
 		// A native point wire has valid coordinates but contributes no contact segment.
-		const segments = segmentsFromWireLine(line);
+		const segments = nativeSegments.flatMap(([x1, y1, x2, y2]) => x1 === x2 && y1 === y2
+			? []
+			: [{ start: { x: x1, y: y1 }, end: { x: x2, y: y2 } }]);
 		return {
 			id,
 			net: String(getSyncState(primitive, 'getState_Net', '')),
