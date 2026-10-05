@@ -428,15 +428,15 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 	if (footprint && !footprintApiAccess(requestedName)) {
 		return { apiFullName, ok: false, reason: 'unsupported_footprint_api', code: 'UNSUPPORTED_FOOTPRINT_API', error: `Unsupported footprint canvas API: ${apiFullName}.`, applied: false, nativeCallAttempted: false };
 	}
+	const unsupportedEditorVersion = requestedName === 'eda.sch_primitiveattribute.createnetlabel' ? getEditorVersionBeforeNetLabelSupport() : undefined;
+	if (unsupportedEditorVersion) {
+		return { apiFullName, ok: false, errorCode: 'EDA_VERSION_UNSUPPORTED', commitStatus: 'not_started', nativeCallAttempted: false, error: `当前 EDA ${unsupportedEditorVersion} 不支持普通网络标签创建；createNetLabel 从 EDA v4 起提供。` };
+	}
 	const { callable, thisArg, resolvedPath } = resolveApiCallable(apiFullName);
 	if (footprint)
 		return invokeFootprintPrimitive(payload, resolvedPath, callable, thisArg, footprintIdentityFromDocument(document), beforeNativeMutation);
 	const invokeArgs = Array.isArray(payload.args) ? payload.args : [];
 	const normalizedPath = resolvedPath.toLowerCase();
-	const unsupportedEditorVersion = normalizedPath === 'eda.sch_primitiveattribute.createnetlabel' ? getEditorVersionBeforeNetLabelSupport() : undefined;
-	if (unsupportedEditorVersion) {
-		return { apiFullName: resolvedPath, ok: false, errorCode: 'EDA_VERSION_UNSUPPORTED', commitStatus: 'not_started', nativeCallAttempted: false, error: `当前 EDA ${unsupportedEditorVersion} 不支持普通网络标签创建；createNetLabel 从 EDA v4 起提供。` };
-	}
 	const routingProps = normalizedPath === PCB_AUTO_ROUTING && isPlainObjectRecord(invokeArgs[0]) ? invokeArgs[0] : undefined;
 	const requestedRoutingNets = Array.isArray(routingProps?.RoutingNets)
 		&& routingProps.RoutingNets.every((net: unknown) => typeof net === 'string')

@@ -10,7 +10,7 @@
 - 网络接触预检与覆盖比较遵循 SDK 原生大写规则，避免小写请求名误报冲突或未知提交；raw 原生参数保持原样，返回 `net` 仍只表示归一后的请求名。
 - raw 导线创建沿用 `api_invoke` 的 1000 毫秒下限及对应回读预算；受控工具的 5000 毫秒下限保持不变，短超时 handler 与真实 runtime 回归通过。
 - 标准 MCP 导线实测通过：未许可接触/跨命名网络拒绝，授权五参数、多路径、小写名创建合并旧 ID，匿名线附近短延伸完整覆盖；完整原生网表、3 普通器件 DTO、无关导线及端口/标识/标签保持基线。原 TPS552892 布局与宿主根因仍缺 fixture，#22 不据此自动关闭。
-- raw `eda.sch_PrimitiveAttribute.createNetLabel` 复用既有版本预检，已知 EDA 3.x 返回未开始及 `nativeCallAttempted:false`；电源/地 NetFlag、4.x 和未知版本保持既有调用。API 索引标明 EDA v4 起提供。
+- raw `eda.sch_PrimitiveAttribute.createNetLabel` 在 callable 解析前复用既有版本预检，包含方法缺失的旧宿主；已知 EDA 3.x 返回未开始及 `nativeCallAttempted:false`；电源/地 NetFlag、4.x 和未知版本保持既有调用。API 索引标明 EDA v4 起提供。
 - EDA 3.2.181 与匹配 2.3.7 的 raw/semantic 网标预检实测通过：前后完整连接读取不变，9 个混合版本客户端 ready、心跳正常，2.3.6 待命客户端完整读取也不变。本轮修复 #26 已知 3.x 触发路径，不泛称宿主内部全部失联根治；#22 原场景和 EDA v4 仍待实机核对。
 
 ## [2.3.6] - 2026-10-05

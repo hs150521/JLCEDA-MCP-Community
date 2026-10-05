@@ -120,6 +120,20 @@ async function main() {
 		assert.equal(rejected.readbackRequired, undefined);
 		assert.match(rejected.error, /3\.2\.181.*v4/);
 
+		const nativeCreateNetLabel = globalThis.eda.sch_PrimitiveAttribute.createNetLabel;
+		delete globalThis.eda.sch_PrimitiveAttribute.createNetLabel;
+		const missingMethod = await invoke('v3-missing-label-method', {
+			apiFullName: 'EDA.SCH_PRIMITIVEATTRIBUTE.CREATENETLABEL',
+			args: [10, 20, 'FSW_SET'],
+		});
+		assert.equal(missingMethod.ok, false);
+		assert.equal(missingMethod.errorCode, 'EDA_VERSION_UNSUPPORTED', 'known 3.x returns the version rejection even when the native method is absent');
+		assert.equal(missingMethod.commitStatus, 'not_started');
+		assert.equal(missingMethod.nativeCallAttempted, false);
+		assert.equal(missingMethod.commitUnknown, undefined);
+		assert.equal(missingMethod.readbackRequired, undefined);
+		assert.equal(labelCalls.length, 0);
+
 		const read = await invoke('read-after-precheck', { apiFullName: 'eda.sch_PrimitiveComponent.getAll', args: [] });
 		assert.deepEqual(read.result, []);
 		assert.equal(readCalls, 1, 'a rejected unsupported API must leave the runtime available for the next read');
@@ -136,6 +150,17 @@ async function main() {
 		assert.deepEqual(flagCalls, [['Ground', 'GND', 10, 20, 0, false]]);
 		assert.equal(labelCalls.length, 0, 'semantic ordinary labels must use the same version precheck');
 
+		for (const version of ['4.0.0', 'unknown']) {
+			editorVersion = version;
+			const requestId = `missing-label-method-${version}`;
+			enqueueTask({ requestId, path: '/bridge/jlceda/api/invoke', payload: { apiFullName: 'eda.sch_PrimitiveAttribute.createNetLabel', args: [10, 20, 'FSW_SET'] }, leaseTerm: 1 }, transport);
+			await waitUntil(() => transport.results.has(requestId));
+			const response = transport.results.get(requestId);
+			assert.match(response.error.message, /调用路径不存在/, 'supported or unknown versions keep ordinary callable resolution');
+			assert.equal(response.result, undefined);
+			assert.equal(labelCalls.length, 0);
+		}
+		globalThis.eda.sch_PrimitiveAttribute.createNetLabel = nativeCreateNetLabel;
 		editorVersion = '4.0.0';
 		assert.equal(getEditorVersionBeforeNetLabelSupport(), undefined);
 		const supportedArgs = [0, 20, 'FSW_SET'];
@@ -146,6 +171,15 @@ async function main() {
 		assert.deepEqual(labelCalls, [supportedArgs], 'the supported version must pass native arguments through exactly once');
 		assert.deepEqual(supported.result, { primitiveId: 'native-label' });
 		assert.equal(supported.errorCode, undefined);
+		editorVersion = 'unknown';
+		const unknownArgs = [30, 40, 'FSW_SET'];
+		const unknownVersion = await invoke('unknown-version-raw-label', {
+			apiFullName: 'EDA.SCH_PRIMITIVEATTRIBUTE.CREATENETLABEL',
+			args: unknownArgs,
+		});
+		assert.deepEqual(labelCalls, [supportedArgs, unknownArgs], 'unknown versions retain case-insensitive resolution and one native call');
+		assert.deepEqual(unknownVersion.result, { primitiveId: 'native-label' });
+		assert.equal(unknownVersion.errorCode, undefined);
 
 		const index = await submit('label-api-index', '/bridge/jlceda/api/index', { owner: 'sch_PrimitiveAttribute.createNetLabel' });
 		assert.equal(index.total, 1);
