@@ -7,7 +7,8 @@
 - 新增共享原生导线段解析器，Wire.line 每 4 个坐标对应实际 LINE 的独立端点对，不在相邻端点对之间虚构线段；连续创建/修改请求、原生参数与 DTO 保持不变。
 - 连通预检、语义读取、导线管理及器件匿名导线组检查统一解析，修复虚构斜线异网误拒、读取时错误网络传播和匿名组误判；真实异网接触仍拒绝。
 - net-only 修改逐实际线段检查并仅传网络属性，不重写几何；修改回读分别归一请求连续路径和原生独立线段，接受同形 L 路径的拆分、反向及重排，保留实际 after.line。
-- 捕获证据为 EDA 3.2.181 / API 0.3.15 的 3 个完整 Wire DTO 与 15 条源码记录（3 WIRE、12 LINE）。旧运行 Bridge 2.3.9 的公开 MCP 只读复现确认相同 DTO、50690 字符源码及虚构斜线误拒，前后完整读取严格相等，零写入；2.3.10 最终宿主只读 preview 尚待验证。
+- 捕获证据为 EDA 3.2.181 / API 0.3.15 的 3 个完整 Wire DTO 与 15 条源码记录（3 WIRE、12 LINE）。旧运行 Bridge 2.3.9 的公开 MCP 只读复现确认相同 DTO、50690 字符源码及虚构斜线误拒，前后完整读取严格相等，零写入。
+- 新 Bridge/Server 2.3.10 的公开 MCP 只读实测通过：虚构斜线附近 preview 可创建且 touches 为空，真实 A 线上的异网请求即使许可 ID 仍拒绝；3 个 DTO 与捕获数据相等，完整连接快照与旧基线相等，同轮完整 schematic_read 不变。源码全部实体记录逐字相等，仅 DOCHEAD client/updateTime/version 动态字段排除，固定 uuid/docType/editVersion 核对，不宣称全源码字符串相等；返回自建 PCB 的完整回读及心跳后 context/ready 复核通过，无写入、保存、关闭或重启。
 - 捕获 fixture、相关定向回归、typecheck、目标 lint 和两轮独立审查通过；Bridge 完整 build/lint 和 Server npm ci/test/lint/多客户端验证通过，不把本地 fixture 当作新版本实机验证。
 - #22 原 TPS552892 夹具缺失，#37 原 62 网络/0 毫秒全失败仍开放，EDA v4 未实测，本轮不据此关闭这些 Issue。详见 [2.3.10 发布说明](../docs/releases/v2.3.10.md)。
 
