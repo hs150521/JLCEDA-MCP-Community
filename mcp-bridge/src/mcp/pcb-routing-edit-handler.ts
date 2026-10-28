@@ -309,6 +309,149 @@ function matchesRequested(actual: Primitive, requested: Record<string, unknown>)
 	});
 }
 
+// Match the existing pcb-connectivity-handler coordinate comparison, without
+// inventing an EDA coordinate grid (the via dimension grid does not apply here).
+const LINE_EPSILON = 1e-6;
+// Whole-page bound only to keep the snapshot finite; it must stay well above a
+// dense real board (pcb_read and footprint_read already return this many
+// primitives) so that a large board cannot lose line modification entirely.
+const MAX_LINE_SNAPSHOT = 20000;
+const MAX_LINE_DIAGNOSTICS = 32;
+
+async function lineSnapshot(runtime: Record<string, unknown>, pageUuid: string): Promise<Primitive[]> {
+	const lineApi = routingApi(runtime, 'line', ['getAll']);
+	const raw = await (lineApi.getAll as () => Promise<unknown>).call(lineApi);
+	await assertSamePage(runtime, pageUuid);
+	if (!Array.isArray(raw))
+		throw new TypeError('EDA pcb_PrimitiveLine.getAll did not return an array.');
+	// Include all copper nets/layers so a replacement on the wrong net cannot disappear from scope.
+	const lines = raw.filter(item => isCopperLayer(finiteNumber(readState(item, 'getState_Layer'), 'EDA layer')))
+		.map(item => readPrimitive('line', item));
+	// Fail closed before retaining or comparing unbounded geometry.
+	if (lines.length > MAX_LINE_SNAPSHOT)
+		throw new RangeError(`PCB copper line snapshot exceeds ${MAX_LINE_SNAPSHOT} primitives.`);
+	if (new Set(lines.map(item => item.primitiveId)).size !== lines.length)
+		throw new TypeError('EDA line snapshot contains duplicate primitive IDs.');
+	return lines;
+}
+
+function lineCovered(target: Primitive, candidates: Primitive[]): boolean {
+	const sx = target.startX as number;
+	const sy = target.startY as number;
+	const dx = (target.endX as number) - sx;
+	const dy = (target.endY as number) - sy;
+	const length = Math.hypot(dx, dy);
+	if (!Number.isFinite(length) || length <= LINE_EPSILON)
+		return false;
+	const ux = dx / length;
+	const uy = dy / length;
+	const intervals: Array<{ start: number; end: number }> = [];
+	for (const line of candidates) {
+		if (line.net !== target.net || line.layer !== target.layer || line.primitiveLock !== target.primitiveLock
+			|| Math.abs((line.lineWidth as number) - (target.lineWidth as number)) > LINE_EPSILON) {
+			continue;
+		}
+		const points = [[line.startX as number, line.startY as number], [line.endX as number, line.endY as number]];
+		if (points.some(([x, y]) => Math.abs((x - sx) * uy - (y - sy) * ux) > LINE_EPSILON))
+			continue;
+		const projections = points.map(([x, y]) => (x - sx) * ux + (y - sy) * uy);
+		const start = Math.max(0, Math.min(...projections));
+		const end = Math.min(length, Math.max(...projections));
+		if (end - start > LINE_EPSILON)
+			intervals.push({ start, end });
+	}
+	intervals.sort((a, b) => a.start - b.start);
+	let covered = 0;
+	for (const interval of intervals) {
+		if (interval.start > covered + LINE_EPSILON)
+			return false;
+		covered = Math.max(covered, interval.end);
+		if (covered >= length - LINE_EPSILON)
+			return true;
+	}
+	return false;
+}
+
+function lineGeometry(line: Primitive): [[number, number], [number, number]] {
+	return [[line.startX as number, line.startY as number], [line.endX as number, line.endY as number]];
+}
+
+function lineSegmentContained(segment: Primitive, target: Primitive): boolean {
+	if (segment.net !== target.net || segment.layer !== target.layer || segment.primitiveLock !== target.primitiveLock
+		|| Math.abs((segment.lineWidth as number) - (target.lineWidth as number)) > LINE_EPSILON) {
+		return false;
+	}
+	const [[sx, sy], [ex, ey]] = lineGeometry(target);
+	const dx = ex - sx;
+	const dy = ey - sy;
+	const length = Math.hypot(dx, dy);
+	if (length <= LINE_EPSILON)
+		return false;
+	const [[x1, y1], [x2, y2]] = lineGeometry(segment);
+	const projections = [[x1, y1], [x2, y2]].map(([x, y]) => {
+		if (Math.abs((x - sx) * dy / length - (y - sy) * dx / length) > LINE_EPSILON)
+			return Number.NaN;
+		return ((x - sx) * dx + (y - sy) * dy) / length;
+	});
+	return projections.every(Number.isFinite) && projections.every(value => value >= -LINE_EPSILON && value <= length + LINE_EPSILON);
+}
+
+function sameLineCopper(a: Primitive, b: Primitive): boolean {
+	return a.net === b.net && a.layer === b.layer && a.primitiveLock === b.primitiveLock
+		&& Math.abs((a.lineWidth as number) - (b.lineWidth as number)) <= LINE_EPSILON;
+}
+
+/** Parallel, zero offset and identical copper attributes. */
+function lineCollinear(a: Primitive, b: Primitive): boolean {
+	if (!sameLineCopper(a, b))
+		return false;
+	const ax = (a.endX as number) - (a.startX as number);
+	const ay = (a.endY as number) - (a.startY as number);
+	const bx = (b.endX as number) - (b.startX as number);
+	const by = (b.endY as number) - (b.startY as number);
+	const lengthA = Math.hypot(ax, ay);
+	const lengthB = Math.hypot(bx, by);
+	if (lengthA <= LINE_EPSILON || lengthB <= LINE_EPSILON)
+		return false;
+	if (Math.abs(ax * by - ay * bx) / (lengthA * lengthB) > LINE_EPSILON)
+		return false;
+	return [[b.startX as number, b.startY as number], [b.endX as number, b.endY as number]]
+		.every(([x, y]) => Math.abs((x - (a.startX as number)) * ay - (y - (a.startY as number)) * ax) / lengthA <= LINE_EPSILON);
+}
+
+/** Collinear primitives share more than a single endpoint. */
+function lineOverlaps(a: Primitive, b: Primitive): boolean {
+	if (!lineCollinear(a, b))
+		return false;
+	const sx = a.startX as number;
+	const sy = a.startY as number;
+	const length = Math.hypot((a.endX as number) - sx, (a.endY as number) - sy);
+	const ux = ((a.endX as number) - sx) / length;
+	const uy = ((a.endY as number) - sy) / length;
+	const projections = [[b.startX as number, b.startY as number], [b.endX as number, b.endY as number]]
+		.map(([x, y]) => (x - sx) * ux + (y - sy) * uy);
+	return Math.min(length, Math.max(...projections)) - Math.max(0, Math.min(...projections)) > LINE_EPSILON;
+}
+
+function lineDiagnostics(before: Primitive[], after: Primitive[]): Record<string, unknown> {
+	const beforeById = new Map(before.map(line => [line.primitiveId, line]));
+	const afterById = new Map(after.map(line => [line.primitiveId, line]));
+	const changed = (line: Primitive, other: Map<string, Primitive>): boolean => {
+		const match = other.get(line.primitiveId);
+		return !match || !matchesRequested(match, line);
+	};
+	const oldLines = before.filter(line => changed(line, afterById));
+	const newLines = after.filter(line => changed(line, beforeById));
+	return {
+		beforeCount: oldLines.length,
+		afterCount: newLines.length,
+		before: preserveBoundedArray(oldLines.slice(0, MAX_LINE_DIAGNOSTICS)),
+		after: preserveBoundedArray(newLines.slice(0, MAX_LINE_DIAGNOSTICS)),
+		truncated: oldLines.length > MAX_LINE_DIAGNOSTICS || newLines.length > MAX_LINE_DIAGNOSTICS,
+		limit: MAX_LINE_DIAGNOSTICS,
+	};
+}
+
 function requestedMismatches(actual: Primitive, requested: Record<string, unknown>): Array<Record<string, unknown>> {
 	return preserveBoundedArray(Object.entries(requested)
 		.filter(([field, wanted]) => !matchesRequested(actual, { [field]: wanted }))
@@ -413,6 +556,11 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 		nativeProperty.polygon = createPolygon(runtime, nativeProperty.polygonSource as PolygonSource);
 		delete nativeProperty.polygonSource;
 	}
+	const beforeLines = action === 'modify' && writableKind === 'line'
+		? await lineSnapshot(runtime, pageUuid)
+		: undefined;
+	if (beforeLines && !beforeLines.some(line => line.primitiveId === primitiveId && matchesRequested(line, before!)))
+		throw new Error('EDA target line changed during preflight.');
 	await assertSamePage(runtime, pageUuid);
 	let nativeResult: unknown;
 	try {
@@ -468,6 +616,54 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 						}
 					: {}),
 			};
+		}
+		if (writableKind === 'line' && beforeLines) {
+			const afterLines = await lineSnapshot(runtime, pageUuid);
+			const targetBefore = beforeLines.find(line => line.primitiveId === primitiveId)!;
+			const targetAfter = { ...targetBefore, ...requested } as Primitive;
+			const beforeById = new Map(beforeLines.map(line => [line.primitiveId, line]));
+			const afterById = new Map(afterLines.map(line => [line.primitiveId, line]));
+			const changedAfter = afterLines.filter((line) => {
+				const previous = beforeById.get(line.primitiveId);
+				return !previous || !matchesRequested(line, previous);
+			});
+			// Existing copper can be the complete result of a native merge. It also
+			// proves an idempotent property write without requiring an artificial change.
+			const targetSegments = afterLines.filter(line => lineSegmentContained(line, targetAfter));
+			const collinearBefore = beforeLines.filter(line => line.primitiveId !== primitiveId && lineCollinear(line, targetAfter));
+			// Natives may also merge the modified line with touching collinear copper.
+			// Accept such a primitive only when its whole extent was copper before the
+			// write, so an applied merge cannot smuggle in new or moved copper.
+			const mergedSegments = afterLines.filter(line => !targetSegments.includes(line)
+				&& lineOverlaps(line, targetAfter)
+				&& lineCovered(line, [...collinearBefore, targetAfter]));
+			const targetPieces = [...targetSegments, ...mergedSegments];
+			// Native rewrites are observed rather than predicted: every primitive that
+			// disappeared or changed must still be covered by the current copper, which
+			// covers neighbours split where the requested line crosses them rather than
+			// where the previously read line did (issue #94).
+			const replacedBefore = beforeLines.filter((line) => {
+				const observed = afterById.get(line.primitiveId);
+				return line.primitiveId !== primitiveId && (!observed || !matchesRequested(observed, line));
+			});
+			const replacedVerified = replacedBefore.every(oldLine => lineCovered(oldLine, afterLines));
+			const targetVerified = targetPieces.length > 0 && lineCovered(targetAfter, targetPieces);
+			const oldTargetRemains = afterLines.some(line => line.primitiveId === primitiveId && matchesRequested(line, targetBefore));
+			// No changed copper may appear outside the requested line and the copper it replaced.
+			const unexpected = changedAfter.filter(line => !targetPieces.includes(line)
+				&& !beforeLines.some(oldLine => oldLine.primitiveId !== primitiveId && lineSegmentContained(line, oldLine)));
+			// A split can retain the unchanged old ID as a proper part of an extended
+			// target. Require newly completed coverage so pre-existing overlapping
+			// copper cannot hide an ignored modification.
+			const retainedTargetSegment = oldTargetRemains && lineSegmentContained(targetBefore, targetAfter)
+				&& !lineCovered(targetAfter, beforeLines);
+			if (oldTargetRemains && !matchesRequested(targetBefore, requested!) && !retainedTargetSegment)
+				unexpected.push(targetBefore);
+			if (targetVerified && replacedVerified && unexpected.length === 0) {
+				return { ok: true, action, scope: SCOPE, pageUuid, kind: writableKind, primitiveId: targetPieces[0].primitiveId, primitiveIds: preserveBoundedArray(targetPieces.map(line => line.primitiveId)), primitive: targetPieces[0], normalization: { kind: 'split_or_merged_line', verification: 'requested_and_replaced_collinear_coverage', replacedPrimitiveIds: preserveBoundedArray(replacedBefore.map(line => line.primitiveId)), mergedPrimitiveIds: preserveBoundedArray(mergedSegments.map(line => line.primitiveId)), replacementPrimitiveIds: preserveBoundedArray(changedAfter.map(line => line.primitiveId)) }, verified: true };
+			}
+			const diagnostics = lineDiagnostics(beforeLines, afterLines);
+			return unknownAfterWrite(action, new Error('EDA line readback does not prove equivalent affected geometry.'), { ...context, after: diagnostics.after, affectedLines: diagnostics, requested, failureKind: 'state_mismatch' });
 		}
 		const observed = await getOne(runtime, writableKind, primitiveId!, pageUuid);
 		const invalidViaDimensions = writableKind === 'via' && observed !== undefined && observed !== null

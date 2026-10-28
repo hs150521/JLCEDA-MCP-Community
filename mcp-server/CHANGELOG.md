@@ -1,6 +1,16 @@
 # 更新日志
 
-## [Unreleased]
+## [2.4.0] - 2026-10-28
+
+- 配合 Bridge 更新 `pcb_routing_edit` 与 `pcb_pour_manage`：拆线/合并按完整覆盖核验，延伸可保留旧 ID 为请求的一部分但须证明新增覆盖；覆铜重建以当前页回读为权威，原生部分、空集合或相同重复记录不单独判为失败，重复保留诊断，页面回读重复 ID 仍拒绝。
+- PR #97 复查补齐幂等直线修改与未变化铜线合并、封装引用盘点不可用时的完整性诊断，以及原理图 Component/Symbol/Footprint 绑定和未请求 BOM 属性的读回保护；Server 继续传递实际状态、差异和未知提交恢复要求。
+- 配合 Bridge 的 EDA 3.x/4.x engines 及官方 `@jlceda/pro-api-types 0.4.27` 索引，公开 API 备注、弃用说明与最低版本。已知宿主版本不满足元数据门槛时，Bridge 在原生调用前返回 `EDA_VERSION_UNSUPPORTED` 和 `nativeCallAttempted:false`，包括 4.1.79/4.2 新增接口及 v5 专用接口。
+- `manufacture_export` 输入 schema 新增原理图 `png`、`svg`；PNG resolution 提供时至少指定一项宽高，每边为 1–4096 的整数，SVG 不接受 resolution。旧 document 分支继续兼容，标注其原生接口从 EDA v4.1 起弃用；新分支要求 EDA 3.2.183 / 4.1.23。
+- `design_archive_export` 新增 `action:"schematic"`，同步当前原理图归档参数及 EDA 3.2.183 / 4.1.23 门槛；保持受限 Base64 返回。
+- `design_compare` 原理图来源仅接受 UUID 字符串，PCB 来源保持 UUID 或工程/PCB 对象，并新增 valUnit、deviation、comparisonSize 选项；后两项按 EDA 4.1.78 实机结果要求有限且严格大于零，schema 与 handler 同步。两种比较最低版本为 EDA 3.2.205 / 4.1.62，按原生 success 判断成功。
+- `library_classification_query` 输入保持不变，输出完整 namePath、可选 uuid、实际 classificationApi 及回退时的 fallbackReason。Bridge 优先新版树，在新方法缺失或新版合法空树而旧树非空时回退；新版抛错/非法结果不回退，旧接口缺失或两边均空时保留新版空树。
+- 匹配 Bridge/Server 2.4.0 在 EDA 4.1.78 的专用测试项目副本实测通过线宽/器件修改与恢复、BOM/三库绑定保留、新导出，以及末轮公共库分类回退和 17 个填充的覆铜重建；重建 verified:true、page_readback，无误隔离。本轮另验证比较、版本拦截、封装源完整性和 recover/readback，范围见 [2.4.0 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.4.0/docs/releases/v2.4.0.md)。
+- 两端完整本地 build/test/lint、多客户端验证通过；最后分类/覆铜摘要补修后定向测试、lint、typecheck、compile、runtime 再次通过。Server 生产依赖审计 0 项，开发依赖仍有 Bridge 18 项、Server 9 项告警；本轮未重跑 EDA 3.x，也未逐项实测新索引全部 API。此处记录本地验证；远端检查与下载状态以 GitHub Actions/Release 为准，校验和随最终 Release 附件提供。
 
 ## [2.3.10] - 2026-10-05
 

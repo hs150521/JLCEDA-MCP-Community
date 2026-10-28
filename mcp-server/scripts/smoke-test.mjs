@@ -237,7 +237,7 @@ async function testProtocolVersion(protocolVersion) {
     const [invalidCallLine] = await Promise.race([invalidCallLinePromise, lineTimeout]);
     const invalidCallResponse = JSON.parse(invalidCallLine);
     assert.equal(invalidCallResponse.id, 5);
-    assert.match(JSON.stringify(invalidCallResponse), /property must contain at least one field/);
+    assert.match(JSON.stringify(invalidCallResponse), /property must contain at least one field|expected object to have >=1 propert/);
 
     const pourCallLinePromise = once(lines, 'line');
     child.stdin.write(JSON.stringify({
@@ -266,7 +266,7 @@ async function testProtocolVersion(protocolVersion) {
     const [invalidPourCallLine] = await Promise.race([invalidPourCallLinePromise, lineTimeout]);
     const invalidPourCallResponse = JSON.parse(invalidPourCallLine);
     assert.equal(invalidPourCallResponse.id, 7);
-    assert.match(JSON.stringify(invalidPourCallResponse), /property must contain at least one field/);
+    assert.match(JSON.stringify(invalidPourCallResponse), /property must contain at least one field|expected object to have >=1 propert/);
 
     const invalidRoutingCallLinePromise = once(lines, 'line');
     child.stdin.write(JSON.stringify({
@@ -280,7 +280,7 @@ async function testProtocolVersion(protocolVersion) {
     const [invalidRoutingCallLine] = await Promise.race([invalidRoutingCallLinePromise, lineTimeout]);
     const invalidRoutingCallResponse = JSON.parse(invalidRoutingCallLine);
     assert.equal(invalidRoutingCallResponse.id, 8);
-    assert.match(JSON.stringify(invalidRoutingCallResponse), /property must contain at least one field/);
+    assert.match(JSON.stringify(invalidRoutingCallResponse), /property must contain at least one field|expected object to have >=1 propert/);
 
     const routingReadLinePromise = once(lines, 'line');
     child.stdin.write(JSON.stringify({

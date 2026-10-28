@@ -3,8 +3,14 @@ const path = require('node:path');
 const process = require('node:process');
 
 const isWindows = process.platform === 'win32';
-const executable = isWindows ? 'py' : 'python3';
-const pythonArgs = isWindows ? ['-3'] : [];
+const executable = process.env.PYTHON || (isWindows ? 'py' : 'python3');
+const pythonArgs = isWindows && !process.env.PYTHON ? ['-3'] : [];
+const options = { stdio: 'inherit', env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1' } };
+const tests = spawnSync(executable, [...pythonArgs, path.join('..', 'tool', 'test_generate_jlceda_api_doc.py')], options);
+if (tests.error)
+	throw tests.error;
+if (tests.status !== 0)
+	process.exit(tests.status ?? 1);
 const generatorPath = path.join('..', 'tool', 'generate_jlceda_api_doc.py');
 const result = spawnSync(executable, [
 	...pythonArgs,
@@ -16,7 +22,7 @@ const result = spawnSync(executable, [
 	'--typescript-module',
 	'node_modules/typescript/lib/typescript.js',
 	'--check',
-], { stdio: 'inherit' });
+], options);
 
 if (result.error) {
 	throw result.error;

@@ -1,0 +1,260 @@
+name: GitHub Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '版本标签，例如 v2.4.0；留空时按所选提交的包版本生成'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  server-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: node verify-multi-client.mjs
+      - run: npm audit --omit=dev --registry=https://registry.npmjs.org
+
+  build-and-release:
+    needs: server-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            mcp-server/package-lock.json
+            mcp-bridge/package-lock.json
+
+      - name: Check tag, package versions and release notes
+        id: release
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync, spawnSync } = require('node:child_process');
+          const readJson = path => JSON.parse(fs.readFileSync(path, 'utf8'));
+          const tag = process.env.RELEASE_TAG || `v${readJson('mcp-server/package.json').version}`;
+          if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(tag))
+            throw new Error('Release tag must be a semantic version prefixed with v.');
+          const version = tag.slice(1);
+          const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          if (commit !== process.env.GITHUB_SHA)
+            throw new Error('The checkout must match the immutable event commit.');
+          const tagLookup = spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/tags/${tag}`]);
+          if (tagLookup.status === 0) {
+            const taggedCommit = execFileSync('git', ['rev-parse', `refs/tags/${tag}^{commit}`], { encoding: 'utf8' }).trim();
+            if (commit !== taggedCommit)
+              throw new Error('The checked-out commit does not match the existing release tag.');
+          } else if (tagLookup.status !== 1 || process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
+            throw new Error('Only workflow_dispatch may create a missing release tag.');
+          }
+          for (const directory of ['mcp-server', 'mcp-bridge']) {
+            const pkg = readJson(`${directory}/package.json`);
+            const lock = readJson(`${directory}/package-lock.json`);
+            if ([pkg.version, lock.version, lock.packages?.['']?.version].some(value => value !== version))
+              throw new Error(`${directory} package and lockfile versions must all equal ${version}.`);
+          }
+          const extension = readJson('mcp-bridge/extension.json');
+          if (extension.version !== version || extension.name !== 'mcp-bridge-community')
+            throw new Error('Extension version or package name does not match the release.');
+          if (readJson('mcp-server/package.json').name !== 'jlceda-mcp-server')
+            throw new Error('Unexpected MCP Server package name.');
+          const section = path => {
+            const text = fs.readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+            const block = text.split(/(?=^## )/m).find(item => item.match(/^##\s+\[([^\]]+)\]/)?.[1] === version);
+            const body = block?.slice(block.indexOf('\n') + 1).trim();
+            if (!body)
+              throw new Error(`${path} must contain non-empty release notes under ## [${version}].`);
+            return body;
+          };
+          const notes = [
+            `# JLCEDA MCP 社区版 ${tag}`,
+            `Bridge 与 Server 来自同一标签 ${tag}（提交 ${commit}），请配套安装。`,
+            '## Bridge',
+            section('mcp-bridge/CHANGELOG.md'),
+            '## MCP Server',
+            section('mcp-server/CHANGELOG.md'),
+            '## 安装包与验证',
+            `- EDA 扩展：\`mcp-bridge-community-${version}.eext\`\n- MCP Server：\`jlceda-mcp-server-${version}.tgz\`\n- SHA-256 校验：\`SHA256SUMS\``,
+            '发布工作流已完成 Windows/Linux Server 测试和 Linux Bridge 构建、lint 与打包；这不替代 CHANGELOG 中明确记录的 EDA 宿主实测。此流程不发布到 npm registry。',
+            `<!-- release-commit: ${commit} -->`,
+          ].join('\n\n') + '\n';
+          fs.mkdirSync('build', { recursive: true });
+          fs.writeFileSync('build/release-notes.md', notes);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\nversion=${version}\ncommit=${commit}\nprerelease=${version.split('+')[0].includes('-')}\n`);
+          NODE
+
+      - name: Install, test and audit MCP Server
+        working-directory: mcp-server
+        run: |
+          npm ci
+          npm test
+          npm run lint
+          node verify-multi-client.mjs
+          npm audit --omit=dev --registry=https://registry.npmjs.org
+
+      - name: Install, build and lint Bridge
+        working-directory: mcp-bridge
+        run: |
+          npm ci
+          npm run build
+          npm run lint
+
+      - name: Check generated tracked files
+        run: git diff --exit-code
+
+      - name: Pack MCP Server
+        working-directory: mcp-server
+        run: npm pack --json --pack-destination ../build > ../build/server-pack.json
+
+      - name: Verify packages and create checksums
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const version = process.env.RELEASE_VERSION;
+          const packed = JSON.parse(fs.readFileSync('build/server-pack.json', 'utf8'));
+          const server = `jlceda-mcp-server-${version}.tgz`;
+          if (packed.length !== 1 || packed[0].filename !== server || packed[0].version !== version)
+            throw new Error('npm pack did not create the expected versioned MCP Server archive.');
+          if (!packed[0].files.some(file => file.path === 'dist/index.js' && file.size > 0))
+            throw new Error('The packed MCP Server is missing its compiled entry point.');
+          const names = [`mcp-bridge-community-${version}.eext`, server];
+          const checksums = names.map(name => {
+            const data = fs.readFileSync(`build/${name}`);
+            if (data.length === 0)
+              throw new Error(`Empty release asset: ${name}`);
+            return `${crypto.createHash('sha256').update(data).digest('hex')}  ${name}`;
+          }).join('\n') + '\n';
+          fs.writeFileSync('build/SHA256SUMS', checksums);
+          NODE
+
+      - name: Upload, verify and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          node <<'NODE'
+          const { GH_TOKEN, GH_REPO, GITHUB_API_URL, RELEASE_TAG, RELEASE_COMMIT, GITHUB_EVENT_NAME } = process.env;
+          const api = async (path, method = 'GET', body) => {
+            const response = await fetch(`${GITHUB_API_URL}/repos/${GH_REPO}/${path}`, {
+              method,
+              headers: { Authorization: `Bearer ${GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+              ...(body ? { body: JSON.stringify(body) } : {}),
+            });
+            if (!response.ok && ![404, 422].includes(response.status))
+              throw new Error(`GitHub ${method} ${path} failed: HTTP ${response.status}`);
+            return { status: response.status, data: await response.json() };
+          };
+          async function prepareTag() {
+            const tag = encodeURIComponent(RELEASE_TAG);
+            let release = await api(`releases/tags/${tag}`);
+            // The tag endpoint may omit drafts; find any visible draft before creating a ref.
+            if (release.status === 404) {
+              for (let page = 1; ; page++) {
+                const listed = await api(`releases?per_page=100&page=${page}`);
+                if (listed.status !== 200 || !Array.isArray(listed.data))
+                  throw new Error('Cannot verify existing draft releases.');
+                const matching = listed.data.find(item => item.tag_name === RELEASE_TAG);
+                if (matching) release = { status: 200, data: matching };
+                if (matching || listed.data.length < 100) break;
+              }
+            }
+            if (release.status !== 404 && (release.status !== 200 || !release.data.draft || !release.data.body?.includes(`<!-- release-commit: ${RELEASE_COMMIT} -->`)))
+              throw new Error('Refusing an already published release or a draft from another commit.');
+            const ref = await api(`git/ref/tags/${tag}`);
+            if (ref.status === 404) {
+              if (GITHUB_EVENT_NAME !== 'workflow_dispatch')
+                throw new Error('A tag-push release cannot recreate a missing tag.');
+              const created = await api('git/refs', 'POST', { ref: `refs/tags/${RELEASE_TAG}`, sha: RELEASE_COMMIT });
+              if (created.status !== 201 && created.status !== 422)
+                throw new Error(`Creating the release tag failed: HTTP ${created.status}`);
+              // A concurrent creator may win; accept only the same immutable commit below.
+              const confirmed = await api(`git/ref/tags/${tag}`);
+              if (confirmed.status !== 200 || confirmed.data.ref !== `refs/tags/${RELEASE_TAG}`)
+                throw new Error('The release tag was not created.');
+            } else if (ref.status !== 200 || ref.data.ref !== `refs/tags/${RELEASE_TAG}`) {
+              throw new Error('Cannot verify the existing release tag.');
+            }
+            const resolved = await api(`commits/${tag}`);
+            if (resolved.status !== 200 || resolved.data.sha !== RELEASE_COMMIT)
+              throw new Error('The release tag points to another commit; it will not be moved.');
+          }
+          prepareTag().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+          remote_commit="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)"
+          if [ "$remote_commit" != "$RELEASE_COMMIT" ]; then
+            echo 'Release tag moved after the checkout; refusing to publish.' >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --json isDraft,body > build/existing-release.json; then
+            node <<'NODE'
+          const fs = require('node:fs');
+          const release = JSON.parse(fs.readFileSync('build/existing-release.json', 'utf8'));
+          if (!release.isDraft)
+            throw new Error('This version is already published; release assets will not be replaced.');
+          if (!release.body.includes(`<!-- release-commit: ${process.env.RELEASE_COMMIT} -->`))
+            throw new Error('The existing draft was not created from this commit by the release workflow.');
+          NODE
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease="$PRERELEASE" \
+              --title "JLCEDA MCP 社区版 $RELEASE_TAG" --notes-file build/release-notes.md
+          fi
+          gh release edit "$RELEASE_TAG" --draft --prerelease="$PRERELEASE" \
+            --title "JLCEDA MCP 社区版 $RELEASE_TAG" --notes-file build/release-notes.md
+          gh release upload "$RELEASE_TAG" \
+            "build/mcp-bridge-community-$RELEASE_VERSION.eext" \
+            "build/jlceda-mcp-server-$RELEASE_VERSION.tgz" build/SHA256SUMS --clobber
+          mkdir -p build/downloaded
+          gh release download "$RELEASE_TAG" --dir build/downloaded \
+            --pattern "mcp-bridge-community-$RELEASE_VERSION.eext" \
+            --pattern "jlceda-mcp-server-$RELEASE_VERSION.tgz" --pattern SHA256SUMS
+          cmp build/SHA256SUMS build/downloaded/SHA256SUMS
+          (cd build/downloaded && sha256sum --check SHA256SUMS)
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"
+          gh release view "$RELEASE_TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"

@@ -41,6 +41,44 @@ function getFileManager(): Record<string, unknown> {
 	return api;
 }
 
+async function readReferencedFootprintUuids(eda: Record<string, unknown>): Promise<{ available: boolean; uuids: string[] }> {
+	const api = eda.pcb_PrimitiveComponent;
+	if (!isPlainObjectRecord(api) || typeof api.getAll !== 'function')
+		return { available: false, uuids: [] };
+	let components: unknown;
+	try {
+		components = await (api.getAll as () => Promise<unknown>).call(api);
+	}
+	catch {
+		return { available: false, uuids: [] };
+	}
+	if (!Array.isArray(components))
+		return { available: false, uuids: [] };
+	const uuids = new Set<string>();
+	let available = true;
+	for (const component of components) {
+		try {
+			const getter = (component as Record<string, unknown> | null)?.getState_Footprint;
+			if (typeof getter !== 'function') {
+				available = false;
+				continue;
+			}
+			const reference: unknown = getter.call(component);
+			// The native API uses undefined for a component without a library footprint.
+			if (reference === undefined)
+				continue;
+			if (isPlainObjectRecord(reference) && typeof reference.uuid === 'string' && reference.uuid.trim())
+				uuids.add(reference.uuid);
+			else
+				available = false;
+		}
+		catch {
+			available = false;
+		}
+	}
+	return { available, uuids: [...uuids] };
+}
+
 function textBytes(value: string): Uint8Array {
 	return new TextEncoder().encode(value);
 }
@@ -82,13 +120,45 @@ export async function handleDesignSourceExportTask(payload: unknown): Promise<un
 			throw new TypeError('EDA sys_FileManager.getDocumentSource returned an invalid result.');
 		return { ok: true, action, source: sourceSummary(source, includeData, maxBytes, previewBytes) };
 	}
+	const eda = getEdaRuntime();
+	const references = eda ? await readReferencedFootprintUuids(eda) : { available: false, uuids: [] };
 	const getDocumentFootprintSources = api.getDocumentFootprintSources;
-	if (typeof getDocumentFootprintSources !== 'function')
-		throw new TypeError('EDA sys_FileManager.getDocumentFootprintSources API is unavailable in this client version.');
+	if (typeof getDocumentFootprintSources !== 'function') {
+		return {
+			ok: false,
+			action,
+			complete: false,
+			total: 0,
+			returned: 0,
+			truncated: false,
+			sources: [],
+			referencedFootprintUuids: references.uuids,
+			reason: references.available ? 'native_footprint_sources_api_unavailable' : 'pcb_footprint_reference_inventory_unavailable',
+		};
+	}
 	const rawSources = await (getDocumentFootprintSources as () => Promise<unknown>).call(api);
 	if (!Array.isArray(rawSources))
 		throw new TypeError('EDA sys_FileManager.getDocumentFootprintSources returned an invalid result.');
+	if (rawSources.length === 0 && references.uuids.length > 0) {
+		return {
+			ok: false,
+			action,
+			complete: false,
+			total: 0,
+			returned: 0,
+			truncated: false,
+			sources: [],
+			referencedFootprintUuids: references.uuids,
+			reason: 'native_footprint_sources_empty_for_populated_pcb',
+		};
+	}
 	const limit = parseBoundedIntegerValue(input.limit, 50, 1, MAX_FOOTPRINTS);
+	const truncated = rawSources.length > limit;
+	const listedUuids = new Set(rawSources
+		.filter((item): item is Record<string, unknown> => isPlainObjectRecord(item) && typeof item.footprintUuid === 'string')
+		.map(item => item.footprintUuid as string));
+	// A partial native list must not read as a complete inventory of the PCB.
+	const missingReferencedFootprintUuids = references.uuids.filter(uuid => !listedUuids.has(uuid));
 	let remainingDataBytes = maxBytes;
 	const sources = preserveBoundedArray(rawSources.slice(0, limit).map((item, index) => {
 		if (!isPlainObjectRecord(item) || typeof item.footprintUuid !== 'string' || typeof item.documentSource !== 'string')
@@ -109,5 +179,19 @@ export async function handleDesignSourceExportTask(payload: unknown): Promise<un
 			source,
 		};
 	}));
-	return { ok: true, action, total: rawSources.length, returned: sources.length, truncated: rawSources.length > limit, sources };
+	return {
+		ok: true,
+		action,
+		complete: references.available && !truncated && missingReferencedFootprintUuids.length === 0,
+		total: rawSources.length,
+		returned: sources.length,
+		truncated,
+		...(!references.available
+			? { referencedFootprintUuids: references.uuids, reason: 'pcb_footprint_reference_inventory_unavailable' }
+			: {}),
+		...(missingReferencedFootprintUuids.length > 0
+			? { referencedFootprintUuids: references.uuids, missingReferencedFootprintUuids, missingReferencedFootprintCount: missingReferencedFootprintUuids.length }
+			: {}),
+		sources,
+	};
 }

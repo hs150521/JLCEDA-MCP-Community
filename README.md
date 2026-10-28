@@ -1,6 +1,26 @@
 # JLCEDA MCP 社区版
 
-当前源码版本：Bridge `2.3.10`，MCP Server `2.3.10`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+当前源码版本：Bridge `2.4.0`，MCP Server `2.4.0`；可下载版本以 [GitHub Release](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 和嘉立创扩展广场各自的发布状态为准。2.3.3 扩充了原理图与 PCB 的完整读取和受控编辑，支持一条工具调用打开或激活当前工程的图页，并修复复制页共享图元 ID、交互放置结果及无网络 PCB 图元的回读。EDA 修改超时或连接失联后，Server 会保留诊断，按操作目标完成只读回读后才能恢复写入。
+
+## 2.4.0：EDA v4 兼容与 PR #97 复查
+
+本轮开发对象为 MCP Server 和 EDA Bridge 扩展。扩展的 EDA engines 扩展为 `^3.0.0 || ^4.0.0`，官方类型及离线 API 索引同步到 `@jlceda/pro-api-types 0.4.27`。安装兼容范围与单项 API 的可用版本分别检查；索引包含较新接口，不代表当前宿主均可调用。
+
+`api_search` 返回官方备注、弃用说明和 `minimumEditorVersions`；`api_invoke` 在能够读取宿主版本及 API 元数据时，对明确不支持的方法返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"` 和 `nativeCallAttempted:false`。例如，低于 4.1.79 的宿主不能调用标注从 4.1.79 新增的方法，EDA v4 也不能调用标注为 v5 新增的方法。版本未知或缺少元数据时不推断可用性，仍需核对原生能力及实际返回。
+
+| 功能 | EDA 3.x 最低版本 | EDA 4.x 最低版本 |
+| --- | --- | --- |
+| 原理图 PNG/SVG 与原理图归档 | 3.2.183 | 4.1.23 |
+| 原理图/PCB 设计比较 | 3.2.205 | 4.1.62 |
+
+- `manufacture_export` 新增 `domain:"schematic"` 的 `kind:"png"`、`kind:"svg"`。PNG 可选 `resolution:{"width":2048}` 或 `{"width":2048,"height":1024}`；提供 resolution 时至少包含一边，宽高均为 1–4096 的整数。省略 resolution 使用原生分辨率。SVG 不接受 resolution，多图页可能返回 ZIP；结果保留实际文件名和类型。旧 `kind:"document"` 继续兼容，其原生接口从 EDA v4.1 起已弃用，PNG/SVG 推荐使用新分支。
+- `design_archive_export action:"schematic"` 导出当前原理图归档，沿用 `fileName`、`fileType`、`includeData` 和字节上限；仅在明确请求时返回 Base64 数据。
+- `design_compare domain:"schematic"` 的 `sourceA`、`sourceB` 只接受原理图 UUID。PCB 比较继续接受 UUID 或 `{projectUuid,pcbUuid}`，新增 `options.valUnit`、`deviation` 和 `comparisonSize`；后两项须为有限正数，单位可选 mil、mm、inch、cm。原理图/PCB 比较要求原生 `success:true` 才报告成功。
+- `library_classification_query` 输入保持不变，优先调用新的 `getClassificationTree`；新方法缺失时使用旧接口，新方法返回合法空树且旧接口返回非空树时也回退，以保留 v4 公共库分类。新接口抛错或返回非法结果不会回退；旧接口不存在或两边均为空时保留新接口的空树。`classificationApi` 标明实际来源，发生回退时 `fallbackReason` 为 `modern_api_unavailable` 或 `modern_tree_empty`。节点提供完整 `namePath:string[]`，`uuid` 仅在原生提供时保留。
+
+[PR #97](https://github.com/hs150521/JLCEDA-MCP-Community/pull/97) 的复查补修包括：PCB 直线的幂等修改及合并到未变化已有铜线的回读；封装引用盘点缺失、异常或坏数据时不再声明源码清单完整；原理图器件编辑核对 Component、Symbol、Footprint 绑定及未请求修改的 BOM 属性，防止自定义属性更新静默清空供应商等字段。保留拆线/合并、覆铜重建和原生元数据保护的回归。
+
+匹配 Bridge/Server 2.4.0 已在 EDA 4.1.78 的专用测试项目副本实测器件修改/恢复、线宽幂等与修改、PNG/SVG/原理图归档；末轮公共库分类回退和 17 个填充的覆铜重建复测通过，未再误入隔离。两端完整本地门禁和最后补修的定向验证通过；EDA 3.x 本轮未重跑，索引全部 API 未逐项实测。此处记录本地验证；远端检查与下载状态以 GitHub Actions/Release 为准，验证范围和依赖审计边界见 [2.4.0 发布说明](docs/releases/v2.4.0.md)。
 
 ## 2.3.10 原生导线段读取
 
@@ -103,19 +123,19 @@ PCB `autoRouting` 指定网络时使用 `RoutingNets:["网络名"]`；返回值�
 - `eda_context`：在客户端支持时返回 JLCEDA/EasyEDA 版本、在线模式、编辑器版本、编译日期和当前画布数据单位。
 - `eda_canvas_snapshot`：读取当前画布元数据，并可在明确请求时返回受限的只读 MCP 图像。
 - `design_source_export`：读取当前文档或封装源文件的受限预览；完整源文本需要明确授权且受字节数限制。
-- `design_archive_export`：读取原生当前工程/当前文档归档的元数据；只有明确请求时才返回受限的 Base64 数据，不写入文件。
-- `library_preview` 和 `library_classification_query`：预览符号/封装资源并浏览受限的官方库分类树。
+- `design_archive_export`：读取原生当前工程、当前文档或当前原理图归档的元数据，也可按工程 UUID 导出；只有明确请求时才返回受限的 Base64 数据，不写入文件。
+- `library_preview` 和 `library_classification_query`：预览符号/封装资源并浏览受限的官方库分类树；分类节点提供完整 `namePath`，兼容新版无 UUID 的多级树与旧版带 UUID 的树。
 - `workspace_query`：查询当前工作区、团队、工程和文件夹，并发现可访问的资源。
-- `design_compare`：调用官方原理图、PCB 和网表比较 API，并返回版本相关错误。
+- `design_compare`：调用官方原理图、PCB 和网表比较 API；原理图使用 UUID 字符串，PCB 可选比较单位及容差参数，已知不支持的宿主在调用前返回版本错误。
 - `pcb_layer_query`：读取 PCB 层和铜层数量。
 - `pcb_layer_manage`：读取当前 PCB 的完整图层清单与铜层数，或用 `confirm:true` 将铜层总数设置为 2–32 的偶数；大型 PCB 可用 `timeoutMs` 调整调用预算，降层前阻止移除非空内层，写后核对同页结果，提交状态未知时按同页图层回读恢复。
 - `pcb_realtime_drc`：读取或明确启停 PCB 实时 DRC。
 - `pcb_document_action`：读取 PCB 坐标、选中图元、区域图元、过滤器和画布状态；执行视图导航、保存、变更导入以及 Base64 自动布局/布线文件导入。
 - `component_select`：支持精确器件属性查询，包括 LCSC `supplierId`。
 - `library_sources`：列出系统、个人、工程和收藏库。
-- `library_search`：搜索或读取 0.4.15 设备、符号、封装、3D 模型、可复用模块和 Panel 库资源，也支持仿真模型搜索；设备搜索支持精确属性和官方 LCSC C 编号映射。设备名称属性搜索会核对实际名称，各页固定关键词搜索并核对全部请求属性。
+- `library_search`：按官方 0.4.27 类型搜索或读取设备、符号、封装、3D 模型、可复用模块和 Panel 库资源，也支持仿真模型搜索；设备搜索支持精确属性和官方 LCSC C 编号映射。设备名称属性搜索会核对实际名称，各页固定关键词搜索并核对全部请求属性。
 - `pcb_constraints_query`：读取当前规则、规则配置、网络规则、区域规则和约束组。
-- `manufacture_export`：生成受限的 BOM、Gerber、网表、贴片坐标等制造文件；仅校验选定 domain/kind 的参数，BOM、图纸文档、标准与仿真网表使用各自格式，避免其他分支提前校验。
+- `manufacture_export`：生成受限的 BOM、Gerber、网表、贴片坐标及原理图 PNG/SVG 等文件；仅校验选定 domain/kind 的参数，PNG 可指定最大 4096 像素的宽高。
 - `manufacture_templates_query`：列出 PCB BOM 模板或原理图装配变体；`manufacture_export` 可使用返回的装配变体。
 
 `schematic_document_action` 与 `pcb_document_action` 的纯查询和画布导航可在写入隔离期间使用；改变选择状态、飞线计算、保存和导入仍按写操作隔离。
@@ -140,10 +160,10 @@ PCB `import_changes` 返回 `pending_confirmation` 后，全局写入暂停，�
 Codex / Claude / Cursor / 其他 MCP 客户端
                   | STDIO MCP
                   v
-       JLCEDA MCP Server 2.3.10
+       JLCEDA MCP Server 2.4.0
                   | 本机 WebSocket
                   v
-       MCP Bridge 社区版 2.3.10
+       MCP Bridge 社区版 2.4.0
                   | JLCEDA 扩展 API
                   v
            嘉立创 EDA 专业版
@@ -151,18 +171,18 @@ Codex / Claude / Cursor / 其他 MCP 客户端
 
 市场中的 `.eext` 只包含 EDA Bridge；原生 MCP Server 需要从同一个 GitHub Release 另行安装。社区版不依赖旧版 VS Code/Cursor MCP Hub。
 
-## 安装 2.3.10
+## 安装 2.4.0
 
-以下为 2.3.10 的安装文件名；是否可下载以发布页为准，并保持 Bridge 与 Server 版本一致。
+以下为 2.4.0 的安装文件名；是否可下载以发布页为准，并保持 Bridge 与 Server 版本一致。
 
 需要 Node.js 20 或更高版本。
 
-1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.3.10.eext`。
+1. 从 [发布页](https://github.com/hs150521/JLCEDA-MCP-Community/releases) 下载并在嘉立创 EDA 扩展管理器中安装 `mcp-bridge-community-2.4.0.eext`。
    安装后在“已安装”的扩展详情中确认已允许“外部交互”，否则 Bridge 无法连接本机 MCP Server。
 2. 下载 MCP Server 包并安装：
 
    ```powershell
-   npm install --global .\jlceda-mcp-server-2.3.10.tgz
+   npm install --global .\jlceda-mcp-server-2.4.0.tgz
    Get-Command jlceda-mcp
    ```
 
@@ -207,7 +227,7 @@ codex mcp list
 - Server 仅监听 `127.0.0.1`，Bridge Token 不得提交或公开。
 - MCP 写工具可修改当前工程；执行前请保存并核对活动项目和页面。
 - 不要让旧版 MCP Hub 与原生 Server 同时占用端口 8765。
-- 本版扩展仅声明兼容嘉立创 EDA 专业版 3.x，已在 3.2.181 上测试；EDA v4 需等待未来明确支持 v4 的版本。
+- 当前源码声明兼容嘉立创 EDA 专业版 3.x 与 4.x，具体功能另按官方最低版本检查。本轮实测宿主为 EDA 4.1.78，未重跑 3.x，也未逐项验证 API 索引全部方法；请安装匹配发布版本的 Bridge 与 Server。
 - 官方 `createNetLabel` 从 EDA v4 起提供，当前 3.x 版本无法创建普通网络标签。Bridge 直接返回 `EDA_VERSION_UNSUPPORTED`，不会启动可能挂起的 EDA 调用；电源和地网络标识仍可使用。
 
 ## 当前操作限制
@@ -235,6 +255,7 @@ npm run build
 - [安全政策](SECURITY.md)
 - [隐私与本地数据流](PRIVACY.md)
 - [发布检查表](docs/publishing.md)
+- [v2.4.0 发布说明与验证范围](docs/releases/v2.4.0.md)
 - [2.3.5 Issue 验证记录](docs/issue-validation-2.3.5.md)
 - [v2.3.10 发布说明与验证范围](docs/releases/v2.3.10.md)
 - [v2.3.9 发布说明与验证范围](docs/releases/v2.3.9.md)

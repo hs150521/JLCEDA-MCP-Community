@@ -665,7 +665,7 @@ async function main() {
 			async schematicComparison(a, b) {
 				assert.equal(a, 'sch-1');
 				assert.equal(b, 'sch-2');
-				return { changed: 2 };
+				return { success: true, data: { changed: 2 } };
 			},
 			async pcbComparison(a, b) {
 				assert.equal(a, 'pcb-1');
@@ -1474,8 +1474,11 @@ async function main() {
 	assert.equal(truncatedNetlistComparison.byType.Net, 130);
 	assert.equal(truncatedNetlistComparison.differences.length, 120);
 	assert.equal(truncatedNetlistComparison.truncated, true);
+	const originalComparisonEditorVersion = globalThis.eda.sys_Environment.getEditorCurrentVersion;
+	globalThis.eda.sys_Environment.getEditorCurrentVersion = () => '4.1.78';
 	const schematicComparison = await handleDesignCompareTask({ domain: 'schematic', sourceA: 'sch-1', sourceB: 'sch-2' });
-	assert.equal(schematicComparison.result.changed, 2);
+	assert.equal(schematicComparison.ok, true);
+	assert.equal(schematicComparison.result.data.changed, 2);
 	const designNetlistComparison = await handleDesignCompareTask({ domain: 'netlist', sourceA: 'net-1', sourceB: { projectUuid: 'project-1', documentUuid: 'net-2' } });
 	assert.equal(designNetlistComparison.differenceCount, 1);
 	assert.equal(designNetlistComparison.returned, 1);
@@ -1492,6 +1495,7 @@ async function main() {
 	const failedPcbComparison = await handleDesignCompareTask({ domain: 'pcb', sourceA: 'pcb-1', sourceB: { projectUuid: 'project-1', pcbUuid: 'pcb-2' } });
 	assert.equal(failedPcbComparison.ok, false);
 	assert.equal(failedPcbComparison.result.error.code, 'INCOMPATIBLE');
+	globalThis.eda.sys_Environment.getEditorCurrentVersion = originalComparisonEditorVersion;
 	const templates = await handleManufactureTemplatesQueryTask({ domain: 'pcb' });
 	assert.deepEqual(templates.templates, ['jlcpcb', 'assembly']);
 	const exportResult = await handleManufactureExportTask({ domain: 'pcb', kind: 'bom', template: 'jlcpcb', includeData: true });

@@ -53,7 +53,7 @@
 - `schematic_drc_check`：只读检查当前原理图页；默认不打开 UI，返回结构化违规列表。
 - `pcb_constraints_query`：只读读取当前 PCB 的规则、网络类、差分对、等长组或焊盘对组。需要 PCB 页面。
 - `netlist_compare`：对比两个已知的原理图或 PCB 文档 UUID；必须先通过 `project_info` 或 `eda_context` 确认 UUID，不得猜测。
-- `design_compare`：按 `domain` 调用官方原理图、PCB 或网表对比 API。PCB 对比在 `0.4.15` 中标注为 EDA v4.2，旧客户端应返回版本能力错误；不得反复猜测参数。
+- `design_compare`：按 `domain` 调用官方原理图、PCB 或网表对比 API。原理图对比仅接受两个原理图 UUID；PCB 对比支持 `options.valUnit/deviation/comparisonSize`。两者从 EDA v3.2.205 / v4.1.62 提供，旧客户端在调用前返回版本能力错误。
 - `pcb_layer_query`：读取当前 PCB 图层、当前工作层和铜层数量。
 - `pcb_documents_manage`：先从 `bridge_clients` 或 `project_info` 取得当前工程的精确 `projectUuid`；`operation:list` 完整列出该工程的 PCB。创建游离 PCB 时省略 `boardName`；复制需源 `pcbUuid`；重命名需先在 EDA 打开目标 PCB。写入须 `confirm:true`，工具不会切换图页。未知提交时用同一工程的 `operation:list` 完整回读目录，必要时先重启原宿主，核对是否已出现副本或新名称再决定后续操作。
 - `board_setup`：传当前工程的精确 `projectUuid` 和 `confirm:true`，EDA 将创建 Board 及一对关联原理图/PCB；若传入同工程游离 `schematicUuid`，工具先创建游离 PCB，再把两个文档关联到新 Board。返回 Board 名称与文档 UUID，不切换编辑器；PCB 原理图变更仍需在打开 PCB 后单独导入。若任一步返回 `commitUnknown:true`，记录已创建的 PCB UUID，使用 `bridge_recover_client` 和 `readbackPath:"/bridge/jlceda/project/info"`、`readbackPayload:{"includePages":false,"includeBoards":true,"includeSchematics":true,"includePcbs":true,"limit":500}` 完整回读后再决定后续操作；不要盲目重试或自动删除游离文档。
@@ -63,7 +63,9 @@
 - `component_select`：可使用 `properties.supplierId` 等 0.4.15 精确字段查询器件。`keyword` 与 `properties` 二选一；结果按用户已给出的选择或授权处理，确有未决取舍时再请求确认。
 - `netlabel_place`：先通过 `eda_context` 确认编辑器版本。普通网络标签的官方 API 从 EDA v4 起提供；3.x 返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus: not_started`，无需重试。电源/地网络标识仍可放置；不要把电源标识当成普通信号标签。
 - `project_info`：读取工程、板子、原理图、PCB 和图页身份，适合在跨页面任务开始时建立上下文。
-- `manufacture_export`：仅生成白名单制造数据，不直接写入本地文件系统。默认返回文件元数据和文本预览；只有用户明确需要下载数据时才设置 `includeData: true`，并注意 Base64 结果可能很大。
+- `manufacture_export`：仅生成白名单制造数据，不直接写入本地文件系统。原理图新增 `kind:png/svg`，PNG 可指定 `resolution.width/height`（1–4096）；多图页可能返回 ZIP，保留实际文件类型。旧 `kind:document` 使用已弃用接口，仅用于兼容。默认返回文件元数据和文本预览；只有用户明确需要下载数据时才设置 `includeData: true`，并注意 Base64 结果可能很大。
+- `design_archive_export`：`action:schematic` 导出当前原理图文件，要求 EDA v3.2.183 / v4.1.23。完整文件数据需显式请求 `includeData:true`。
+- `library_classification_query`：新版分类可能没有 UUID，应使用完整 `namePath` 识别节点；原生 UUID 在可用时保留。通过 `classificationApi` 和可选 `fallbackReason` 区分新旧分类来源。新方法缺失或新树为空而旧树非空时可回退；新版抛错或非法结果不会回退。
 - `manufacture_templates_query`：在 PCB BOM 导出前读取当前可用模板；将返回的模板名原样传给 `manufacture_export` 的 `template` 参数，不要猜测模板名称。原理图查询只返回官方装配变体。
 - `manufacture_templates_query` 还会返回原理图装配变体；如需指定变体，必须将返回的完整 `{text, value}` 传给 schematic `manufacture_export` 的 `assemblyVariantsConfig`。
 - `library_search`：搜索或按 UUID 读取官方 device、symbol、footprint 库资产；device 可使用 `supplierId` 等精确字段，也可用官方 `lcscIds` 将 LCSC C 编号映射到 EasyEDA 器件（支持批量查询），symbol/footprint 使用各自支持的 `keyword` 搜索。device 的 `keyword`、`properties`、`lcscIds` 与 `uuid` 必须按 schema 选择其一；symbol/footprint 可使用 `keyword` 或 `uuid`。
@@ -84,7 +86,7 @@
 
 - `api_index`：列出精选 EDA API 的模块索引，每条包含 `fullName`（如 `eda.sch_Symbol.addSymbol`）和摘要描述，**不含**参数签名。适用场景：不确定目标功能属于哪个模块时，先调用此工具浏览命名空间，定位目标模块名。已知模块名时可直接跳过此步。
 
-- `api_search`：按关键词检索具体 API 方法，返回完整签名（参数名、参数类型、返回类型）。目标方法或签名尚未按当前 EDA/API 版本验证时，先调用此工具；本次会话已核实，或仓库中已有与当前版本匹配的已验证精确签名时，无需重复搜索。不得凭猜测构造参数。
+- `api_search`：按关键词检索公开 API 方法，返回完整签名、稳定性、弃用说明、备注和 `minimumEditorVersions`。离线文档基于 0.4.27，包含要求 v4.1.79、v4.2 或 v5 的接口；存在文档不等于当前宿主可用。目标方法或签名尚未按当前 EDA/API 版本验证时，先调用此工具；本次会话已核实，或仓库中已有与当前版本匹配的已验证精确签名时，无需重复搜索。不得凭猜测构造参数。
 
 - `api_invoke`：调用指定 EDA API 并将结果透传。`apiFullName` 和参数须来自与当前 EDA/API 版本相符的已验证签名，包括本次会话的 `api_search` 结果；不依据猜测或模糊记忆调用，写入时遵循目标身份核对与未知提交恢复要求。
 

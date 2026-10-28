@@ -1038,7 +1038,7 @@
   },
   {
     "name": "pcb_pour_manage",
-    "description": "读取当前 PCB 全部覆铜边框和填充摘要，或创建、修改、删除边框及显式重建。创建/修改允许闭合轮廓等价反向、起点变化及已观察的四位小数坐标回读，返回实际轮廓和 normalization；真实形变仍失败。批量重建 API 不可用时使用每个原生覆铜实例的 rebuildCopperRegion；全部不可用则返回 EDA_CAPABILITY_UNAVAILABLE，未写入。原生优先级调整等偏差返回 before/after/sideEffects；重建无填充或删除后残留填充返回 verified:false。创建或修改不会自动重建。未知写入先恢复并用 action=read 完整回读。",
+    "description": "读取当前 PCB 全部覆铜边框和填充摘要，或创建、修改、删除边框及显式重建。创建/修改允许闭合轮廓等价反向、起点变化及已观察的四位小数坐标回读，返回实际轮廓和 normalization；真实形变仍失败。批量重建 API 不可用时使用每个原生覆铜实例的 rebuildCopperRegion；全部不可用则返回 EDA_CAPABILITY_UNAVAILABLE，未写入。原生优先级调整等偏差返回 before/after/sideEffects；重建无填充或删除后残留填充返回 verified:false。重建以当前页回读为权威：原生部分、空集合或同一填充的相同重复记录不单独判为失败，重复数量/ID 记录在 rebuildDiagnostics；目标覆铜仍有可读填充且每条原生返回均与回读一致时返回 verified:true、verificationScope:\"page_readback\" 与 nativeReturnCoveredObservedCount。页面回读重复 ID、填充丢失或内容不一致仍拒绝。创建或修改不会自动重建。未知写入先恢复并用 action=read 完整回读。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1077,7 +1077,7 @@
   },
   {
     "name": "pcb_routing_edit",
-    "description": "完整读取当前 PCB 铜层直线、圆弧、折线和过孔，或按类型及 ID 读取、修改、删除；可创建圆弧/折线，直线/过孔创建使用 pcb_connectivity_action。过孔尺寸修改只接受精确值或 EDA 3.2.181 实测的 0.2 mil 最近格点（round_0_2_mil），返回请求和实际尺寸；位置、网络及真实尺寸偏差仍严格核对。修改不符时返回 after/requested/mismatches。明确属于封装的过孔在删除前拒绝；缺父字段时 ownership=unknown。过孔删除 verified 仅指当前页内存，durableDeletionVerified=false，持久性需保存重开核对。未知写入先恢复并回读全部走线、过孔和网络。",
+    "description": "完整读取当前 PCB 铜层直线、圆弧、折线和过孔，或按类型及 ID 读取、修改、删除；可创建圆弧/折线，直线/过孔创建使用 pcb_connectivity_action。过孔尺寸修改只接受精确值或 EDA 3.2.181 实测的 0.2 mil 最近格点（round_0_2_mil），返回请求和实际尺寸；位置、网络及真实尺寸偏差仍严格核对。修改不符时返回 after/requested/mismatches。同网拆线、合并和幂等写入按请求线与受影响铜的完整覆盖核验；延伸时可保留原 ID 作为请求的一部分，但必须证明写前未完整覆盖、写后完成新增覆盖。返回 normalization（replacedPrimitiveIds、mergedPrimitiveIds）及 replacementPrimitiveIds；覆盖不足、网络/层/线宽/锁定不符或出现额外铜仍隔离。明确属于封装的过孔在删除前拒绝；缺父字段时 ownership=unknown。过孔删除 verified 仅指当前页内存，durableDeletionVerified=false，持久性需保存重开核对。未知写入先恢复并回读全部走线、过孔和网络。",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1846,6 +1846,7 @@
         "domain": { "type": "string", "enum": ["netlist", "schematic", "pcb"] },
         "sourceA": {},
         "sourceB": {},
+        "options": { "type": "object", "properties": { "valUnit": { "enum": ["mil", "mm", "inch", "cm"] }, "deviation": { "type": "number", "exclusiveMinimum": 0 }, "comparisonSize": { "type": "number", "exclusiveMinimum": 0 } }, "additionalProperties": false },
         "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 }
       },
       "required": ["domain", "sourceA", "sourceB"],
@@ -1854,6 +1855,7 @@
           "type": "object",
           "properties": {
             "domain": { "const": "netlist" },
+            "options": false,
             "sourceA": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }] },
             "sourceB": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "documentUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "documentUuid"], "additionalProperties": false }] }
           }
@@ -1862,8 +1864,9 @@
           "type": "object",
           "properties": {
             "domain": { "const": "schematic" },
-            "sourceA": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "schematicUuid"], "additionalProperties": false }] },
-            "sourceB": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object", "properties": { "projectUuid": { "type": "string", "minLength": 1 }, "schematicUuid": { "type": "string", "minLength": 1 } }, "required": ["projectUuid", "schematicUuid"], "additionalProperties": false }] }
+            "options": false,
+            "sourceA": { "type": "string", "minLength": 1 },
+            "sourceB": { "type": "string", "minLength": 1 }
           }
         },
         {
@@ -1935,7 +1938,7 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["project", "document", "project_by_uuid"], "default": "project" },
+        "action": { "type": "string", "enum": ["project", "document", "schematic", "project_by_uuid"], "default": "project" },
         "projectUuid": { "type": "string", "minLength": 1 },
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string", "enum": ["epro", "epro2"] },
@@ -1959,7 +1962,7 @@
         {
           "type": "object",
           "properties": {
-            "action": { "const": "document" },
+            "action": { "enum": ["document", "schematic"] },
             "fileName": { "type": "string", "minLength": 1 },
             "fileType": { "type": "string", "enum": ["epro", "epro2"] },
             "includeData": { "type": "boolean" },
@@ -2054,8 +2057,9 @@
         "domain": { "type": "string", "enum": ["pcb", "schematic"] },
         "kind": {
           "type": "string",
-          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
+          "enum": ["gerber", "bom", "netlist", "pick_and_place", "3d", "3d_shell", "test_point", "flying_probe_test", "dxf", "pdf", "png", "svg", "ipc_d356a", "open_database", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx", "manufacture_data", "simulation_netlist", "document"]
         },
+        "resolution": { "type": "object", "properties": { "width": { "type": "integer", "minimum": 1, "maximum": 4096 }, "height": { "type": "integer", "minimum": 1, "maximum": 4096 } }, "minProperties": 1, "additionalProperties": false },
         "fileName": { "type": "string", "minLength": 1 },
         "fileType": { "type": "string" },
         "template": { "type": "string", "minLength": 1 },
@@ -2076,6 +2080,8 @@
       },
       "required": ["domain", "kind"],
       "oneOf": [
+        {"type":"object","properties":{"domain":{"const":"schematic"},"kind":{"const":"png"},"fileName":{"type":"string","minLength":1},"resolution":{"type":"object","properties":{"width":{"type":"integer","minimum":1,"maximum":4096},"height":{"type":"integer","minimum":1,"maximum":4096}},"minProperties":1,"additionalProperties":false},"includeData":{"type":"boolean","default":false},"timeoutMs":{"type":"integer","minimum":5000,"maximum":120000,"default":60000}},"required":["domain","kind"],"additionalProperties":false},
+        {"type":"object","properties":{"domain":{"const":"schematic"},"kind":{"const":"svg"},"fileName":{"type":"string","minLength":1},"includeData":{"type":"boolean","default":false},"timeoutMs":{"type":"integer","minimum":5000,"maximum":120000,"default":60000}},"required":["domain","kind"],"additionalProperties":false},
         {
           "type": "object",
           "properties": { "domain": { "const": "pcb" }, "kind": { "enum": ["flying_probe_test", "dxf", "pdf", "ipc_d356a", "interactive_bom", "dsn", "auto_route_json", "auto_layout_json", "altium", "pads", "pcb_info", "idx"] }, "fileName": { "type": "string", "minLength": 1 }, "includeData": { "type": "boolean", "default": false }, "timeoutMs": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 60000 } },
@@ -2164,7 +2170,7 @@
   },
   {
     "name": "library_classification_query",
-    "description": "Read a bounded classification tree for an EasyEDA library before searching that library. This tool never changes library contents.",
+    "description": "Read a bounded classification tree for an EasyEDA library before searching that library. Prefer the modern API, falling back only when it is absent or returns a valid empty tree while the legacy tree is nonempty. classificationApi and optional fallbackReason identify the source; modern API errors and invalid results do not trigger fallback. This tool never changes library contents.",
     "inputSchema": {
       "type": "object",
       "properties": {

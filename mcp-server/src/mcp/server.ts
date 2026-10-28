@@ -58,8 +58,9 @@ function createToolInputSchema(
   }
   const schema = z.fromJSONSchema(inputSchema as z.core.JSONSchema.JSONSchema);
   if (name === 'pcb_component_edit' || name === 'schematic_component_edit' || name === 'schematic_wire_manage' || name === 'schematic_text_manage' || name === 'pcb_pour_manage' || name === 'pcb_routing_edit' || name === 'pcb_board_outline_manage' || name === 'pcb_region_manage' || name === 'pcb_text_manage') {
-    // z.fromJSONSchema currently omits minProperties. Preserve the advertised
-    // contract when the call reaches the MCP parser.
+    // Older zod versions drop minProperties from fromJSONSchema, so keep a
+    // refinement for the advertised contract; zod >=4.6 enforces it itself with
+    // a differently worded message, hence the tolerant smoke assertions.
     return schema.superRefine((value, context) => {
       if (typeof value === 'object' && value !== null && 'action' in value && value.action === 'modify'
         && 'property' in value && typeof value.property === 'object' && value.property !== null

@@ -49,17 +49,19 @@ def parse_args() -> GeneratorConfig:
         SystemExit: 参数格式不合法时由 argparse 抛出。
     """
 
+    repo_root = Path(__file__).resolve().parent.parent
+    bridge_root = repo_root / "mcp-bridge"
     parser = argparse.ArgumentParser(
         description="将嘉立创EDA官方 d.ts 转为 AI 检索友好的 JSON API 文档"
     )
     parser.add_argument(
         "--input",
-      default=r"D:\GitCode\JLCEDA-MCP\mcp-bridge\node_modules\@jlceda\pro-api-types\index.d.ts",
+      default=str(bridge_root / "node_modules/@jlceda/pro-api-types/index.d.ts"),
         help="官方类型定义文件路径",
     )
     parser.add_argument(
         "--output",
-      default=r"D:\GitCode\JLCEDA-MCP\mcp-bridge\resources\jlceda-pro-api-doc.json",
+      default=str(bridge_root / "resources/jlceda-pro-api-doc.json"),
         help="主输出 JSON 文件路径",
     )
     parser.add_argument(
@@ -70,7 +72,7 @@ def parse_args() -> GeneratorConfig:
     )
     parser.add_argument(
         "--typescript-module",
-      default=r"D:\GitCode\JLCEDA-MCP\mcp-bridge\node_modules\typescript\lib\typescript.js",
+      default=str(bridge_root / "node_modules/typescript/lib/typescript.js"),
         help="TypeScript 模块路径（typescript.js）",
     )
     parser.add_argument(
@@ -570,6 +572,71 @@ def filter_hollow_symbols(symbols: list[dict[str, Any]]) -> list[dict[str, Any]]
   return filtered_symbols
 
 
+def get_jsdoc_tags(symbol: dict[str, Any]) -> list[dict[str, Any]]:
+  """读取 AST 的 JSDoc 标记；remarks 和 deprecated 必须分别解释。"""
+
+  return [
+    tag
+    for block in (symbol.get("jsDoc") or {}).get("blocks", [])
+    for tag in block.get("tags", [])
+    if isinstance(tag, dict)
+  ]
+
+
+def filter_non_public_symbols(symbols: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  """排除私有实现、构造器及其子项，避免生成不可调用的 eda 路径。"""
+
+  excluded_ids = {
+    symbol.get("id")
+    for symbol in symbols
+    if symbol.get("kind") == "constructor"
+    or any(modifier in {"PrivateKeyword", "ProtectedKeyword"} for modifier in symbol.get("modifiers", []))
+    or any(tag.get("tagName") == "internal" for tag in get_jsdoc_tags(symbol))
+  }
+  # 父项通常先于子项；仍做闭包处理以兼容不同 AST 输出顺序。
+  while True:
+    descendants = {
+      symbol.get("id")
+      for symbol in symbols
+      if symbol.get("parentId") in excluded_ids or symbol.get("ownerId") in excluded_ids
+    }
+    if descendants.issubset(excluded_ids):
+      break
+    excluded_ids.update(descendants)
+  return [symbol for symbol in symbols if symbol.get("id") not in excluded_ids]
+
+
+def build_api_metadata(symbol: dict[str, Any]) -> dict[str, Any]:
+  """保留稳定性、版本与限制说明，不将弃用版本误判为首次可用版本。"""
+
+  tags = get_jsdoc_tags(symbol)
+  metadata: dict[str, Any] = {}
+  for stability in ("alpha", "beta", "public"):
+    if any(tag.get("tagName") == stability for tag in tags):
+      metadata["stability"] = stability
+      break
+  remarks = "\n\n".join(str(tag.get("text") or "").strip() for tag in tags if tag.get("tagName") == "remarks").strip()
+  if remarks:
+    metadata["remarks"] = remarks
+  deprecated_tags = [tag for tag in tags if tag.get("tagName") == "deprecated"]
+  if deprecated_tags:
+    metadata["deprecated"] = True
+    metadata["deprecationMessage"] = "\n\n".join(str(tag.get("text") or "").strip() for tag in deprecated_tags).strip()
+
+  # 官方有并行版本线，例如 ADD since EDA v3.2.183 / EDA v4.1.23。
+  # 只解析 ADD since / @since；MODIFY since、REMOVE since、弃用说明均不是引入版本。
+  version_statements = re.findall(r"\bADD\s+since\s+([^\r\n]+)", remarks, flags=re.IGNORECASE)
+  version_statements.extend(str(tag.get("text") or "") for tag in tags if tag.get("tagName") == "since")
+  versions: list[str] = []
+  for statement in version_statements:
+    for version in re.findall(r"\b(?:EDA\s+)?v?(\d+(?:\.\d+){0,2})\b", statement, flags=re.IGNORECASE):
+      if version not in versions:
+        versions.append(version)
+  if versions:
+    metadata["minimumEditorVersions"] = versions
+  return metadata
+
+
 def build_ts_extractor_script() -> str:
     """构建 TypeScript AST 抽取脚本源码。
 
@@ -621,7 +688,9 @@ function commentToString(comment) {
           return part;
         }
         if (part && typeof part.text === 'string') {
-          return part.text;
+          // 保留 {@link Class.method | label} 的目标，避免 remarks 丢失 API 名称。
+          const name = part.name && typeof part.name.getText === 'function' ? part.name.getText(sourceFile) : '';
+          return name ? `${name}${part.text ? ` ${part.text}` : ''}` : part.text;
         }
         return '';
       })
@@ -1047,7 +1116,6 @@ def build_api_projection(symbols: list[dict[str, Any]]) -> dict[str, list[dict[s
     callable_kinds = {
         "function",
         "method",
-        "constructor",
         "callSignature",
         "getter",
         "setter",
@@ -1074,6 +1142,7 @@ def build_api_projection(symbols: list[dict[str, Any]]) -> dict[str, list[dict[s
             "kind": symbol.get("kind"),
             "ownerFullName": symbol.get("ownerFullName"),
             "summary": (symbol.get("jsDoc") or {}).get("summary", ""),
+            **build_api_metadata(symbol),
         }
 
         if symbol.get("kind") in callable_kinds:
@@ -1107,12 +1176,17 @@ def build_final_document(
   """组装最终 JSON 文档。"""
 
   symbols = normalize_symbols_for_ai_output(ast_result.get("symbols", []))
+  symbols = filter_non_public_symbols(symbols)
   symbols = filter_deprecated_api_symbols(symbols)
   symbols = filter_hollow_symbols(symbols)
   query_indexes = build_query_indexes(symbols)
   projections = build_api_projection(symbols)
 
+  package_path = config.input_path.parent / "package.json"
+  package = json.loads(package_path.read_text(encoding="utf-8")) if package_path.exists() else {}
+  type_package = {"name": package.get("name", ""), "version": package.get("version", "")}
   return {
+    "typePackage": type_package,
     "queryIndexes": query_indexes,
     "projections": projections,
   }

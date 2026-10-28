@@ -157,6 +157,20 @@ async function main() {
 	assert.equal((await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest, initialDigest, 'fill enumeration order should not affect digest');
 	poured.get('filled-1').fills[0].path = { getSourceStrictComplex: () => [['R', 11, 20, 100, 80, 0, 0]] };
 	assert.notEqual((await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest, initialDigest, 'same fill IDs and count with changed geometry must change digest');
+	const distinctFill = fill('c', ['CIRCLE', 50, 60, 20], { lineWidth: 0.3, fill: false });
+	poured.get('filled-1').fills = [fill('a'), distinctFill, fill('b')];
+	const geometryMultisetDigest = (await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest;
+	poured.get('filled-1').fills = [fill('refreshed-b'), fill('refreshed-a'), { ...distinctFill, id: 'refreshed-c' }];
+	assert.equal((await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest, geometryMultisetDigest, 'internal fill ID regeneration and enumeration order must not affect geometry digest');
+	poured.get('filled-1').fills.pop();
+	poured.get('filled-1').fills.push(fill('refreshed-c'));
+	assert.notEqual((await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest, geometryMultisetDigest, 'equal fill counts must still distinguish differing geometry multiplicities');
+	poured.get('filled-1').fills = [fill('a')];
+	assert.notEqual((await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest, initialDigest, 'duplicate geometries must be retained in the digest');
+	for (const patch of [{ lineWidth: 0.25 }, { fill: false }]) {
+		poured.get('filled-1').fills = [fill('a', rectangle, patch), fill('b')];
+		assert.notEqual((await handlePcbPourManageTask({ action: 'read' })).poured[0].fillGeometryDigest, initialDigest, 'fill mode and line width are part of geometry');
+	}
 	poured.get('filled-1').fills = [fill('a'), fill('b')];
 	for (let index = 0; index < 125; index++)
 		pours.set(`extra-${index}`, makePour(`extra-${index}`));
@@ -241,6 +255,59 @@ async function main() {
 	assert.equal(rebuilt.ok, true);
 	assert.equal(rebuilt.all, false);
 	assert.equal(rebuilt.poured.find(item => item.pourPrimitiveId === 'new-1').fillCount, 1);
+	assert.equal(rebuilt.rebuildDiagnostics.nativeReturnCount, 1);
+	assert.equal(rebuilt.rebuildDiagnostics.readbackAttempts, 1);
+	const nativeBeforeRegeneratedFillIds = pourApi.rebuildCopperRegions;
+	pourApi.rebuildCopperRegions = async () => {
+		const state = poured.get('filled-new-1');
+		const returnedFills = [fill('native-rectangle'), fill('native-circle', ['CIRCLE', 50, 60, 20])];
+		const result = pouredPrimitive({ ...state, fills: returnedFills });
+		state.fills = returnedFills.map((item, index) => ({ ...item, id: `page-${index}` })).reverse();
+		return [result];
+	};
+	const regeneratedFillIds = await handlePcbPourManageTask({ action: 'rebuild', primitiveId: 'new-1' });
+	assert.deepEqual([regeneratedFillIds.ok, regeneratedFillIds.verified, regeneratedFillIds.commitUnknown], [true, true, undefined], 'rebuild must verify unchanged geometry with regenerated internal fill IDs and reordered fills');
+	const nativeWithRegeneratedFillIds = pourApi.rebuildCopperRegions;
+	pourApi.rebuildCopperRegions = async () => {
+		const result = await nativeWithRegeneratedFillIds();
+		poured.get('filled-new-1').fills[0].path = { getSourceStrictComplex: () => [['CIRCLE', 51, 60, 20]] };
+		return result;
+	};
+	const regeneratedIdsWithChangedPath = await handlePcbPourManageTask({ action: 'rebuild', primitiveId: 'new-1' });
+	assert.deepEqual([regeneratedIdsWithChangedPath.ok, regeneratedIdsWithChangedPath.commitUnknown, regeneratedIdsWithChangedPath.nativeCallSettled], [false, true, true], 'ID-independent digest must still reject an actual path change with unchanged primitive ID and fill count');
+	assert.match(regeneratedIdsWithChangedPath.error, /fill is missing or differs/);
+	pourApi.rebuildCopperRegions = nativeBeforeRegeneratedFillIds;
+	await pourApi.rebuildCopperRegions(['new-1']);
+	// #95：原生对未变化的 pour 返回 null 时不能当作缺失填充。
+	const nativeNullRebuild = pourApi.rebuildCopperRegions;
+	pourApi.rebuildCopperRegions = async () => null;
+	const nullReturn = await handlePcbPourManageTask({ action: 'rebuild', primitiveId: 'new-1' });
+	assert.deepEqual([nullReturn.ok, nullReturn.verified, nullReturn.nativeReturnCoveredObservedCount], [true, true, 0], 'a null native return must fall back to page readback');
+	assert.equal(nullReturn.rebuildDiagnostics.nativeReturnType, 'null');
+	assert.equal(nullReturn.rebuildDiagnostics.observedCount, 1);
+	pourApi.rebuildCopperRegions = nativeNullRebuild;
+	const savedPouredGetAll = globalThis.eda.pcb_PrimitivePoured.getAll;
+	const syncBatchRebuild = pourApi.rebuildCopperRegions;
+	let pendingReadbacks = 0;
+	let priorPoured;
+	pourApi.rebuildCopperRegions = async (...args) => {
+		priorPoured = await savedPouredGetAll();
+		const result = await syncBatchRebuild(...args);
+		pendingReadbacks = 2;
+		return result;
+	};
+	globalThis.eda.pcb_PrimitivePoured.getAll = async () => pendingReadbacks-- > 0 ? priorPoured : savedPouredGetAll();
+	// Change the returned geometry so stale same-ID readback cannot pass.
+	const freshGeometryRebuild = pourApi.rebuildCopperRegions;
+	pourApi.rebuildCopperRegions = async (...args) => {
+		const result = await freshGeometryRebuild(...args);
+		poured.get('filled-new-1').fills = [fill('delayed', ['R', 12, 20, 100, 80, 0, 0])];
+		return result;
+	};
+	const delayed = await handlePcbPourManageTask({ action: 'rebuild', primitiveId: 'new-1' });
+	assert.deepEqual([delayed.ok, delayed.verified, delayed.rebuildDiagnostics.readbackAttempts], [true, true, 3], 'settle must read again without issuing another native rebuild');
+	globalThis.eda.pcb_PrimitivePoured.getAll = savedPouredGetAll;
+	pourApi.rebuildCopperRegions = syncBatchRebuild;
 	const rebuiltAll = await handlePcbPourManageTask({ action: 'rebuild', all: true });
 	assert.equal(rebuiltAll.all, true);
 	assert.equal(rebuiltAll.pouredCount, 2);
@@ -269,6 +336,33 @@ async function main() {
 	assert.deepEqual([fallbackSingle.ok, fallbackSingle.verified, fallbackSingle.rebuildReturnedCount], [true, true, 1]);
 	const fallbackAll = await handlePcbPourManageTask({ action: 'rebuild', all: true });
 	assert.deepEqual([fallbackAll.ok, fallbackAll.verified, fallbackAll.rebuildReturnedCount], [true, true, 2]);
+	const normalInstanceGetAll = pourApi.getAll;
+	let dropSecondRebuiltFill = false;
+	pourApi.getAll = async function () {
+		return (await savedPourGetAll.call(pourApi)).map(item => ({
+			...item,
+			async rebuildCopperRegion() {
+				await savedBatchRebuild.call(pourApi, [this.getState_PrimitiveId()]);
+				if (dropSecondRebuiltFill && this.getState_PrimitiveId() === 'new-1')
+					poured.delete('filled-new-1');
+				return pouredPrimitive(poured.get('filled-pour-1'));
+			},
+		}));
+	};
+	const repeatedInstanceReturn = await handlePcbPourManageTask({ action: 'rebuild', all: true });
+	assert.deepEqual([repeatedInstanceReturn.ok, repeatedInstanceReturn.verified, repeatedInstanceReturn.verificationScope, repeatedInstanceReturn.rebuildReturnedCount], [true, true, 'page_readback', 2], 'v4 per-pour repeated native objects must not invalidate complete page readback');
+	assert.equal(repeatedInstanceReturn.rebuildDiagnostics.rebuildPath, 'per_pour');
+	assert.equal(repeatedInstanceReturn.rebuildDiagnostics.duplicateReturnedCount, 1);
+	assert.deepEqual(repeatedInstanceReturn.rebuildDiagnostics.duplicateReturnedIds, ['filled-pour-1']);
+	assert.deepEqual(repeatedInstanceReturn.rebuildDiagnostics.missingReturnedIds, ['filled-new-1']);
+	assert.deepEqual(repeatedInstanceReturn.rebuildDiagnostics.missingObservedIds, []);
+	dropSecondRebuiltFill = true;
+	const repeatedReturnWithMissingFill = await handlePcbPourManageTask({ action: 'rebuild', all: true });
+	assert.deepEqual([repeatedReturnWithMissingFill.ok, repeatedReturnWithMissingFill.commitUnknown, repeatedReturnWithMissingFill.nativeCallSettled], [false, true, true], 'repeated native objects must not hide a lost page fill');
+	assert.match(repeatedReturnWithMissingFill.error, /lost the readable fill/);
+	assert.deepEqual(repeatedReturnWithMissingFill.rebuildDiagnostics.duplicateReturnedIds, ['filled-pour-1']);
+	await savedBatchRebuild.call(pourApi, ['new-1']);
+	pourApi.getAll = normalInstanceGetAll;
 	const writesBeforePartialCapability = writeCount;
 	const supportedInstanceGetAll = pourApi.getAll;
 	pourApi.getAll = async function () {
@@ -282,11 +376,22 @@ async function main() {
 	pourApi.rebuildCopperRegions = savedBatchRebuild;
 	const nativeAllRebuild = pourApi.rebuildCopperRegions;
 	pourApi.rebuildCopperRegions = async () => [];
-	const emptyAllWithExistingFills = await handlePcbPourManageTask({ action: 'rebuild', all: true });
-	assert.deepEqual([emptyAllWithExistingFills.commitUnknown, emptyAllWithExistingFills.nativeCallSettled], [true, true], 'all-page rebuild must reject an empty result while fills remain');
+	const emptyReturnWithReadableFills = await handlePcbPourManageTask({ action: 'rebuild', all: true });
+	assert.deepEqual([emptyReturnWithReadableFills.ok, emptyReturnWithReadableFills.verified, emptyReturnWithReadableFills.verificationScope], [true, true, 'page_readback'], '#95：原生返回空集合不代表填充缺失，当前页回读才是权威证据');
+	assert.equal(emptyReturnWithReadableFills.rebuildDiagnostics.nativeReturnCount, 0);
+	assert.equal(emptyReturnWithReadableFills.nativeReturnCoveredObservedCount, 0);
 	pourApi.rebuildCopperRegions = async () => [pouredPrimitive(poured.get('filled-pour-1'))];
 	const partialAllWithExistingFills = await handlePcbPourManageTask({ action: 'rebuild', all: true });
-	assert.deepEqual([partialAllWithExistingFills.commitUnknown, partialAllWithExistingFills.nativeCallSettled], [true, true], 'all-page rebuild must reject a partial returned fill set');
+	assert.deepEqual([partialAllWithExistingFills.ok, partialAllWithExistingFills.verified, partialAllWithExistingFills.commitUnknown], [true, true, undefined], '#95：原生只返回部分填充时，完整回读必须放行');
+	assert.equal(partialAllWithExistingFills.nativeReturnCoveredObservedCount, 1);
+	assert.equal(partialAllWithExistingFills.rebuildDiagnostics.rebuildPath, 'batch');
+	assert.equal(partialAllWithExistingFills.rebuildDiagnostics.nativeReturnType, 'array');
+	assert.equal(partialAllWithExistingFills.rebuildDiagnostics.nativeReturnCount, 1);
+	assert.equal(partialAllWithExistingFills.rebuildDiagnostics.observedCount, 2);
+	assert.deepEqual(partialAllWithExistingFills.rebuildDiagnostics.missingReturnedIds, ['filled-new-1']);
+	assert.deepEqual(partialAllWithExistingFills.rebuildDiagnostics.missingObservedIds, []);
+	assert.equal(partialAllWithExistingFills.rebuildDiagnostics.after.poured[0].fillCount, 1);
+	assert.equal(partialAllWithExistingFills.rebuildDiagnostics.readbackAttempts, 1);
 	const secondFill = poured.get('filled-new-1');
 	pourApi.rebuildCopperRegions = async () => {
 		poured.delete('filled-new-1');
@@ -296,6 +401,29 @@ async function main() {
 	assert.deepEqual([partialAllWithMissingReadback.commitUnknown, partialAllWithMissingReadback.nativeCallSettled], [true, true], 'all-page rebuild must reject a lost previously filled pour even when return and readback match');
 	poured.set('filled-new-1', secondFill);
 	pourApi.rebuildCopperRegions = nativeAllRebuild;
+	let duplicatePageFill = false;
+	globalThis.eda.pcb_PrimitivePoured.getAll = async () => {
+		const items = await savedPouredGetAll();
+		return duplicatePageFill ? [...items, items[0]] : items;
+	};
+	pourApi.rebuildCopperRegions = async (...args) => {
+		const result = await nativeAllRebuild(...args);
+		duplicatePageFill = true;
+		return result;
+	};
+	const duplicatePageReadback = await handlePcbPourManageTask({ action: 'rebuild', all: true });
+	assert.deepEqual([duplicatePageReadback.ok, duplicatePageReadback.commitUnknown, duplicatePageReadback.nativeCallSettled], [false, true, true], 'duplicate IDs in authoritative page readback must still be rejected');
+	assert.match(duplicatePageReadback.error, /current-page poured readback returned duplicate/);
+	globalThis.eda.pcb_PrimitivePoured.getAll = savedPouredGetAll;
+	pourApi.rebuildCopperRegions = nativeAllRebuild;
+	pourApi.getAll = async () => {
+		const items = await savedPourGetAll.call(pourApi);
+		return [...items, items[0]];
+	};
+	const writesBeforeDuplicateBoundary = writeCount;
+	await assert.rejects(handlePcbPourManageTask({ action: 'rebuild', all: true }), /current-page pour readback returned duplicate/);
+	assert.equal(writeCount, writesBeforeDuplicateBoundary, 'duplicate boundary IDs must fail before issuing a native rebuild');
+	pourApi.getAll = savedPourGetAll;
 	await assert.rejects(handlePcbPourManageTask({ action: 'rebuild', all: true, primitiveId: 'new-1' }), /either/);
 	const nativeDeleteWithFill = pourApi.delete;
 	const newPourBeforeDelete = pours.get('new-1');
