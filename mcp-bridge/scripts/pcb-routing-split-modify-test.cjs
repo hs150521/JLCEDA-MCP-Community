@@ -81,6 +81,44 @@ async function main() {
 	assert.equal((await run(retained)).result.ok, true, 'old ID can survive as one split segment');
 	const unchangedId = [line('target', 0, -5, 30, 0)];
 	assert.equal((await run([line('target', 0, 0, 30, 0)], { before: unchangedId })).result.ok, true);
+	const noOpBefore = [line('target', 0, 0, 20, 0), line('neighbour', 0, 10, 20, 10)];
+	const noOp = await run(noOpBefore, { before: noOpBefore, property: { endX: 20 } });
+	assert.deepEqual([noOp.result.ok, noOp.result.verified, noOp.result.commitUnknown, noOp.writes], [true, true, undefined, 1], 'an idempotent line write must verify unchanged copper');
+	for (const [name, after] of [
+		['idempotent write lost unrelated copper', noOpBefore.slice(0, 1)],
+		['idempotent write added unrelated copper', [...noOpBefore, line('extra', 0, 20, 20, 20)]],
+	]) {
+		const rejected = await run(after, { before: noOpBefore, property: { endX: 20 } });
+		assert.equal(rejected.result.commitUnknown, true, name);
+		assert.equal(rejected.writes, 1, name);
+	}
+	const absorbedBefore = [line('target', 0, 0, 20, 0), line('tail', 20, 0, 40, 0)];
+	const absorbed = await run([absorbedBefore[1]], { before: absorbedBefore, property: { startX: 20, endX: 30 } });
+	assert.equal(absorbed.result.ok, true, 'a modified line absorbed into unchanged existing copper must verify');
+	assert.deepEqual(absorbed.result.primitiveIds, ['tail']);
+	assert.deepEqual(absorbed.result.normalization.mergedPrimitiveIds, ['tail']);
+	assert.equal(absorbed.writes, 1);
+	const ignored = await run(absorbedBefore, { before: absorbedBefore, property: { startX: 20, endX: 30 } });
+	assert.equal(ignored.result.commitUnknown, true, 'unchanged existing coverage must not hide an ignored write leaving the old target');
+	const absorbedWithExtra = await run([absorbedBefore[1], line('extra', 30, 0, 30, 10)], { before: absorbedBefore, property: { startX: 20, endX: 30 } });
+	assert.equal(absorbedWithExtra.result.commitUnknown, true, 'an absorbed line must still reject unexpected copper');
+	const prefixBefore = [line('target', 0, 0, 10, 0), line('down', 10, -5, 10, 0), line('up', 10, 0, 10, 5)];
+	const prefixAfter = [...prefixBefore, line('extension', 10, 0, 20, 0)];
+	const prefix = await run(prefixAfter, { before: prefixBefore, property: { endX: 20 } });
+	assert.equal(prefix.result.ok, true, 'a native split may keep the old target unchanged as the first segment of an extended line');
+	assert.deepEqual(prefix.result.primitiveIds, ['target', 'extension']);
+	assert.equal(prefix.writes, 1);
+	for (const [name, before, after, property] of [
+		['ignored extension', prefixBefore, prefixBefore, { endX: 20 }],
+		['pre-existing coverage hides ignored write', prefixAfter, prefixAfter, { endX: 20 }],
+		['retained prefix leaves a gap', prefixBefore, [...prefixBefore, line('extension', 10, 0, 19, 0)], { endX: 20 }],
+		['retained prefix extends outside requested target', prefixBefore, prefixAfter, { startX: 1, endX: 20 }],
+		['retained prefix adds unrelated copper', prefixBefore, [...prefixAfter, line('extra', 15, 0, 15, 10)], { endX: 20 }],
+	]) {
+		const rejected = await run(after, { before, property });
+		assert.equal(rejected.result.commitUnknown, true, name);
+		assert.equal(rejected.writes, 1, name);
+	}
 	const timedOut = (await run(split(), { timeout: true })).result;
 	assert.equal(timedOut.nativeCallSettled, false);
 	assert.equal(requiresHostRestartForResult('/bridge/jlceda/pcb/routing-edit', {}, timedOut), true);

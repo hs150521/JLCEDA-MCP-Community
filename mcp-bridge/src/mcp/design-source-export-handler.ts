@@ -45,19 +45,38 @@ async function readReferencedFootprintUuids(eda: Record<string, unknown>): Promi
 	const api = eda.pcb_PrimitiveComponent;
 	if (!isPlainObjectRecord(api) || typeof api.getAll !== 'function')
 		return { available: false, uuids: [] };
-	const components = await (api.getAll as () => Promise<unknown>).call(api);
+	let components: unknown;
+	try {
+		components = await (api.getAll as () => Promise<unknown>).call(api);
+	}
+	catch {
+		return { available: false, uuids: [] };
+	}
 	if (!Array.isArray(components))
 		return { available: false, uuids: [] };
 	const uuids = new Set<string>();
+	let available = true;
 	for (const component of components) {
-		const getter = (component as Record<string, unknown> | null)?.getState_Footprint;
-		if (typeof getter !== 'function')
-			continue;
-		const reference = getter.call(component);
-		if (isPlainObjectRecord(reference) && typeof reference.uuid === 'string' && reference.uuid.trim())
-			uuids.add(reference.uuid);
+		try {
+			const getter = (component as Record<string, unknown> | null)?.getState_Footprint;
+			if (typeof getter !== 'function') {
+				available = false;
+				continue;
+			}
+			const reference: unknown = getter.call(component);
+			// The native API uses undefined for a component without a library footprint.
+			if (reference === undefined)
+				continue;
+			if (isPlainObjectRecord(reference) && typeof reference.uuid === 'string' && reference.uuid.trim())
+				uuids.add(reference.uuid);
+			else
+				available = false;
+		}
+		catch {
+			available = false;
+		}
 	}
-	return { available: true, uuids: [...uuids] };
+	return { available, uuids: [...uuids] };
 }
 
 function textBytes(value: string): Uint8Array {
@@ -120,7 +139,7 @@ export async function handleDesignSourceExportTask(payload: unknown): Promise<un
 	const rawSources = await (getDocumentFootprintSources as () => Promise<unknown>).call(api);
 	if (!Array.isArray(rawSources))
 		throw new TypeError('EDA sys_FileManager.getDocumentFootprintSources returned an invalid result.');
-	if (rawSources.length === 0 && references.available && references.uuids.length > 0) {
+	if (rawSources.length === 0 && references.uuids.length > 0) {
 		return {
 			ok: false,
 			action,
@@ -139,9 +158,7 @@ export async function handleDesignSourceExportTask(payload: unknown): Promise<un
 		.filter((item): item is Record<string, unknown> => isPlainObjectRecord(item) && typeof item.footprintUuid === 'string')
 		.map(item => item.footprintUuid as string));
 	// A partial native list must not read as a complete inventory of the PCB.
-	const missingReferencedFootprintUuids = references.available
-		? references.uuids.filter(uuid => !listedUuids.has(uuid))
-		: [];
+	const missingReferencedFootprintUuids = references.uuids.filter(uuid => !listedUuids.has(uuid));
 	let remainingDataBytes = maxBytes;
 	const sources = preserveBoundedArray(rawSources.slice(0, limit).map((item, index) => {
 		if (!isPlainObjectRecord(item) || typeof item.footprintUuid !== 'string' || typeof item.documentSource !== 'string')
@@ -165,10 +182,13 @@ export async function handleDesignSourceExportTask(payload: unknown): Promise<un
 	return {
 		ok: true,
 		action,
-		complete: !truncated && missingReferencedFootprintUuids.length === 0,
+		complete: references.available && !truncated && missingReferencedFootprintUuids.length === 0,
 		total: rawSources.length,
 		returned: sources.length,
 		truncated,
+		...(!references.available
+			? { referencedFootprintUuids: references.uuids, reason: 'pcb_footprint_reference_inventory_unavailable' }
+			: {}),
 		...(missingReferencedFootprintUuids.length > 0
 			? { referencedFootprintUuids: references.uuids, missingReferencedFootprintUuids, missingReferencedFootprintCount: missingReferencedFootprintUuids.length }
 			: {}),

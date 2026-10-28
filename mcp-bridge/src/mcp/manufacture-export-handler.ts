@@ -1,4 +1,5 @@
 import { getEdaRuntime, isPlainObjectRecord } from '../utils.ts';
+import { unsupportedApiVersion } from './api-version.ts';
 
 type ExportDomain = 'pcb' | 'schematic';
 
@@ -27,7 +28,7 @@ const PCB_METHODS = new Set([
 	'idx',
 	'manufacture_data',
 ]);
-const SCHEMATIC_METHODS = new Set(['bom', 'netlist', 'simulation_netlist', 'document']);
+const SCHEMATIC_METHODS = new Set(['bom', 'netlist', 'simulation_netlist', 'png', 'svg', 'document']);
 const STANDARD_NETLIST_TYPES = ['Allegro', 'PADS', 'Protel2', 'JLCEDA'] as const;
 const SIMULATION_NETLIST_TYPES = ['Ngspice'] as const;
 const BOM_FILE_TYPES = ['xlsx', 'csv'] as const;
@@ -97,6 +98,23 @@ function optionalAssemblyVariant(input: Record<string, unknown>): { text: string
 	return { text: text.trim(), value: value.trim() };
 }
 
+function optionalPngResolution(input: Record<string, unknown>): { width?: number; height?: number } | undefined {
+	const value = input.resolution;
+	if (value === undefined)
+		return undefined;
+	if (!isPlainObjectRecord(value) || Object.keys(value).length === 0)
+		throw new TypeError('resolution must be an object with width or height.');
+	const resolution: { width?: number; height?: number } = {};
+	for (const [key, dimension] of Object.entries(value)) {
+		if (key !== 'width' && key !== 'height')
+			throw new TypeError(`resolution.${key} is not supported.`);
+		if (typeof dimension !== 'number' || !Number.isInteger(dimension) || dimension < 1 || dimension > 4096)
+			throw new RangeError(`resolution.${key} must be an integer between 1 and 4096.`);
+		resolution[key] = dimension;
+	}
+	return resolution;
+}
+
 function rejectUnexpectedFields(input: Record<string, unknown>, allowed: readonly string[]): void {
 	const allowedFields = new Set(['domain', 'kind', 'includeData', 'timeoutMs', ...allowed]);
 	for (const key of Object.keys(input)) {
@@ -125,6 +143,8 @@ function validateExportFields(domain: ExportDomain, kind: string, input: Record<
 		bom: ['fileName', 'fileType', 'template', 'assemblyVariantsConfig'],
 		netlist: ['fileName', 'netlistType'],
 		simulation_netlist: ['fileName', 'netlistType'],
+		png: ['fileName', 'resolution'],
+		svg: ['fileName'],
 		document: ['fileName', 'fileType', 'documentScope'],
 	};
 	rejectUnexpectedFields(input, allowedByKind[kind] ?? []);
@@ -195,6 +215,9 @@ function resolveCall(domain: ExportDomain, kind: string, input: Record<string, u
 		bom: () => ({ method: 'getBomFile', args: [fileName, optionalEnum(input, 'fileType', BOM_FILE_TYPES), template, undefined, undefined, undefined, undefined, assemblyVariantsConfig] }),
 		netlist: () => ({ method: 'getNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', STANDARD_NETLIST_TYPES)] }),
 		simulation_netlist: () => ({ method: 'getSimulationNetlistFile', args: [fileName, optionalEnum(input, 'netlistType', SIMULATION_NETLIST_TYPES)] }),
+		png: () => ({ method: 'getPngFile', args: [fileName, optionalPngResolution(input)] }),
+		svg: () => ({ method: 'getSvgFile', args: [fileName] }),
+		// Deprecated since EDA v4.1; preserve the legacy document export for older clients.
 		document: () => ({ method: 'getExportDocumentFile', args: [fileName, optionalEnum(input, 'fileType', DOCUMENT_FILE_TYPES), undefined, optionalString(input, 'documentScope')] }),
 	};
 	return calls[kind]();
@@ -215,6 +238,11 @@ export async function handleManufactureExportTask(payload: unknown): Promise<unk
 	const moduleName = domain === 'pcb' ? 'pcb_ManufactureData' : 'sch_ManufactureData';
 	const api = eda?.[moduleName];
 	const call = resolveCall(domain, kind, payload);
+	if (domain === 'schematic' && (kind === 'png' || kind === 'svg')) {
+		const unsupported = await unsupportedApiVersion(`eda.${moduleName}.${call.method}`, ['3.2.183', '4.1.23']);
+		if (unsupported)
+			return unsupported;
+	}
 	if (domain === 'pcb' && payload.assemblyVariantsConfig !== undefined)
 		throw new TypeError('assemblyVariantsConfig is only supported for schematic BOM exports.');
 	if (!isPlainObjectRecord(api) || typeof api[call.method] !== 'function') {

@@ -1,12 +1,19 @@
 # 变更日志
 
-## [Unreleased]
+## [2.4.0] - 2026-10-28
 
-- `pcb_routing_edit` 直线修改改为按请求几何与回读中实际变化的图元核验：原生在修改后新产生的同网交点处拆线（#94 报告场景）、以及与原共线相邻段合并时，均按完整覆盖判定，返回 `normalization.replacedPrimitiveIds`、`mergedPrimitiveIds` 和 `replacementPrimitiveIds`；覆盖不足、网络/层/线宽/锁定不符或出现额外铜仍保留隔离。整页铜线快照上限由 2048 提升到 20000，避免高密度 PCB 无法修改直线。
-- `pcb_pour_manage` 重建以当前页回读为权威：原生只返回部分或空填充集合、或对未变化覆铜返回 `null` 时，只要目标覆铜仍有可读填充即返回 `verified:true`、`verificationScope:"page_readback"` 与 `nativeReturnCoveredObservedCount`；已填充覆铜的填充丢失、返回填充与回读不一致仍进入隔离（#95）。
-- `design_source_export` 的 `footprints` 动作在原生列表不完整时返回 `missingReferencedFootprintUuids` 与 `missingReferencedFootprintCount`，被 `limit` 截断时不再声明 `complete:true`（#93 跟进）。
+- `pcb_routing_edit` 直线修改按请求几何与当前页铜线完整覆盖核验：支持修改后新产生的同网交点拆线（#94）、与原共线相邻段合并，以及 PR #97 复查发现的幂等写入和合并到未变化已有线段。延伸时允许旧 ID 保留为请求的一部分，但须证明写前没有完整覆盖、写后完成新增覆盖，不能用已有重叠铜掩盖未执行的修改；覆盖不足、网络/层/线宽/锁定不符或出现额外铜继续失败。使用 ID 索引避免高密度快照的重复线性查找，整页铜线快照上限为 20000。
+- `pcb_pour_manage` 重建以当前页回读为权威：原生只返回部分或空填充集合、对未变化覆铜返回 `null`、或同一填充的相同记录重复时，不单独判定失败；重复数量和 ID 作为诊断。目标覆铜仍有可读填充且每条原生返回均与回读一致时返回 `verified:true`、`verificationScope:"page_readback"` 与 `nativeReturnCoveredObservedCount`；页面回读重复 ID、填充丢失或内容不一致仍拒绝（#95）。
+- `design_source_export` 的 `footprints` 动作在原生列表不完整时返回 `missingReferencedFootprintUuids` 与 `missingReferencedFootprintCount`，被 `limit` 截断时不再声明 `complete:true`（#93）。PR #97 复查补齐引用 API 缺失、返回非法列表、getter 缺失/异常及坏引用数据分支：保留可用源码和部分已知 UUID，明确 `complete:false`，不把无法盘点当作空 PCB。
+- `schematic_component_edit` 禁止通过 `otherProperty` 重放原生库绑定及供应商、制造商别名；自定义属性更新保留其余自定义字段，并核对未请求修改的 canonical BOM 属性。支持读取和比较 Component、Symbol、Footprint 三种库绑定；缺少 getter 时报告 unavailable，绑定改变、失去可读性或 BOM 字段意外清空时返回实际 after 与 mismatches，不报告验证成功。
+- 官方类型固定到 `@jlceda/pro-api-types 0.4.27`，重新生成离线 API 索引，扩展 engines 更新为 `^3.0.0 || ^4.0.0`。`api_search` 返回备注、弃用信息和 `minimumEditorVersions`；`api_invoke` 在版本与元数据可用时，拒绝低于官方门槛的调用，返回 `EDA_VERSION_UNSUPPORTED`、`commitStatus:"not_started"`、`nativeCallAttempted:false`，避免低版本误调用 4.1.79/4.2 新接口或 EDA v4 误调用 v5 新接口。
+- `manufacture_export` 新增原理图 `png`、`svg`，PNG 可选 resolution，提供时至少指定 width/height 中一项，每边为 1–4096 整数；SVG 不接受分辨率参数，多图页 ZIP 保留原生文件名/类型。调用前检查 EDA 3.2.183 / 4.1.23 门槛；旧 document 导出继续兼容，文档标明原生方法从 EDA v4.1 起弃用。
+- `design_archive_export` 新增 `action:"schematic"`，调用当前原理图归档 API，沿用类型和受限 Base64 输出，并检查 EDA 3.2.183 / 4.1.23 门槛。
+- `design_compare` 按 0.4.27 官方签名限定原理图比较为 UUID 字符串，PCB 比较新增 valUnit、deviation、comparisonSize 选项；EDA 4.1.78 实机确认后两项须为严格正数，schema 与 handler 提前拒绝零值。原理图/PCB 比较门槛为 EDA 3.2.205 / 4.1.62，按原生 success 判断结果。
+- `library_classification_query` 优先使用新 `getClassificationTree`；新方法缺失，或新版合法空树而旧树非空时回退旧 `getAllClassificationTree`，避免 v4 公共库失去旧分类。新版抛错/非法结果不回退，旧接口缺失或两边均空时保留新版空树；`classificationApi` 与回退时的 `fallbackReason` 标明来源。节点增加完整 `namePath`，uuid 在原生提供时保留，输入和节点/深度限制保持不变。
 - 回归：`pcb-routing-split-modify-test.cjs` 与 `schematic-component-reserved-test.cjs` 此前未接入 `npm run build`，现已纳入 `test:pcb-routing` 和 `test:schematic-components`；新增新交点拆线、共线合并、高密度快照、空/部分/`null` 原生返回与截断完整性用例。
-- 本轮仅以本地 fixture/mock 验证并通过完整 `npm run build`、`npm run lint`、`npm run typecheck`；未在 EDA 宿主实测，#93 至 #96 的实机确认仍待完成。
+- Bridge/Server 2.4.0 在 EDA 4.1.78 的专用测试项目副本实测通过：线宽 10→11→10 与幂等写入、器件改名/恢复及 BOM/三库绑定保留、PNG/SVG/原理图归档。末轮复测公共库分类回退返回 total:8654、returned:5 及完整 namePath；覆铜重建原生/页面均为 17 个填充，verified:true、page_readback，不再误入隔离。本轮另验证设计比较、版本门槛、封装源完整性及 recover/readback；详见 [2.4.0 验证记录](https://github.com/hs150521/JLCEDA-MCP-Community/blob/v2.4.0/docs/releases/v2.4.0.md)。
+- 两端完整本地 build/test/lint 和多客户端验证通过；末轮分类/覆铜摘要补修后定向测试、lint、typecheck、compile、runtime 再次通过。Server 生产依赖审计 0 项，开发依赖仍有 Bridge 18 项、Server 9 项告警。本轮未重跑 EDA 3.x、未实测索引全部 API；此处记录本地验证；远端检查与下载状态以 GitHub Actions/Release 为准，最终资产校验和随 Release 提供。
 
 ## [2.3.10] - 2026-10-05
 

@@ -11,7 +11,7 @@
 
 import { isPlainObjectRecord, parseBoundedIntegerValue, toSafeErrorMessage } from '../utils';
 
-interface ApiProjectionItem {
+export interface ApiProjectionItem {
 	id: number;
 	name: string;
 	fullName: string;
@@ -22,9 +22,20 @@ interface ApiProjectionItem {
 	typeText?: string;
 	returnType?: string;
 	parameters?: unknown[];
+	stability?: string;
+	remarks?: string;
+	deprecated?: boolean;
+	deprecationMessage?: string;
+	minimumEditorVersions?: string[];
+}
+
+export interface ApiTypePackage {
+	name: string;
+	version: string;
 }
 
 interface ApiDocument {
+	typePackage?: ApiTypePackage;
 	queryIndexes?: {
 		symbolIdByKeyword?: Record<string, number[]>;
 	};
@@ -35,6 +46,7 @@ interface ApiDocument {
 }
 
 interface ApiCache {
+	typePackage?: ApiTypePackage;
 	allItems: ApiProjectionItem[];
 	callableItems: ApiProjectionItem[];
 	typeItems: ApiProjectionItem[];
@@ -170,6 +182,7 @@ async function loadApiCache(): Promise<ApiCache> {
 	}
 
 	apiCache = {
+		typePackage: document.typePackage,
 		allItems,
 		callableItems,
 		typeItems,
@@ -177,6 +190,13 @@ async function loadApiCache(): Promise<ApiCache> {
 		keywordIndex: buildKeywordIndex(document.queryIndexes?.symbolIdByKeyword),
 	};
 	return apiCache;
+}
+
+/** 查询公开调用项的版本与稳定性信息，不探测或执行 EDA API。 */
+export async function getApiMetadata(apiFullName: string): Promise<ApiProjectionItem | undefined> {
+	const cache = await loadApiCache();
+	const normalized = apiFullName.trim().toLowerCase();
+	return cache.callableItems.find(item => item.fullName.toLowerCase() === normalized);
 }
 
 /**
@@ -271,6 +291,10 @@ export async function handleApiSearchTask(payload: unknown): Promise<unknown> {
 				typeText: item.typeText ?? '',
 				returnType: item.returnType ?? '',
 				parameters: Array.isArray(item.parameters) ? item.parameters : [],
+				...(item.stability ? { stability: item.stability } : {}),
+				...(item.remarks ? { remarks: item.remarks } : {}),
+				...(item.deprecated ? { deprecated: true, deprecationMessage: item.deprecationMessage ?? '' } : {}),
+				...(item.minimumEditorVersions?.length ? { minimumEditorVersions: item.minimumEditorVersions } : {}),
 				score,
 			};
 		})
@@ -284,6 +308,7 @@ export async function handleApiSearchTask(payload: unknown): Promise<unknown> {
 	const items = filteredItems.slice(0, limit);
 
 	return {
+		...(cache.typePackage ? { typePackage: cache.typePackage } : {}),
 		query,
 		scope,
 		owner: ownerFilter,

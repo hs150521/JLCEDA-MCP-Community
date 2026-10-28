@@ -1,6 +1,7 @@
 import { getEdaRuntime, isPlainObjectRecord } from '../utils.ts';
+import { unsupportedApiVersion } from './api-version.ts';
 
-type ArchiveAction = 'project' | 'document' | 'project_by_uuid';
+type ArchiveAction = 'project' | 'document' | 'schematic' | 'project_by_uuid';
 
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
 const MIN_MAX_BYTES = 64 * 1024;
@@ -24,8 +25,8 @@ function requiredString(input: Record<string, unknown>, key: string): string {
 function parseAction(value: unknown): ArchiveAction {
 	if (value === undefined || value === null)
 		return 'project';
-	if (value !== 'project' && value !== 'document' && value !== 'project_by_uuid')
-		throw new TypeError('action must be project, document, or project_by_uuid.');
+	if (value !== 'project' && value !== 'document' && value !== 'schematic' && value !== 'project_by_uuid')
+		throw new TypeError('action must be project, document, schematic, or project_by_uuid.');
 	return value;
 }
 
@@ -72,7 +73,12 @@ export async function handleDesignArchiveExportTask(payload: unknown): Promise<u
 		? 'getProjectFile'
 		: action === 'document'
 			? 'getDocumentFile'
-			: 'getProjectFileByProjectUuid';
+			: action === 'schematic' ? 'getSchematicFile' : 'getProjectFileByProjectUuid';
+	if (action === 'schematic') {
+		const unsupported = await unsupportedApiVersion('eda.sys_FileManager.getSchematicFile', ['3.2.183', '4.1.23']);
+		if (unsupported)
+			return { ...unsupported, action };
+	}
 	if (typeof api[methodName] !== 'function')
 		throw new TypeError(`EDA sys_FileManager.${methodName} API is unavailable in this client version.`);
 	const args = action === 'project_by_uuid'

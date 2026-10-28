@@ -6,6 +6,7 @@ import { handleSchematicReadTask } from './schematic-read-handler.ts';
 type Action = 'read' | 'modify' | 'delete';
 type PropertyValue = string | number | boolean;
 type Property = Record<string, PropertyValue>;
+type LibraryBinding = { libraryUuid: string; uuid: string } | null;
 
 interface ComponentState {
 	primitiveId: string;
@@ -24,8 +25,12 @@ interface ComponentState {
 	supplier: string | null;
 	supplierId: string | null;
 	otherProperty: Property;
-	component: { libraryUuid: string; uuid: string } | null;
+	component: LibraryBinding;
 	componentReadable: boolean;
+	symbol: LibraryBinding;
+	symbolReadable: boolean;
+	footprint: LibraryBinding;
+	footprintReadable: boolean;
 }
 
 interface PinNetwork {
@@ -49,6 +54,7 @@ const SCOPE = 'current_schematic_page';
 const NUMERIC_FIELDS = ['x', 'y', 'rotation'] as const;
 const BOOLEAN_FIELDS = ['mirror', 'addIntoBom', 'addIntoPcb'] as const;
 const TEXT_FIELDS = ['designator', 'name', 'uniqueId', 'manufacturer', 'manufacturerId', 'supplier', 'supplierId'] as const;
+const BINDING_FIELDS = ['component', 'symbol', 'footprint'] as const;
 const EDITABLE_FIELDS = new Set<string>([...NUMERIC_FIELDS, ...BOOLEAN_FIELDS, ...TEXT_FIELDS, 'otherProperty']);
 const NATIVE_RESULT_UNKNOWN = /timed?\s*out|ETIMEDOUT|disconnect|connection\s+(?:closed|lost|reset|aborted)|socket\s+(?:closed|hang up)|transport\s+(?:closed|lost)|websocket.*(?:closed|not open)|ECONNRESET|ECONNABORTED|EPIPE/i;
 const COORDINATE_EPSILON = 1e-6;
@@ -100,20 +106,21 @@ function readOtherProperty(value: unknown): Property {
 	return { ...value } as Property;
 }
 
-function readComponentBinding(primitive: unknown): Pick<ComponentState, 'component' | 'componentReadable'> {
-	// Official SCH types expose only Component; Symbol/Footprint have no public getters.
-	const getter = (primitive as Record<string, unknown> | null)?.getState_Component;
+function readLibraryBinding(primitive: unknown, method: string): { value: LibraryBinding; readable: boolean } {
+	const getter = (primitive as Record<string, unknown> | null)?.[method];
 	if (typeof getter !== 'function')
-		return { component: null, componentReadable: false };
+		return { value: null, readable: false };
 	try {
 		const value: unknown = getter.call(primitive);
 		if (value === undefined)
-			return { component: null, componentReadable: true };
-		if (isPlainObjectRecord(value) && typeof value.libraryUuid === 'string' && typeof value.uuid === 'string')
-			return { component: { libraryUuid: value.libraryUuid, uuid: value.uuid }, componentReadable: true };
+			return { value: null, readable: true };
+		if (isPlainObjectRecord(value) && typeof value.libraryUuid === 'string' && value.libraryUuid.trim()
+			&& typeof value.uuid === 'string' && value.uuid.trim()) {
+			return { value: { libraryUuid: value.libraryUuid, uuid: value.uuid }, readable: true };
+		}
 	}
 	catch { /* Expose unavailable binding state instead of inventing a reference. */ }
-	return { component: null, componentReadable: false };
+	return { value: null, readable: false };
 }
 
 function readComponent(primitive: unknown): ComponentState {
@@ -124,6 +131,9 @@ function readComponent(primitive: unknown): ComponentState {
 	const mirror = readState(primitive, 'getState_Mirror');
 	if (typeof mirror !== 'boolean')
 		throw new TypeError(`EDA component ${primitiveId} has no readable mirror state.`);
+	const component = readLibraryBinding(primitive, 'getState_Component');
+	const symbol = readLibraryBinding(primitive, 'getState_Symbol');
+	const footprint = readLibraryBinding(primitive, 'getState_Footprint');
 	return {
 		primitiveId,
 		type,
@@ -141,7 +151,12 @@ function readComponent(primitive: unknown): ComponentState {
 		supplier: optionalText(readState(primitive, 'getState_Supplier'), 'supplier'),
 		supplierId: optionalText(readState(primitive, 'getState_SupplierId'), 'supplierId'),
 		otherProperty: readOtherProperty(readState(primitive, 'getState_OtherProperty')),
-		...readComponentBinding(primitive),
+		component: component.value,
+		componentReadable: component.readable,
+		symbol: symbol.value,
+		symbolReadable: symbol.readable,
+		footprint: footprint.value,
+		footprintReadable: footprint.readable,
 	};
 }
 
@@ -235,29 +250,41 @@ function modificationMismatches(before: ComponentState, after: ComponentState, r
 		if (key !== 'otherProperty')
 			compare(key, expected, after[key as keyof ComponentState]);
 	}
+	// Replacing custom metadata must not silently clear unrelated native BOM attributes.
+	for (const key of [...TEXT_FIELDS, 'addIntoBom', 'addIntoPcb'] as const) {
+		if (!Object.hasOwn(requested, key))
+			compare(key, before[key], after[key]);
+	}
 	for (const [key, value] of Object.entries(fullOtherProperty))
 		compare(`otherProperty.${key}`, value, Object.hasOwn(after.otherProperty, key) ? after.otherProperty[key] : undefined);
-	if (before.componentReadable) {
-		if (!after.componentReadable) {
-			mismatches.push({ key: 'component', expected: before.component, actual: null, reason: 'binding_unreadable' });
+	for (const key of BINDING_FIELDS) {
+		if (!before[`${key}Readable`])
+			continue;
+		const previous = before[key];
+		const current = after[key];
+		if (!after[`${key}Readable`]) {
+			mismatches.push({ key, expected: previous, actual: null, reason: 'binding_unreadable' });
 		}
-		else if (before.component && after.component) {
-			compare('component.libraryUuid', before.component.libraryUuid, after.component.libraryUuid);
-			compare('component.uuid', before.component.uuid, after.component.uuid);
+		else if (previous && current) {
+			compare(`${key}.libraryUuid`, previous.libraryUuid, current.libraryUuid);
+			compare(`${key}.uuid`, previous.uuid, current.uuid);
 		}
 		else {
-			compare('component', before.component, after.component);
+			compare(key, previous, current);
 		}
 	}
 	return mismatches;
 }
 
 function bindingVerification(before: ComponentState, after: ComponentState): Record<string, unknown> {
+	const checked = BINDING_FIELDS.filter(key => before[`${key}Readable`] && after[`${key}Readable`]);
+	const unavailable = BINDING_FIELDS.filter(key => !checked.includes(key));
+	const unchanged = checked.every(key => before[key]?.libraryUuid === after[key]?.libraryUuid && before[key]?.uuid === after[key]?.uuid);
 	return {
-		verified: false,
-		checked: before.componentReadable && after.componentReadable ? ['component'] : [],
-		unavailable: [...(before.componentReadable && after.componentReadable ? [] : ['component']), 'symbol', 'footprint'],
-		reason: 'Only getState_Component is public in the schematic API types; unavailable bindings cannot be verified.',
+		verified: unavailable.length === 0 && unchanged,
+		checked,
+		unavailable,
+		...(unavailable.length ? { reason: 'Some library bindings are unreadable in this client; unavailable bindings cannot be verified.' } : {}),
 	};
 }
 

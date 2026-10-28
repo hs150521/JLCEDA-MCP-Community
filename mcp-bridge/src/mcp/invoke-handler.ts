@@ -17,6 +17,7 @@ import type { AutoRoutingSnapshot } from './pcb-auto-routing-observation';
 import { footprintApiAccess, isReadOnlyBridgeRequest } from '../bridge/bridge-contract';
 import { assertFootprintIdentity, editorDocumentPageKind, footprintIdentityFromDocument, readCurrentEditorDocument } from '../bridge/editor-context.ts';
 import { getSyncState, isPlainObjectRecord, isUnknownNativeRpcResult, preserveBoundedArray, safeCall, toSafeErrorMessage, toSerializableAsync } from '../utils';
+import { unsupportedApiVersion } from './api-version.ts';
 import { readSchematicComponentBaseline, restoreChangedSchematicDesignators } from './component-designator-restore';
 import { compareFootprintModification, prepareFootprintModification } from './footprint-modify-helper.ts';
 import { readFootprintPrimitiveState } from './footprint-primitive-state.ts';
@@ -423,6 +424,9 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 
 	const apiFullName = String(payload.apiFullName ?? '').trim();
 	const requestedName = apiFullName.toLowerCase();
+	const unsupportedVersion = await unsupportedApiVersion(apiFullName);
+	if (unsupportedVersion)
+		return unsupportedVersion;
 	if (payload.allowedWireIds !== undefined && requestedName !== 'eda.sch_primitivewire.create')
 		throw new TypeError('allowedWireIds is only supported for eda.sch_PrimitiveWire.create.');
 	const canvasApi = requestedName.startsWith('eda.pcb_') || requestedName.startsWith('eda.sch_');

@@ -78,6 +78,50 @@ async function main() {
 	assert.equal(inventoryUnavailable.complete, false);
 	assert.equal(inventoryUnavailable.reason, 'pcb_footprint_reference_inventory_unavailable');
 
+	for (const sources of [[], [{ footprintUuid: 'fp-1', documentSource: 'FOOTPRINT: one' }]]) {
+		for (const components of [
+			[],
+			undefined,
+			[{}],
+			[null],
+			[component(null)],
+			[component({})],
+			[component({ uuid: '' })],
+			[component({ uuid: '   ' })],
+			[component({ uuid: 12 })],
+			[{ getState_Footprint() { throw new Error('unavailable'); } }],
+		]) {
+			setRuntime({ sources, components, componentApi: components?.length !== 0 });
+			const unknownInventory = await handleDesignSourceExportTask({ action: 'footprints', includeData: true });
+			assert.equal(unknownInventory.ok, true, 'native sources remain usable when the reference inventory is unavailable');
+			assert.equal(unknownInventory.complete, false);
+			assert.equal(unknownInventory.reason, 'pcb_footprint_reference_inventory_unavailable');
+			assert.equal(unknownInventory.returned, sources.length);
+			if (sources.length)
+				assert.equal(unknownInventory.sources[0].source.data, 'FOOTPRINT: one');
+		}
+	}
+	setRuntime({ sources: [], components: [] });
+	globalThis.eda.pcb_PrimitiveComponent.getAll = async () => {
+		throw new Error('unavailable');
+	};
+	const failedInventory = await handleDesignSourceExportTask({ action: 'footprints' });
+	assert.equal(failedInventory.complete, false);
+	assert.equal(failedInventory.reason, 'pcb_footprint_reference_inventory_unavailable');
+
+	setRuntime({ sources: [], components: [component(undefined)] });
+	const unbound = await handleDesignSourceExportTask({ action: 'footprints' });
+	assert.deepEqual([unbound.ok, unbound.complete, unbound.total], [true, true, 0], 'undefined is the documented unbound footprint state');
+
+	setRuntime({
+		sources: [{ footprintUuid: 'fp-1', documentSource: 'FOOTPRINT: one' }],
+		components: [{}, component({ uuid: 'fp-2' })],
+	});
+	const partlyReadable = await handleDesignSourceExportTask({ action: 'footprints' });
+	assert.equal(partlyReadable.complete, false);
+	assert.equal(partlyReadable.reason, 'pcb_footprint_reference_inventory_unavailable');
+	assert.deepEqual(partlyReadable.missingReferencedFootprintUuids, ['fp-2'], 'known missing references survive an incomplete inventory');
+
 	console.log('design-source-export regression tests passed');
 }
 

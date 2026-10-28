@@ -621,29 +621,43 @@ export async function handlePcbRoutingEditTask(payload: unknown): Promise<unknow
 			const afterLines = await lineSnapshot(runtime, pageUuid);
 			const targetBefore = beforeLines.find(line => line.primitiveId === primitiveId)!;
 			const targetAfter = { ...targetBefore, ...requested } as Primitive;
-			const changedAfter = afterLines.filter(line => !beforeLines.some(beforeLine => beforeLine.primitiveId === line.primitiveId && matchesRequested(line, beforeLine)));
-			const targetSegments = changedAfter.filter(line => lineSegmentContained(line, targetAfter));
+			const beforeById = new Map(beforeLines.map(line => [line.primitiveId, line]));
+			const afterById = new Map(afterLines.map(line => [line.primitiveId, line]));
+			const changedAfter = afterLines.filter((line) => {
+				const previous = beforeById.get(line.primitiveId);
+				return !previous || !matchesRequested(line, previous);
+			});
+			// Existing copper can be the complete result of a native merge. It also
+			// proves an idempotent property write without requiring an artificial change.
+			const targetSegments = afterLines.filter(line => lineSegmentContained(line, targetAfter));
 			const collinearBefore = beforeLines.filter(line => line.primitiveId !== primitiveId && lineCollinear(line, targetAfter));
 			// Natives may also merge the modified line with touching collinear copper.
 			// Accept such a primitive only when its whole extent was copper before the
 			// write, so an applied merge cannot smuggle in new or moved copper.
-			const mergedSegments = changedAfter.filter(line => !targetSegments.includes(line)
+			const mergedSegments = afterLines.filter(line => !targetSegments.includes(line)
 				&& lineOverlaps(line, targetAfter)
 				&& lineCovered(line, [...collinearBefore, targetAfter]));
 			const targetPieces = [...targetSegments, ...mergedSegments];
 			// Native rewrites are observed rather than predicted: every primitive that
-			// disappeared or changed must still be covered by the changed copper, which
+			// disappeared or changed must still be covered by the current copper, which
 			// covers neighbours split where the requested line crosses them rather than
 			// where the previously read line did (issue #94).
-			const replacedBefore = beforeLines.filter(line => line.primitiveId !== primitiveId
-				&& !afterLines.some(afterLine => afterLine.primitiveId === line.primitiveId && matchesRequested(afterLine, line)));
-			const replacedVerified = replacedBefore.every(oldLine => lineCovered(oldLine, changedAfter));
+			const replacedBefore = beforeLines.filter((line) => {
+				const observed = afterById.get(line.primitiveId);
+				return line.primitiveId !== primitiveId && (!observed || !matchesRequested(observed, line));
+			});
+			const replacedVerified = replacedBefore.every(oldLine => lineCovered(oldLine, afterLines));
 			const targetVerified = targetPieces.length > 0 && lineCovered(targetAfter, targetPieces);
 			const oldTargetRemains = afterLines.some(line => line.primitiveId === primitiveId && matchesRequested(line, targetBefore));
 			// No changed copper may appear outside the requested line and the copper it replaced.
 			const unexpected = changedAfter.filter(line => !targetPieces.includes(line)
 				&& !beforeLines.some(oldLine => oldLine.primitiveId !== primitiveId && lineSegmentContained(line, oldLine)));
-			if (oldTargetRemains)
+			// A split can retain the unchanged old ID as a proper part of an extended
+			// target. Require newly completed coverage so pre-existing overlapping
+			// copper cannot hide an ignored modification.
+			const retainedTargetSegment = oldTargetRemains && lineSegmentContained(targetBefore, targetAfter)
+				&& !lineCovered(targetAfter, beforeLines);
+			if (oldTargetRemains && !matchesRequested(targetBefore, requested!) && !retainedTargetSegment)
 				unexpected.push(targetBefore);
 			if (targetVerified && replacedVerified && unexpected.length === 0) {
 				return { ok: true, action, scope: SCOPE, pageUuid, kind: writableKind, primitiveId: targetPieces[0].primitiveId, primitiveIds: preserveBoundedArray(targetPieces.map(line => line.primitiveId)), primitive: targetPieces[0], normalization: { kind: 'split_or_merged_line', verification: 'requested_and_replaced_collinear_coverage', replacedPrimitiveIds: preserveBoundedArray(replacedBefore.map(line => line.primitiveId)), mergedPrimitiveIds: preserveBoundedArray(mergedSegments.map(line => line.primitiveId)), replacementPrimitiveIds: preserveBoundedArray(changedAfter.map(line => line.primitiveId)) }, verified: true };

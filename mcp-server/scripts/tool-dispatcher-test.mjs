@@ -716,8 +716,16 @@ const designCompareDefinition = definitions.find((definition) => definition.name
 assert.ok(designCompareDefinition);
 const designCompareSchema = z.fromJSONSchema(designCompareDefinition.inputSchema);
 assert.equal(designCompareSchema.safeParse({ domain: 'netlist', sourceA: 'a', sourceB: 'b' }).success, true);
-assert.equal(designCompareSchema.safeParse({ domain: 'schematic', sourceA: { projectUuid: 'project', schematicUuid: 'sch-a' }, sourceB: { projectUuid: 'project', schematicUuid: 'sch-b' } }).success, true);
+assert.equal(designCompareSchema.safeParse({ domain: 'schematic', sourceA: 'sch-a', sourceB: 'sch-b' }).success, true);
+assert.equal(designCompareSchema.safeParse({ domain: 'schematic', sourceA: { projectUuid: 'project', schematicUuid: 'sch-a' }, sourceB: { projectUuid: 'project', schematicUuid: 'sch-b' } }).success, false);
 assert.equal(designCompareSchema.safeParse({ domain: 'pcb', sourceA: { projectUuid: 'project', pcbUuid: 'pcb-a' }, sourceB: { projectUuid: 'project', pcbUuid: 'pcb-b' } }).success, true);
+assert.equal(designCompareSchema.safeParse({ domain: 'pcb', sourceA: 'pcb-a', sourceB: 'pcb-b', options: { valUnit: 'mm', deviation: 0.1, comparisonSize: 1 } }).success, true);
+for (const options of [{ deviation: 0 }, { comparisonSize: 0 }, { deviation: -1 }, { comparisonSize: -1 }, { valUnit: 'invalid' }]) {
+  assert.equal(designCompareSchema.safeParse({ domain: 'pcb', sourceA: 'pcb-a', sourceB: 'pcb-b', options }).success, false);
+}
+for (const domain of ['netlist', 'schematic']) {
+  assert.equal(designCompareSchema.safeParse({ domain, sourceA: 'a', sourceB: 'b', options: { deviation: 1 } }).success, false);
+}
 assert.equal(designCompareSchema.safeParse({ domain: 'netlist', sourceA: '', sourceB: 'b' }).success, false);
 
 const schematicPagesDefinition = definitions.find((definition) => definition.name === 'schematic_pages_manage');
