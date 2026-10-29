@@ -169,7 +169,7 @@ jobs:
           (async () => {
             if (GH_REPO !== 'hs150521/JLCEDA-MCP-Community' || RELEASE_COMMIT !== process.env.REFRESH_SOURCE) throw new Error('Unexpected target');
             const release = await api('releases/427132378');
-            if (release.tag_name !== 'v2.4.0' || release.immutable || ![PREVIOUS_SOURCE, RELEASE_COMMIT].some(sha => release.body.includes('<!-- release-commit: '+sha+' -->'))) throw new Error('Release has changed');
+            if (!['v2.4.0','untagged-07e629883c233bced98b'].includes(release.tag_name) || release.immutable || ![PREVIOUS_SOURCE, RELEASE_COMMIT].some(sha => release.body.includes('<!-- release-commit: '+sha+' -->'))) throw new Error('Release has changed');
             const ref = await api('git/ref/tags/v2.4.0');
             if (ref.object.type !== 'commit' || ![PREVIOUS_SOURCE, RELEASE_COMMIT].includes(ref.object.sha)) throw new Error('Tag has changed');
             fs.writeFileSync('build/previous-release.json', JSON.stringify(release,null,2));
@@ -177,7 +177,7 @@ jobs:
             await api('git/refs/tags/v2.4.0', 'PATCH', {sha:RELEASE_COMMIT,force:true});
             const checked = await api('git/ref/tags/v2.4.0');
             if (checked.object.sha !== RELEASE_COMMIT) throw new Error('Tag verification failed');
-            await api('releases/427132378', 'PATCH', {body:fs.readFileSync('build/release-notes.md','utf8'),target_commitish:RELEASE_COMMIT});
+            await api('releases/427132378', 'PATCH', {tag_name:'v2.4.0',body:fs.readFileSync('build/release-notes.md','utf8'),target_commitish:RELEASE_COMMIT});
             const crypto = require('node:crypto');
             const names = ['mcp-bridge-community-2.4.0.eext','jlceda-mcp-server-2.4.0.tgz','SHA256SUMS'];
             const current = await api('releases/427132378');
@@ -197,7 +197,7 @@ jobs:
               if (digest(Buffer.from(await downloaded.arrayBuffer())) !== digest(data)) throw new Error('Downloaded asset mismatch: '+name);
               console.log('Uploaded and verified '+name+' '+digest(data));
             }
-            await api('releases/427132378','PATCH',{draft:false,prerelease:false,make_latest:'true'});
+            await api('releases/427132378','PATCH',{tag_name:'v2.4.0',draft:false,prerelease:false,make_latest:'true'});
             console.log('Published https://github.com/'+GH_REPO+'/releases/tag/v2.4.0');
           })().catch(error => {console.error(error.message);process.exitCode=1});
           NODE
