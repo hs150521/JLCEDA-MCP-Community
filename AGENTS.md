@@ -3,6 +3,7 @@
 ## 协作规则
 
 - 文档中的自然语言优先使用中文；代码、命令、API 名称、协议名称、产品名和必要的专有名词可保留原文。
+- README 保持简短，聚焦项目介绍、安装、配置、使用和必要限制；版本变更、PR 修复经过和逐项测试记录放在 CHANGELOG 或 docs/releases，不在 README 中堆叠版本章节。
 - 当用户要求检查仓库、Issue、PR 或其他 repo 内容时，若未特别说明，默认检查社区仓库 `hs150521/JLCEDA-MCP-Community`，不要检查 upstream `sengbin/JLCEDA-MCP`。
 - 使用 `gh` 发送 Issue、PR 描述或评论前，先验证 Markdown 格式，尤其是换行符、代码块和列表，确保不会把转义字符或明文换行符直接显示给读者。
 
