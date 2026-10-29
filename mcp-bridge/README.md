@@ -4,6 +4,21 @@
 
 基于 [sengbin/JLCEDA-MCP](https://github.com/sengbin/JLCEDA-MCP) 维护，非嘉立创官方插件。
 
+## 功能演示
+
+![MCP 功能演示动画](images/demo.gif)
+
+历史版本录屏；当前版本的安装与连接方式见下方说明。
+
+<details>
+<summary>查看功能流程示意图</summary>
+
+![MCP Bridge 功能示意：原理图读取、器件放置和网络标签修改](images/feature-demo.png)
+
+此图为功能流程示意，实际界面以当前 EDA 版本为准。
+
+</details>
+
 ## 安装与连接
 
 需要嘉立创 EDA 专业版 3.x/4.x、Node.js 20+ 和支持 MCP 的 AI 客户端；具体功能受 EDA 版本限制。
