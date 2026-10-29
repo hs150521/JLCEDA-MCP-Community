@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 9f16313db2250b5863ec7229f9a11f734d0b2512
+          ref: c79e43d853033b090de3bf8c9ff60a848b48d5de
           fetch-depth: 0
           persist-credentials: false
       - name: Verify successful checks from the original refresh attempt
@@ -63,8 +63,10 @@ jobs:
           if (commit !== process.env.REFRESH_SOURCE)
             throw new Error('The checkout must match the immutable event commit.');
           const changed = execFileSync('git', ['diff', '--name-only', process.env.PREVIOUS_SOURCE, commit], {encoding:'utf8'}).trim().split('\n');
-          const allowed = ['AGENTS.md', 'README.md', 'docs/native-mcp-setup.md', 'mcp-bridge/README.md', 'mcp-server/README.md'];
+          const allowed = ['README.md', 'mcp-bridge/README.md', 'mcp-bridge/.edaignore'];
           if (changed.some(file => !allowed.includes(file))) throw new Error('Only the reviewed documentation changes may be republished.');
+          const previousIgnore = execFileSync('git',['show',process.env.PREVIOUS_SOURCE+':mcp-bridge/.edaignore'],{encoding:'utf8'});
+          if (previousIgnore.replace('/images/demo.gif\n','') !== fs.readFileSync('mcp-bridge/.edaignore','utf8')) throw new Error('Unexpected packaging change');
           const tagLookup = spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/tags/${tag}`]);
           if (tagLookup.status === 0) {
             const taggedCommit = execFileSync('git', ['rev-parse', `refs/tags/${tag}^{commit}`], { encoding: 'utf8' }).trim();
@@ -96,7 +98,7 @@ jobs:
             `# JLCEDA MCP 社区版 ${tag}`,
             `Bridge 与 Server 来自同一标签 ${tag}（提交 ${commit}），请配套安装。`,
             '## 文档重打包说明',
-          '按维护者要求沿用 v2.4.0，纳入精简后的 README 与安装文档；功能代码未变。标签与附件已更新至上述提交，SHA256SUMS 已重新生成。此前下载过 v2.4.0 的用户如需新版文档，请重新下载安装包。',
+          '按维护者要求沿用 v2.4.0，保留精简文档，并恢复仓库首页与扩展 README 的演示 GIF、功能示意图；扩展安装包已包含 GIF 文件。功能代码未变。标签与附件已更新至上述提交，SHA256SUMS 已重新生成。此前下载过 v2.4.0 的用户如需新版文档与演示，请重新下载安装包。',
           '## Bridge',
             section('mcp-bridge/CHANGELOG.md'),
             '## MCP Server',
@@ -149,6 +151,32 @@ jobs:
           }).join('\n') + '\n';
           fs.writeFileSync('build/SHA256SUMS', checksums);
           NODE
+      - name: Verify bundled demo images and unchanged runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |-
+          mkdir -p build/previous
+          gh release download v2.4.0 --dir build/previous --pattern '*.eext' --pattern '*.tgz' --repo hs150521/JLCEDA-MCP-Community
+          python3 <<'PY'
+          from pathlib import Path
+          import zipfile, tarfile
+          bridge='mcp-bridge-community-2.4.0.eext'
+          server='jlceda-mcp-server-2.4.0.tgz'
+          with zipfile.ZipFile('build/'+bridge) as new, zipfile.ZipFile('build/previous/'+bridge) as old:
+              a={n:old.read(n) for n in old.namelist() if not n.endswith('/')}
+              b={n:new.read(n) for n in new.namelist() if not n.endswith('/')}
+              assert b.keys()-a.keys()=={'images/demo.gif'}
+              assert not a.keys()-b.keys()
+              assert [n for n in a if a[n]!=b[n]]==['README.md']
+              for name in ['README.md','images/demo.gif','images/feature-demo.png']:
+                  assert b[name]==Path('mcp-bridge',name).read_bytes()
+              assert b'images/demo.gif' in b['README.md'] and b'images/feature-demo.png' in b['README.md']
+          with tarfile.open('build/'+server) as new, tarfile.open('build/previous/'+server) as old:
+              a={m.name:old.extractfile(m).read() for m in old.getmembers() if m.isfile()}
+              b={m.name:new.extractfile(m).read() for m in new.getmembers() if m.isfile()}
+              assert a==b
+          print('Bridge differs only in README and bundled GIF; Server contents and all runtime bytes unchanged.')
+          PY
       - name: Upload, verify and publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,7 +197,7 @@ jobs:
           (async () => {
             if (GH_REPO !== 'hs150521/JLCEDA-MCP-Community' || RELEASE_COMMIT !== process.env.REFRESH_SOURCE) throw new Error('Unexpected target');
             const release = await api('releases/427132378');
-            if (!['v2.4.0','untagged-07e629883c233bced98b'].includes(release.tag_name) || release.immutable || ![PREVIOUS_SOURCE, RELEASE_COMMIT].some(sha => release.body.includes('<!-- release-commit: '+sha+' -->'))) throw new Error('Release has changed');
+            if (release.tag_name !== 'v2.4.0' || release.immutable || ![PREVIOUS_SOURCE, RELEASE_COMMIT].some(sha => release.body.includes('<!-- release-commit: '+sha+' -->'))) throw new Error('Release has changed');
             const ref = await api('git/ref/tags/v2.4.0');
             if (ref.object.type !== 'commit' || ![PREVIOUS_SOURCE, RELEASE_COMMIT].includes(ref.object.sha)) throw new Error('Tag has changed');
             fs.writeFileSync('build/previous-release.json', JSON.stringify(release,null,2));
@@ -202,6 +230,6 @@ jobs:
           })().catch(error => {console.error(error.message);process.exitCode=1});
           NODE
 env:
-  REFRESH_SOURCE: 9f16313db2250b5863ec7229f9a11f734d0b2512
-  PREVIOUS_SOURCE: 997659aafa691860c4f38bb58d3b3588d999af42
+  REFRESH_SOURCE: c79e43d853033b090de3bf8c9ff60a848b48d5de
+  PREVIOUS_SOURCE: 9f16313db2250b5863ec7229f9a11f734d0b2512
 
