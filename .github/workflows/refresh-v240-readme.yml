@@ -167,7 +167,8 @@ jobs:
               b={n:new.read(n) for n in new.namelist() if not n.endswith('/')}
               assert b.keys()-a.keys()=={'images/demo.gif'}
               assert not a.keys()-b.keys()
-              assert [n for n in a if a[n]!=b[n]]==['README.md']
+              assert {n for n in a if a[n]!=b[n]}=={'README.md','.edaignore'}
+              assert a['.edaignore'].replace(b'/images/demo.gif\n',b'')==b['.edaignore']
               for name in ['README.md','images/demo.gif','images/feature-demo.png']:
                   assert b[name]==Path('mcp-bridge',name).read_bytes()
               assert b'images/demo.gif' in b['README.md'] and b'images/feature-demo.png' in b['README.md']
@@ -175,7 +176,7 @@ jobs:
               a={m.name:old.extractfile(m).read() for m in old.getmembers() if m.isfile()}
               b={m.name:new.extractfile(m).read() for m in new.getmembers() if m.isfile()}
               assert a==b
-          print('Bridge differs only in README and bundled GIF; Server contents and all runtime bytes unchanged.')
+          print('Bridge differs only in README, GIF packaging rule and bundled GIF; Server contents and all runtime bytes unchanged.')
           PY
       - name: Upload, verify and publish GitHub Release
         env:
