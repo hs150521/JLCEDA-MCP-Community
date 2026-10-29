@@ -15,6 +15,21 @@
 - 导出 BOM、Gerber、网表、原理图图像及设计归档。
 - 查询官方 API、比较设计，并在多个 EDA 页面间选择操作目标。
 
+## 功能演示
+
+![MCP 功能演示动画](mcp-bridge/images/demo.gif)
+
+历史版本录屏；当前版本的安装与连接方式见下方「快速开始」。
+
+<details>
+<summary>查看功能流程示意图</summary>
+
+![MCP Bridge 功能示意：原理图读取、器件放置和网络标签修改](mcp-bridge/images/feature-demo.png)
+
+此图为功能流程示意，实际界面以当前 EDA 版本为准。
+
+</details>
+
 ## 快速开始
 
 需要 Node.js 20+、嘉立创 EDA 专业版 3.x/4.x，以及支持本地 STDIO MCP 的 AI 客户端。具体功能受 EDA 版本限制。
