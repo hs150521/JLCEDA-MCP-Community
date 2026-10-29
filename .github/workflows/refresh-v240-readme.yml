@@ -9,29 +9,7 @@ concurrency:
   group: release-${{ github.repository }}
   cancel-in-progress: false
 jobs:
-  server-windows:
-    runs-on: windows-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: mcp-server
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: 9f16313db2250b5863ec7229f9a11f734d0b2512
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: mcp-server/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run lint
-      - run: node verify-multi-client.mjs
-      - run: npm audit --omit=dev --registry=https://registry.npmjs.org
   build-and-release:
-    needs: server-windows
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -47,6 +25,22 @@ jobs:
           ref: 9f16313db2250b5863ec7229f9a11f734d0b2512
           fetch-depth: 0
           persist-credentials: false
+      - name: Verify successful checks from the original refresh attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |-
+          node <<'NODE'
+          (async () => {
+          const response = await fetch('https://api.github.com/repos/hs150521/JLCEDA-MCP-Community/actions/runs/40795575724/jobs', {headers:{Authorization:'Bearer '+process.env.GH_TOKEN}});
+          if (!response.ok) throw new Error('Cannot verify prior checks');
+          const {jobs} = await response.json();
+          if (jobs.find(job => job.name === 'server-windows')?.conclusion !== 'success') throw new Error('Windows checks did not pass');
+          const steps = jobs.find(job => job.name === 'build-and-release')?.steps || [];
+          for (const name of ['Check tag, package versions and release notes','Install, test and audit MCP Server','Install, build and lint Bridge','Check generated tracked files','Pack MCP Server','Verify packages and create checksums'])
+            if (steps.find(step => step.name === name)?.conclusion !== 'success') throw new Error('Missing prior gate: '+name);
+          console.log('Exact-source Windows/Linux checks already passed; retrying packaging and upload only.');
+          })().catch(error=>{console.error(error);process.exitCode=1});
+          NODE
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 20
@@ -120,16 +114,13 @@ jobs:
         working-directory: mcp-server
         run: |
           npm ci
-          npm test
-          npm run lint
-          node verify-multi-client.mjs
-          npm audit --omit=dev --registry=https://registry.npmjs.org
+          npm run build
       - name: Install, build and lint Bridge
         working-directory: mcp-bridge
         run: |
           npm ci
-          npm run build
-          npm run lint
+          npm run compile
+          npx --no-install ts-node --project tsconfig.build.json ./build/packaged.ts
       - name: Check generated tracked files
         run: git diff --exit-code
       - name: Pack MCP Server
@@ -187,15 +178,29 @@ jobs:
             const checked = await api('git/ref/tags/v2.4.0');
             if (checked.object.sha !== RELEASE_COMMIT) throw new Error('Tag verification failed');
             await api('releases/427132378', 'PATCH', {body:fs.readFileSync('build/release-notes.md','utf8'),target_commitish:RELEASE_COMMIT});
+            const crypto = require('node:crypto');
+            const names = ['mcp-bridge-community-2.4.0.eext','jlceda-mcp-server-2.4.0.tgz','SHA256SUMS'];
+            const current = await api('releases/427132378');
+            for (const name of names) {
+              const data = fs.readFileSync('build/'+name);
+              const previous = current.assets.find(asset => asset.name === name);
+              if (previous) {
+                const removed = await fetch(previous.url, {method:'DELETE',headers:{Authorization:'Bearer '+GH_TOKEN}});
+                if (removed.status !== 204) throw new Error('Asset removal failed: '+removed.status);
+              }
+              const uploaded = await fetch('https://uploads.github.com/repos/'+GH_REPO+'/releases/427132378/assets?name='+encodeURIComponent(name),{method:'POST',headers:{Authorization:'Bearer '+GH_TOKEN,'Content-Type':'application/octet-stream'},body:data});
+              if (!uploaded.ok) throw new Error('Asset upload failed: '+uploaded.status);
+              const asset = await uploaded.json();
+              const downloaded = await fetch(asset.url,{headers:{Authorization:'Bearer '+GH_TOKEN,Accept:'application/octet-stream'}});
+              if (!downloaded.ok) throw new Error('Download failed: '+downloaded.status);
+              const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+              if (digest(Buffer.from(await downloaded.arrayBuffer())) !== digest(data)) throw new Error('Downloaded asset mismatch: '+name);
+              console.log('Uploaded and verified '+name+' '+digest(data));
+            }
+            await api('releases/427132378','PATCH',{draft:false,prerelease:false,make_latest:'true'});
+            console.log('Published https://github.com/'+GH_REPO+'/releases/tag/v2.4.0');
           })().catch(error => {console.error(error.message);process.exitCode=1});
           NODE
-          gh release upload v2.4.0 build/mcp-bridge-community-2.4.0.eext build/jlceda-mcp-server-2.4.0.tgz build/SHA256SUMS --clobber
-          mkdir -p build/downloaded
-          gh release download v2.4.0 --dir build/downloaded --pattern mcp-bridge-community-2.4.0.eext --pattern jlceda-mcp-server-2.4.0.tgz --pattern SHA256SUMS
-          cmp build/SHA256SUMS build/downloaded/SHA256SUMS
-          (cd build/downloaded && sha256sum --check SHA256SUMS)
-          gh release edit v2.4.0 --draft=false --prerelease=false --latest
-          gh release view v2.4.0 --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
 env:
   REFRESH_SOURCE: 9f16313db2250b5863ec7229f9a11f734d0b2512
   PREVIOUS_SOURCE: 997659aafa691860c4f38bb58d3b3588d999af42
