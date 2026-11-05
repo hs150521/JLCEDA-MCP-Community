@@ -213,6 +213,34 @@ async function rawSchematicCreateTests() {
 }
 
 async function main() {
+	const deviceGetCalls = [];
+	const deviceItem = { uuid: 'device-1', libraryUuid: 'library-1', name: 'Test Device' };
+	globalThis.eda = {
+		lib_Device: {
+			async get(...args) {
+				assert.equal(this, globalThis.eda.lib_Device);
+				deviceGetCalls.push(args);
+				return args[0] === deviceItem.uuid ? deviceItem : undefined;
+			},
+		},
+	};
+	// The host silently returns undefined for object-form lookups; reject them before calling it.
+	for (const args of [[{ libraryUuid: 'library-1', uuid: 'device-1' }], [], [''], ['   '], [null], [42]]) {
+		await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.lib_Device.get', args }), /lib_Device.get.*deviceUuid.*string/);
+	}
+	for (const libraryUuid of [null, 42, { uuid: 'library-1' }]) {
+		await assert.rejects(handleApiInvokeTask({ apiFullName: 'eda.lib_Device.get', args: ['device-1', libraryUuid] }), /lib_Device.get.*libraryUuid.*string/);
+	}
+	assert.equal(deviceGetCalls.length, 0, 'invalid device lookups never reach the native API');
+	for (const args of [['device-1'], ['device-1', 'library-1'], ['device-1', undefined], ['device-1', ''], ['device-1', '   ']]) {
+		const result = await handleApiInvokeTask({ apiFullName: 'eda.LIB_DEVICE.GET', args });
+		assert.deepEqual(result.result, deviceItem);
+		assert.deepEqual(deviceGetCalls.at(-1), args, 'device and optional library UUID retain their positional arguments');
+	}
+	const missingDevice = await handleApiInvokeTask({ apiFullName: 'eda.lib_Device.get', args: ['missing-device', 'library-1'] });
+	assert.equal(missingDevice.result, undefined, 'a valid lookup may still report that the device does not exist');
+	assert.equal(deviceGetCalls.length, 6);
+
 	const pageUuid = 'page-1';
 	let documentType = 1;
 	let nativePinModifyCalls = 0;
