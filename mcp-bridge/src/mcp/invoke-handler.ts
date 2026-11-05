@@ -450,6 +450,13 @@ export async function handleApiInvokeTask(payload: unknown, reportPinAdapter?: (
 		return invokeFootprintPrimitive(payload, resolvedPath, callable, thisArg, footprintIdentityFromDocument(document), beforeNativeMutation);
 	const invokeArgs = Array.isArray(payload.args) ? payload.args : [];
 	const normalizedPath = resolvedPath.toLowerCase();
+	if (normalizedPath === 'eda.lib_device.get') {
+		const [deviceUuid, libraryUuid] = invokeArgs;
+		if (typeof deviceUuid !== 'string' || !deviceUuid.trim())
+			throw new TypeError('eda.lib_Device.get expects positional args [deviceUuid, libraryUuid?]; deviceUuid must be a non-empty string.');
+		if (libraryUuid !== undefined && typeof libraryUuid !== 'string')
+			throw new TypeError('eda.lib_Device.get libraryUuid must be a string when provided.');
+	}
 	const routingProps = normalizedPath === PCB_AUTO_ROUTING && isPlainObjectRecord(invokeArgs[0]) ? invokeArgs[0] : undefined;
 	const requestedRoutingNets = Array.isArray(routingProps?.RoutingNets)
 		&& routingProps.RoutingNets.every((net: unknown) => typeof net === 'string')
